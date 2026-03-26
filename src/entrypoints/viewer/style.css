@@ -1,0 +1,110 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  background:
+    radial-gradient(circle at top left, #d7ecff 0, transparent 32%),
+    linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
+  color: #142033;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.viewer-shell {
+  min-height: 100vh;
+  padding: 40px 20px;
+}
+
+.viewer-panel {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 32px;
+  border: 1px solid rgba(20, 32, 51, 0.08);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 24px 80px rgba(20, 32, 51, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.viewer-eyebrow {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #2d6ca2;
+}
+
+.viewer-title {
+  margin: 0;
+  font-size: clamp(28px, 5vw, 42px);
+  line-height: 1.1;
+}
+
+.viewer-copy {
+  margin: 16px 0 0;
+  max-width: 60ch;
+  line-height: 1.7;
+  color: #435166;
+}
+
+.viewer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 32px;
+}
+
+.viewer-card {
+  padding: 20px;
+  border-radius: 18px;
+  background: #f5f9fe;
+  border: 1px solid rgba(45, 108, 162, 0.12);
+}
+
+.viewer-card-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #59718b;
+}
+
+.viewer-card-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #142033;
+}
+
+.viewer-notice {
+  margin-top: 32px;
+  padding: 18px 20px;
+  border-left: 4px solid #2d6ca2;
+  border-radius: 14px;
+  background: rgba(45, 108, 162, 0.08);
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .viewer-shell {
+    padding: 20px 12px;
+  }
+
+  .viewer-panel {
+    padding: 24px 18px;
+    border-radius: 20px;
+  }
+}
+
