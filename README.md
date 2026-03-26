@@ -10,6 +10,7 @@ X の投稿を個人用に保存し、あとから検索しやすくする Chrom
 - WXT + TypeScript + React の基本構成
 - Manifest V3 前提の entrypoints 整理
 - IndexedDB + Dexie を使う前提の最小 DB モジュール
+- Popup / Viewer / Background / Content Script の最低限テンプレート
 - viewer ページの最小 UI
 - 要件 / MVP / データモデル / 実装ステップの初期ドキュメント
 
@@ -39,6 +40,7 @@ src/
 主な責務:
 
 - `src/entrypoints/background.ts`: service worker。拡張アイコンクリック時に viewer を開く
+- `src/entrypoints/popup/`: 最小 popup。viewer を開く導線を持つ
 - `src/entrypoints/x.content.ts`: X / Twitter 向け content script の最小エントリ
 - `src/entrypoints/viewer/`: React ベースの viewer ページ
 - `src/db/`: Dexie のスキーマと repository
@@ -47,7 +49,6 @@ src/
 
 ## セットアップ
 
-この環境では `node` / `npm` が未導入だったため、依存インストールとビルド確認は未実行です。
 Node.js と npm を入れた上で、以下を実行してください。
 
 ```bash
@@ -61,6 +62,9 @@ npm run build
 ```bash
 npm run dev
 ```
+
+ビルド後に Chrome へ読み込むときは、`.output/chrome-mv3/` を「パッケージ化されていない拡張機能を読み込む」で指定します。
+アイコン画像はまだ未追加のため、Chrome では既定アイコン表示になります。
 
 ## 依存方針
 

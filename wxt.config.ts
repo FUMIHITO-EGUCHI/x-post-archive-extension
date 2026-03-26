@@ -10,7 +10,8 @@ export default defineConfig({
     permissions: ["storage"],
     host_permissions: ["https://x.com/*", "https://twitter.com/*"],
     action: {
-      default_title: "Open archive viewer"
+      default_title: "Open archive viewer",
+      default_popup: "popup.html"
     }
   }
 });
