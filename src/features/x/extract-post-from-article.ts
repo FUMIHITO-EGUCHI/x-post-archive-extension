@@ -1,0 +1,83 @@
+import type { SavePostInput } from "../../types/archive";
+
+const POST_PATH_PATTERN = /^\/([^/]+)\/status\/(\d+)$/;
+
+export function extractPostFromArticle(article: HTMLElement): SavePostInput | null {
+  const permalink = findPermalink(article);
+  const text = extractPostText(article);
+
+  if (permalink === null || text === null) {
+    return null;
+  }
+
+  return {
+    x_post_id: permalink.xPostId,
+    x_username: permalink.xUsername,
+    post_text: text,
+    post_url: permalink.postUrl
+  };
+}
+
+export function extractPostIdFromArticle(article: HTMLElement): string | null {
+  const permalink = findPermalink(article);
+  return permalink?.xPostId ?? null;
+}
+
+function extractPostText(article: HTMLElement): string | null {
+  const tweetText = article.querySelector('[data-testid="tweetText"]');
+  const value = tweetText?.textContent?.trim() ?? "";
+
+  return value === "" ? null : value;
+}
+
+function findPermalink(article: HTMLElement): {
+  xPostId: string;
+  xUsername: string;
+  postUrl: string;
+} | null {
+  const anchors = article.querySelectorAll<HTMLAnchorElement>('a[href*="/status/"]');
+
+  for (const anchor of anchors) {
+    const parsed = parsePermalink(anchor.href);
+
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function parsePermalink(href: string): {
+  xPostId: string;
+  xUsername: string;
+  postUrl: string;
+} | null {
+  try {
+    const url = new URL(href, window.location.origin);
+    const matched = url.pathname.match(POST_PATH_PATTERN);
+
+    if (matched === null) {
+      return null;
+    }
+
+    const xUsername = matched[1];
+    const xPostId = matched[2];
+
+    if (xUsername === undefined || xPostId === undefined) {
+      return null;
+    }
+
+    if (xUsername.trim() === "" || xPostId.trim() === "") {
+      return null;
+    }
+
+    return {
+      xUsername,
+      xPostId,
+      postUrl: `${url.origin}${url.pathname}`
+    };
+  } catch {
+    return null;
+  }
+}

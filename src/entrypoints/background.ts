@@ -4,7 +4,7 @@ export default defineBackground({
   type: "module",
   main() {
     chrome.runtime.onInstalled.addListener(() => {
-      console.info("X Post Archive Extension foundation initialized.");
+      console.info("X Post Archive Extension initialized.");
     });
 
     chrome.action.onClicked.addListener(() => {
