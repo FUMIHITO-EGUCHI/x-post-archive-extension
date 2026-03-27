@@ -1,59 +1,62 @@
 # Requirements
 
-## 背景
+## Goal
 
-X の過去投稿、いいね、保存済み投稿は後から探しにくい。
-スクリーンショット保存では本文検索やスレッド追跡が弱く、動画も扱いづらい。
+X の各投稿に保存ボタンを差し込み、押した投稿を IndexedDB に保存し、別タブの一覧画面で確認と削除ができる Chrome 拡張を作る。
 
-## プロダクト目的
+## Initial Scope
 
-この拡張は、X 投稿の個人用アーカイブ兼検索ツールを作るためのものとする。
-目的は以下の 3 点。
+初版で実現すること:
 
-1. 保存できること
-2. 後から探せること
-3. 読みやすいこと
+1. `article[data-testid="tweet"]` ごとに保存ボタンを表示する
+2. 保存ボタン押下で 1 投稿を保存する
+3. 保存済み投稿を一覧画面で新しい順に表示する
+4. 一覧画面から `x_post_id` 指定で削除する
 
-## 今回の作業スコープ
+初版で実装しないこと:
 
-今回は本格実装ではなく、以下の初期土台のみを対象とする。
+- タグ
+- 検索
+- ユーザー集計
+- 画像 / 動画保存
+- 反応数保存
+- スレッド保存
+- 自動更新
+- 論理削除
 
-- WXT + TypeScript + React の最小構成
-- Manifest V3 前提の entrypoints 整理
-- IndexedDB + Dexie を使う前提の DB 骨格
-- viewer ページの最小表示
-- 実装前提を揃えるドキュメント作成
+## Saved Fields
 
-## 今回やらないこと
+- `x_post_id`
+- `x_username`
+- `post_text`
+- `post_url`
+- `saved_at`
 
-- X 投稿の保存処理本実装
-- X DOM 抽出の本実装
-- 検索機能の本実装
-- タグ付け UI の本実装
-- メディア保存
-- 自動更新追従
+## DOM Extraction Policy
 
-## 非機能要件
+- CSS クラス名には依存しない
+- `article[data-testid="tweet"]` を投稿単位として扱う
+- `href` と `data-testid` を優先して使う
+- `x_username` と `x_post_id` と `post_url` は投稿 permalink から取る
+- `post_text` は投稿 article 内の `data-testid="tweetText"` から取る
 
-- Chrome Extension Manifest V3 前提
-- TypeScript `strict` 前提
-- React は viewer UI に限定
-- content script と service worker は素の TypeScript を基本とする
-- メイン DB は IndexedDB、ラッパーは Dexie
-- データモデルは検索性優先で構造化する
+## Responsibility Split
 
-## 初期成果物
+以下は分離する。
 
-- `package.json` / `wxt.config.ts` / `tsconfig.json`
-- `src/entrypoints/` 配下の最小 entrypoints
-- `src/db/` の Dexie ベーススキーマ
-- `src/types/` の保存データ型とメッセージ型
-- `docs/` 配下の初期整理ドキュメント
+1. 投稿 DOM 検出
+2. 保存ボタン差し込み
+3. DOM からの投稿データ抽出
+4. IndexedDB 保存
+5. 保存済み判定
+6. 一覧表示
+7. 削除
 
-## 制約
+## Runtime Direction
 
-- 大量実装を避ける
-- 後戻りしにくい骨格を優先する
-- まだ未確定な仕様は docs 上で明示する
-- package manager は npm を前提とする
-
+- Manifest V3
+- WXT
+- TypeScript strict
+- React は viewer のみ
+- content script と background は素の TypeScript
+- 保存処理は content script から background へ message で依頼する
