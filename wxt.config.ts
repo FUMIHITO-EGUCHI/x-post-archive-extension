@@ -7,8 +7,8 @@ export default defineConfig({
   manifest: {
     name: "X Post Archive Extension",
     description: "Save X posts and review them later in a simple archive viewer.",
-    permissions: ["storage"],
-    host_permissions: ["https://x.com/*", "https://twitter.com/*"],
+    permissions: ["storage", "unlimitedStorage"],
+    host_permissions: ["https://x.com/*", "https://twitter.com/*", "https://pbs.twimg.com/*"],
     action: {
       default_title: "Open archive viewer"
     }

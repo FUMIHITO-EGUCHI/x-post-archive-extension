@@ -1,0 +1,126 @@
+const MEDIA_ROOT_SEGMENTS = ["media", "images"] as const;
+
+export function buildMediaOpfsPath(xPostId: string, mediaId: string): string {
+  return `/${[...MEDIA_ROOT_SEGMENTS, xPostId, `${mediaId}.bin`].join("/")}`;
+}
+
+export async function writeBlobToOpfs(opfsPath: string, blob: Blob): Promise<void> {
+  const fileHandle = await getFileHandle(opfsPath, true);
+  const writable = await fileHandle.createWritable();
+
+  try {
+    await writable.write(blob);
+  } finally {
+    await writable.close();
+  }
+}
+
+export async function readBlobFromOpfs(opfsPath: string): Promise<Blob> {
+  const fileHandle = await getFileHandle(opfsPath, false);
+  const file = await fileHandle.getFile();
+  return file;
+}
+
+export async function deleteBlobFromOpfs(opfsPath: string): Promise<void> {
+  const segments = splitOpfsPath(opfsPath);
+  const fileName = segments.at(-1);
+
+  if (fileName === undefined) {
+    throw new Error("Invalid OPFS path.");
+  }
+
+  const parentSegments = segments.slice(0, -1);
+  const parentDirectory = await getDirectory(parentSegments, false);
+
+  try {
+    await parentDirectory.removeEntry(fileName);
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return;
+    }
+
+    throw error;
+  }
+
+  await deleteDirectoryIfEmpty(parentSegments);
+}
+
+async function getFileHandle(
+  opfsPath: string,
+  create: boolean
+): Promise<FileSystemFileHandle> {
+  const segments = splitOpfsPath(opfsPath);
+  const fileName = segments.at(-1);
+
+  if (fileName === undefined) {
+    throw new Error("Invalid OPFS path.");
+  }
+
+  const directory = await getDirectory(segments.slice(0, -1), create);
+  return directory.getFileHandle(fileName, {
+    create
+  });
+}
+
+async function getDirectory(
+  segments: string[],
+  create: boolean
+): Promise<FileSystemDirectoryHandle> {
+  let directory = await navigator.storage.getDirectory();
+
+  for (const segment of segments) {
+    directory = await directory.getDirectoryHandle(segment, {
+      create
+    });
+  }
+
+  return directory;
+}
+
+async function deleteDirectoryIfEmpty(segments: string[]): Promise<void> {
+  for (let index = segments.length; index > MEDIA_ROOT_SEGMENTS.length; index -= 1) {
+    const currentSegments = segments.slice(0, index);
+    const currentName = currentSegments.at(-1);
+    const parentSegments = currentSegments.slice(0, -1);
+
+    if (currentName === undefined) {
+      return;
+    }
+
+    const parentDirectory = await getDirectory(parentSegments, false);
+
+    try {
+      await parentDirectory.removeEntry(currentName);
+    } catch (error) {
+      if (isNotFoundError(error) || isDirectoryNotEmptyError(error)) {
+        return;
+      }
+
+      throw error;
+    }
+  }
+}
+
+function splitOpfsPath(opfsPath: string): string[] {
+  const normalized = opfsPath.trim();
+
+  if (!normalized.startsWith("/")) {
+    throw new Error("OPFS path must start with '/'.");
+  }
+
+  const segments = normalized.split("/").filter((segment) => segment.length > 0);
+
+  if (segments.length <= MEDIA_ROOT_SEGMENTS.length) {
+    throw new Error("OPFS path is missing file segments.");
+  }
+
+  return segments;
+}
+
+function isDirectoryNotEmptyError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "InvalidModificationError";
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "NotFoundError";
+}

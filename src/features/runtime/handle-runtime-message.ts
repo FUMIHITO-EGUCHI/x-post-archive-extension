@@ -1,9 +1,9 @@
 import {
-  deletePost,
-  hasPost,
-  listPosts,
-  savePost
-} from "../../db/repositories/posts-repository";
+  deleteArchivePost,
+  hasSavedPost,
+  listArchivePosts,
+  saveArchivePost
+} from "../archive/archive-service";
 import type {
   DeletePostResponse,
   HasPostResponse,
@@ -23,7 +23,7 @@ export async function handleRuntimeMessage(
 
   switch (message.type) {
     case "posts/save": {
-      const result = await savePost(message.post);
+      const result = await saveArchivePost(message.post);
       const response: SavePostResponse =
         result.post === undefined
           ? {
@@ -41,7 +41,7 @@ export async function handleRuntimeMessage(
     case "posts/has": {
       const response: HasPostResponse = {
         type: "posts/has-result",
-        exists: await hasPost(message.xPostId)
+        exists: await hasSavedPost(message.xPostId)
       };
       return response;
     }
@@ -49,7 +49,7 @@ export async function handleRuntimeMessage(
     case "posts/list": {
       const response: ListPostsResponse = {
         type: "posts/list-result",
-        posts: await listPosts()
+        posts: await listArchivePosts()
       };
       return response;
     }
@@ -57,7 +57,7 @@ export async function handleRuntimeMessage(
     case "posts/delete": {
       const response: DeletePostResponse = {
         type: "posts/delete-result",
-        deleted: await deletePost(message.xPostId)
+        deleted: await deleteArchivePost(message.xPostId)
       };
       return response;
     }

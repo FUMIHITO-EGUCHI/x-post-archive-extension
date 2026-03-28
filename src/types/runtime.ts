@@ -1,4 +1,4 @@
-import type { PostRecord, SavePostInput } from "./archive";
+import type { ArchivePostRecord, PostRecord, SavePostInput } from "./archive";
 
 export type SavePostMessage = {
   type: "posts/save";
@@ -38,7 +38,7 @@ export type HasPostResponse = {
 
 export type ListPostsResponse = {
   type: "posts/list-result";
-  posts: PostRecord[];
+  posts: ArchivePostRecord[];
 };
 
 export type DeletePostResponse = {
