@@ -1,12 +1,19 @@
-import type { SavePostInput } from "../../types/archive";
+import type { SaveImageInput, SavePostInput } from "../../types/archive";
 
 const POST_PATH_PATTERN = /^\/([^/]+)\/status\/(\d+)$/;
+const PHOTO_PATH_PATTERN = /\/photo\/(\d+)$/;
 
 export function extractPostFromArticle(article: HTMLElement): SavePostInput | null {
   const permalink = findPermalink(article);
+
+  if (permalink === null) {
+    return null;
+  }
+
+  const media = extractPostImages(article);
   const text = extractPostText(article);
 
-  if (permalink === null || text === null) {
+  if (text === "" && media.length === 0) {
     return null;
   }
 
@@ -14,7 +21,8 @@ export function extractPostFromArticle(article: HTMLElement): SavePostInput | nu
     x_post_id: permalink.xPostId,
     x_username: permalink.xUsername,
     post_text: text,
-    post_url: permalink.postUrl
+    post_url: permalink.postUrl,
+    media
   };
 }
 
@@ -23,7 +31,7 @@ export function extractPostIdFromArticle(article: HTMLElement): string | null {
   return permalink?.xPostId ?? null;
 }
 
-function extractPostText(article: HTMLElement): string | null {
+function extractPostText(article: HTMLElement): string {
   const tweetText = article.querySelector<HTMLElement>('[data-testid="tweetText"]');
 
   if (tweetText !== null) {
@@ -53,12 +61,99 @@ function extractPostText(article: HTMLElement): string | null {
     }
   }
 
-  return bestCandidate;
+  return bestCandidate ?? "";
+}
+
+function extractPostImages(article: HTMLElement): SaveImageInput[] {
+  const photoAnchors = article.querySelectorAll<HTMLAnchorElement>('a[href*="/photo/"]');
+  const images: SaveImageInput[] = [];
+  const seenUrls = new Set<string>();
+
+  for (const anchor of photoAnchors) {
+    const img = anchor.querySelector<HTMLImageElement>("img[src]");
+
+    if (img === null) {
+      continue;
+    }
+
+    const normalizedUrl = normalizeImageUrl(img.currentSrc || img.src);
+
+    if (normalizedUrl === null || seenUrls.has(normalizedUrl)) {
+      continue;
+    }
+
+    seenUrls.add(normalizedUrl);
+    images.push({
+      source_url: normalizedUrl,
+      position: extractPhotoPosition(anchor, images.length),
+      alt_text: normalizeAltText(img.alt),
+      width: normalizeDimension(img.naturalWidth || img.width),
+      height: normalizeDimension(img.naturalHeight || img.height)
+    });
+  }
+
+  return images
+    .sort((left, right) => left.position - right.position)
+    .map((image, index) => ({
+      ...image,
+      position: index
+    }));
 }
 
 function normalizeText(value: string | null | undefined): string | null {
   const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
   return normalized === "" ? null : normalized;
+}
+
+function normalizeAltText(value: string | null | undefined): string | null {
+  const normalized = normalizeText(value);
+  return normalized === null ? null : normalized;
+}
+
+function normalizeDimension(value: number): number | null {
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function extractPhotoPosition(anchor: HTMLAnchorElement, fallbackIndex: number): number {
+  try {
+    const url = new URL(anchor.href, window.location.origin);
+    const matched = url.pathname.match(PHOTO_PATH_PATTERN);
+    const rawPosition = matched?.[1];
+
+    if (rawPosition === undefined) {
+      return fallbackIndex;
+    }
+
+    const parsedPosition = Number.parseInt(rawPosition, 10);
+
+    if (!Number.isInteger(parsedPosition) || parsedPosition <= 0) {
+      return fallbackIndex;
+    }
+
+    return parsedPosition - 1;
+  } catch {
+    return fallbackIndex;
+  }
+}
+
+function normalizeImageUrl(src: string): string | null {
+  try {
+    const url = new URL(src, window.location.origin);
+
+    if (url.hostname !== "pbs.twimg.com" || !url.pathname.includes("/media/")) {
+      return null;
+    }
+
+    url.protocol = "https:";
+
+    if (url.searchParams.has("name")) {
+      url.searchParams.set("name", "orig");
+    }
+
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function findPermalink(article: HTMLElement): {
