@@ -1,55 +1,26 @@
 # X Post Archive Extension
 
-X の投稿を個人用に保存し、あとから検索しやすくする Chrome 拡張の土台です。
-このリポジトリでは、X の UI 再現ではなく、保存・検索・閲覧のための構造化データ基盤を重視します。
+Version `0.1.0`
 
-## 現在の状態
+X の投稿を 1 件ずつ保存して、あとから一覧で見返すための Chrome 拡張です。
+初版では保存、一覧、削除だけに絞っています。
 
-2026-03-26 時点では、本格実装前の最小構成までを作成しています。
+## Stack
 
-- WXT + TypeScript + React の基本構成
-- Manifest V3 前提の entrypoints 整理
-- IndexedDB + Dexie を使う前提の最小 DB モジュール
-- Popup / Viewer / Background / Content Script の最低限テンプレート
-- viewer ページの最小 UI
-- 要件 / MVP / データモデル / 実装ステップの初期ドキュメント
+- WXT
+- TypeScript
+- React
+- IndexedDB
+- Dexie
 
-まだ入っていないもの:
+## Current MVP
 
-- X 投稿の実保存
-- DOM 抽出ロジックの本実装
-- 検索 UI の本実装
-- タグ管理 UI の本実装
-- メディア保存
+- X の投稿ごとに保存ボタンを表示
+- `x_post_id`, `x_username`, `post_text`, `post_url`, `saved_at` を保存
+- viewer で保存済み投稿を新しい順に表示
+- viewer から投稿を削除
 
-## ディレクトリ構成
-
-```text
-docs/
-  data-model.md
-  implementation-steps.md
-  mvp-plan.md
-  requirements.md
-src/
-  db/
-  entrypoints/
-  features/
-  types/
-```
-
-主な責務:
-
-- `src/entrypoints/background.ts`: service worker。拡張アイコンクリック時に viewer を開く
-- `src/entrypoints/popup/`: 最小 popup。viewer を開く導線を持つ
-- `src/entrypoints/x.content.ts`: X / Twitter 向け content script の最小エントリ
-- `src/entrypoints/viewer/`: React ベースの viewer ページ
-- `src/db/`: Dexie のスキーマと repository
-- `src/features/`: X 固有処理、runtime messaging、viewer 機能
-- `src/types/`: 保存データ型、メッセージ型
-
-## セットアップ
-
-Node.js と npm を入れた上で、以下を実行してください。
+## Commands
 
 ```bash
 npm install
@@ -63,22 +34,17 @@ npm run build
 npm run dev
 ```
 
-ビルド後に Chrome へ読み込むときは、`.output/chrome-mv3/` を「パッケージ化されていない拡張機能を読み込む」で指定します。
-アイコン画像はまだ未追加のため、Chrome では既定アイコン表示になります。
+Chrome では `.output/chrome-mv3/` を unpacked extension として読み込みます。
 
-## 依存方針
+## One-off Migration
 
-- Package manager: npm
-- Extension framework: WXT
-- Language: TypeScript
-- UI: React
-- Main DB: IndexedDB
-- IndexedDB wrapper: Dexie
+旧 DB `x-post-archive` から現行 DB `x-post-archive-posts-v1` へ移す必要がある場合は、
+[legacy DB migration guide](./docs/legacy-db-migration.md) と
+[migration script](./scripts/migrate-legacy-posts.js) を使ってください。
 
-## 参考ドキュメント
+## Docs
 
 - [requirements](./docs/requirements.md)
 - [mvp-plan](./docs/mvp-plan.md)
 - [data-model](./docs/data-model.md)
 - [implementation-steps](./docs/implementation-steps.md)
-

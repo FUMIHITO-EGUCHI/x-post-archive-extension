@@ -1,17 +1,59 @@
-export type ArchiveStats = {
-  posts: number;
-  threads: number;
-  tags: number;
+import type { PostRecord, SavePostInput } from "./archive";
+
+export type SavePostMessage = {
+  type: "posts/save";
+  post: SavePostInput;
 };
 
-export type GetArchiveStatsMessage = {
-  type: "viewer/get-archive-stats";
+export type HasPostMessage = {
+  type: "posts/has";
+  xPostId: string;
 };
 
-export type ArchiveStatsResponse = {
-  type: "viewer/archive-stats";
-  stats: ArchiveStats;
+export type ListPostsMessage = {
+  type: "posts/list";
 };
 
-export type RuntimeMessage = GetArchiveStatsMessage;
-export type RuntimeResponse = ArchiveStatsResponse;
+export type DeletePostMessage = {
+  type: "posts/delete";
+  xPostId: string;
+};
+
+export type RuntimeMessage =
+  | SavePostMessage
+  | HasPostMessage
+  | ListPostsMessage
+  | DeletePostMessage;
+
+export type SavePostResponse = {
+  type: "posts/save-result";
+  status: "saved" | "duplicate";
+  post?: PostRecord;
+};
+
+export type HasPostResponse = {
+  type: "posts/has-result";
+  exists: boolean;
+};
+
+export type ListPostsResponse = {
+  type: "posts/list-result";
+  posts: PostRecord[];
+};
+
+export type DeletePostResponse = {
+  type: "posts/delete-result";
+  deleted: boolean;
+};
+
+export type RuntimeErrorResponse = {
+  type: "runtime/error";
+  message: string;
+};
+
+export type RuntimeResponse =
+  | SavePostResponse
+  | HasPostResponse
+  | ListPostsResponse
+  | DeletePostResponse
+  | RuntimeErrorResponse;
