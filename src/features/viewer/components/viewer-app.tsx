@@ -1,82 +1,130 @@
 import { useEffect, useState } from "react";
-import { requestArchiveStats } from "../../runtime/client";
-import type { ArchiveStats } from "../../../types/runtime";
+import type { PostRecord } from "../../../types/archive";
+import { requestDeletePost, requestPosts } from "../../runtime/client";
 
-const emptyStats: ArchiveStats = {
-  posts: 0,
-  threads: 0,
-  tags: 0
-};
+type ViewerStatus = "idle" | "loading" | "ready";
 
 export function ViewerApp() {
-  const [stats, setStats] = useState<ArchiveStats>(emptyStats);
-  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [posts, setPosts] = useState<PostRecord[]>([]);
+  const [status, setStatus] = useState<ViewerStatus>("idle");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [loadNotice, setLoadNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadStats() {
+    async function loadPosts() {
       setStatus("loading");
+      setLoadNotice(null);
 
       try {
-        const response = await requestArchiveStats();
+        const response = await requestPosts();
 
         if (!cancelled) {
-          setStats(response.stats);
+          setPosts(response.posts);
           setStatus("ready");
         }
       } catch (error) {
-        console.error("Failed to load archive stats.", error);
+        console.error("Failed to load posts.", error);
 
         if (!cancelled) {
-          setStatus("error");
+          setPosts([]);
+          setStatus("ready");
+          setLoadNotice("Posts could not be loaded. Showing an empty list.");
         }
       }
     }
 
-    void loadStats();
+    void loadPosts();
 
     return () => {
       cancelled = true;
     };
   }, []);
 
+  async function handleDelete(xPostId: string) {
+    setDeletingId(xPostId);
+
+    try {
+      const response = await requestDeletePost(xPostId);
+
+      if (response.deleted) {
+        setPosts((current) => current.filter((post) => post.x_post_id !== xPostId));
+      }
+    } catch (error) {
+      console.error("Failed to delete post.", error);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <main className="viewer-shell">
-      <section className="viewer-panel">
-        <p className="viewer-eyebrow">Foundation Snapshot</p>
-        <h1 className="viewer-title">X post archive viewer groundwork</h1>
+      <section className="viewer-hero">
+        <p className="viewer-eyebrow">Initial Release</p>
+        <h1 className="viewer-title">Saved X posts</h1>
         <p className="viewer-copy">
-          保存・検索・閲覧の本実装に進む前に、拡張の骨格、DB スキーマ、viewer の起動経路だけを整えた状態です。
+          Saved posts are listed here in descending order of saved time.
         </p>
+      </section>
 
-        <div className="viewer-grid">
-          <StatCard label="Posts" value={stats.posts} />
-          <StatCard label="Threads" value={stats.threads} />
-          <StatCard label="Tags" value={stats.tags} />
+      <section className="viewer-list-panel">
+        <div className="viewer-list-header">
+          <h2>Archive</h2>
+          <span>{posts.length} posts</span>
         </div>
 
-        <div className="viewer-notice">
-          {status === "loading" && "IndexedDB の初期状態を確認しています。"}
-          {status === "ready" && "Dexie 経由で DB に接続できる前提の viewer 初期画面です。"}
-          {status === "error" && "viewer と background の接続確認に失敗しました。依存導入後に再確認してください。"}
-        </div>
+        {status === "loading" && <p className="viewer-message">Loading saved posts...</p>}
+        {loadNotice !== null && (
+          <p className="viewer-message viewer-message-error">{loadNotice}</p>
+        )}
+        {status === "ready" && posts.length === 0 && (
+          <p className="viewer-message">No saved posts.</p>
+        )}
+
+        {posts.length > 0 && (
+          <div className="viewer-list">
+            {posts.map((post) => (
+              <article className="post-card" key={post.x_post_id}>
+                <div className="post-card-header">
+                  <div>
+                    <p className="post-username">@{post.x_username}</p>
+                    <p className="post-date">{formatSavedAt(post.saved_at)}</p>
+                  </div>
+                  <button
+                    className="post-delete-button"
+                    type="button"
+                    onClick={() => {
+                      void handleDelete(post.x_post_id);
+                    }}
+                    disabled={deletingId === post.x_post_id}
+                  >
+                    {deletingId === post.x_post_id ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+
+                <p className="post-text">{post.post_text}</p>
+
+                <a
+                  className="post-link"
+                  href={post.post_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {post.post_url}
+                </a>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );
 }
 
-type StatCardProps = {
-  label: string;
-  value: number;
-};
-
-function StatCard({ label, value }: StatCardProps) {
-  return (
-    <article className="viewer-card">
-      <span className="viewer-card-label">{label}</span>
-      <strong className="viewer-card-value">{value}</strong>
-    </article>
-  );
+function formatSavedAt(savedAt: number): string {
+  return new Intl.DateTimeFormat("ja-JP", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(savedAt);
 }
-

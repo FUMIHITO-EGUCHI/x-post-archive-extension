@@ -1,114 +1,51 @@
 # Data Model
 
-## 方針
+## Scope
 
-- 投稿を最小単位として保存する
-- スレッドは投稿群のまとまりとして保持する
-- 自動タグと手動タグを分離する
-- 保存時点の反応数はスナップショットとして分離する
-- 将来のメディア保存を見越してメディア参照を独立させる
+初版では 1 投稿単位の保存だけを扱う。
+タグ、スレッド、メディア、反応数、ユーザー集計はデータモデルに含めない。
 
-## エンティティ
+## Store
 
-### posts
+### `posts`
 
-保存対象の最小単位。
+IndexedDB のストア名は `posts` とする。
+主キーは `x_post_id` をそのまま使う。
 
-主な項目:
+フィールド:
 
-- `id`
-- `authorId`
-- `authorHandle`
-- `authorDisplayName`
-- `content`
-- `permalink`
-- `createdAt`
-- `savedAt`
-- `inReplyToPostId`
-- `threadId`
-- `saveSource`
+- `x_post_id: string`
+- `x_username: string`
+- `post_text: string`
+- `post_url: string`
+- `saved_at: number`
 
-### threads
+## Constraints
 
-投稿者本人の返信連投チェーン。
+以下は必須項目とする。
 
-主な項目:
+- `x_post_id`
+- `x_username`
+- `post_text`
+- `post_url`
+- `saved_at`
 
-- `id`
-- `rootPostId`
-- `authorId`
-- `authorHandle`
-- `postIds`
-- `savedAt`
+バリデーション方針:
 
-### tags
+- `string` 項目は `null` / `undefined` だけでなく空文字も不可
+- `saved_at` はミリ秒 timestamp の有限な数値
+- `x_post_id` が重複する場合は新規保存しない
 
-自動タグと手動タグを同一テーブルで保持しつつ、`kind` で区別する。
+## Index Design
 
-主な項目:
+初版の一覧要件は `saved_at` 降順のみなので、少なくとも以下を持つ。
 
-- `id`
-- `label`
-- `slug`
-- `kind`
-- `createdAt`
+- primary key: `x_post_id`
+- secondary index: `saved_at`
 
-### postTags
+Dexie の schema は `posts: "&x_post_id, saved_at"` とする。
 
-投稿とタグの関連。
+## Display Model
 
-主な項目:
-
-- `id`
-- `postId`
-- `tagId`
-- `kind`
-- `createdAt`
-
-### mediaRefs
-
-将来の画像・動画保存に備えたメディア参照情報。
-
-主な項目:
-
-- `id`
-- `postId`
-- `mediaType`
-- `sourceUrl`
-- `previewUrl`
-- `altText`
-- `position`
-
-### postMetrics
-
-保存時点の反応数スナップショット。
-
-主な項目:
-
-- `postId`
-- `replyCount`
-- `repostCount`
-- `likeCount`
-- `quoteCount`
-- `capturedAt`
-
-## 初期インデックス方針
-
-- `posts.id`
-- `posts.authorHandle`
-- `posts.createdAt`
-- `posts.savedAt`
-- `threads.rootPostId`
-- `threads.authorHandle`
-- `tags.slug`
-- `tags.kind`
-- `postTags.postId`
-- `postTags.tagId`
-- `mediaRefs.postId`
-- `postMetrics.postId`
-
-## 表示用モデルとの分離
-
-保存データは DB 用の正規化寄りモデルとして保持し、viewer では必要に応じて結合済み表示モデルへ変換する。
-今回の初期セットアップでは、表示モデルはまだ最小限に留める。
-
+初版では保存データと表示データの差分が小さいため、viewer は `posts` をそのまま読む。
+将来検索や集計を追加するときは、viewer 用 selector / mapper を追加して分離する。

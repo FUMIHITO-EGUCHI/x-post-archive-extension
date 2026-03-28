@@ -1,81 +1,33 @@
 # Implementation Steps
 
-## Step 0: Initial foundation
+## Step 1: Posts-only data layer
 
-目的:
-WXT / React / Dexie を前提に、以後の実装が迷子にならない骨格を揃える。
+- `PostRecord` と保存 DTO を定義する
+- Dexie schema を `posts` のみに絞る
+- 保存、一覧取得、削除、存在確認の repository を作る
 
-成果物:
+## Step 2: Runtime contract
 
-- entrypoints の分離
-- DB スキーマの初期定義
-- runtime messaging の最小実装
-- viewer の起動確認用 UI
-- 基本文書の整備
+- content script から background に保存要求を送る
+- viewer から一覧取得と削除要求を送る
+- runtime message と response 型を最小構成で定義する
 
-## Step 1: Save request contract
+## Step 3: X DOM integration
 
-目的:
-保存機能を入れる前に、content script と background 間のメッセージ契約を固める。
-
-想定作業:
-
-- 保存要求メッセージ型の拡張
-- 抽出 DTO と保存 DTO の分離
-- 失敗時レスポンス方針の整理
-
-## Step 2: X post extraction MVP
-
-目的:
-単体投稿の最小抽出を実装する。
-
-想定作業:
-
-- X 専用抽出モジュール作成
-- 不安定な DOM 値の正規化
-- ハッシュタグ抽出
-
-## Step 3: Persistence MVP
-
-目的:
-単体投稿の保存を成立させる。
-
-想定作業:
-
-- background 側保存サービス
-- Dexie transaction 導入
-- 重複保存ポリシー整理
+- `article[data-testid="tweet"]` を監視する
+- 投稿ごとに保存ボタンを 1 回だけ差し込む
+- 投稿 permalink から `x_username`, `x_post_id`, `post_url` を抽出する
+- `data-testid="tweetText"` から本文を抽出する
+- 保存済みなら `保存済み`、未保存なら `保存` を表示する
 
 ## Step 4: Viewer MVP
 
-目的:
-保存済み一覧と詳細を読めるようにする。
+- 保存済み投稿一覧を `saved_at` 降順で表示する
+- 各行に削除ボタンを付ける
+- 削除後に一覧 state を更新する
 
-想定作業:
+## Step 5: Verification
 
-- 一覧 UI
-- 詳細 UI
-- 保存時点の反応数表示
-
-## Step 5: Search MVP
-
-目的:
-検索性を MVP 水準まで引き上げる。
-
-想定作業:
-
-- 本文検索
-- 投稿者検索
-- タグ検索
-
-## Step 6: Thread MVP
-
-目的:
-投稿者本人の返信連投チェーンを扱えるようにする。
-
-想定作業:
-
-- thread 定義に沿った保存
-- スレッド順表示
-- 単体投稿とスレッド表示の切り分け
-
+- `npm run typecheck`
+- `npm run build`
+- Chrome で読み込み、保存 / 一覧 / 削除を手動確認する

@@ -6,12 +6,11 @@ export default defineConfig({
   manifestVersion: 3,
   manifest: {
     name: "X Post Archive Extension",
-    description: "Save and search X posts as personal snapshots.",
+    description: "Save X posts and review them later in a simple archive viewer.",
     permissions: ["storage"],
     host_permissions: ["https://x.com/*", "https://twitter.com/*"],
     action: {
-      default_title: "Open archive viewer",
-      default_popup: "popup.html"
+      default_title: "Open archive viewer"
     }
   }
 });
