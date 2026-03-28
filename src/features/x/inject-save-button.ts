@@ -59,25 +59,25 @@ export function setButtonState(button: HTMLButtonElement, state: SaveButtonState
   switch (state) {
     case "idle":
       button.disabled = false;
-      button.textContent = "保存";
+      button.textContent = "Save";
       button.style.background = "#ffffff";
       button.style.color = "#0f1419";
       break;
     case "saving":
       button.disabled = true;
-      button.textContent = "保存中...";
+      button.textContent = "Saving...";
       button.style.background = "#eef5fb";
       button.style.color = "#4b6278";
       break;
     case "saved":
       button.disabled = true;
-      button.textContent = "保存済み";
+      button.textContent = "Saved";
       button.style.background = "#e7f8ee";
       button.style.color = "#157347";
       break;
     case "error":
       button.disabled = false;
-      button.textContent = "再試行";
+      button.textContent = "Retry";
       button.style.background = "#fff1f1";
       button.style.color = "#b42318";
       break;
