@@ -24,10 +24,41 @@ export function extractPostIdFromArticle(article: HTMLElement): string | null {
 }
 
 function extractPostText(article: HTMLElement): string | null {
-  const tweetText = article.querySelector('[data-testid="tweetText"]');
-  const value = tweetText?.textContent?.trim() ?? "";
+  const tweetText = article.querySelector<HTMLElement>('[data-testid="tweetText"]');
 
-  return value === "" ? null : value;
+  if (tweetText !== null) {
+    const exactText = normalizeText(tweetText.textContent);
+
+    if (exactText !== null) {
+      return exactText;
+    }
+  }
+
+  const langCandidates = article.querySelectorAll<HTMLElement>("div[lang]");
+  let bestCandidate: string | null = null;
+
+  for (const candidate of langCandidates) {
+    if (candidate.closest('[role="button"], a, nav, header, footer') !== null) {
+      continue;
+    }
+
+    const text = normalizeText(candidate.textContent);
+
+    if (text === null) {
+      continue;
+    }
+
+    if (bestCandidate === null || text.length > bestCandidate.length) {
+      bestCandidate = text;
+    }
+  }
+
+  return bestCandidate;
+}
+
+function normalizeText(value: string | null | undefined): string | null {
+  const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
+  return normalized === "" ? null : normalized;
 }
 
 function findPermalink(article: HTMLElement): {

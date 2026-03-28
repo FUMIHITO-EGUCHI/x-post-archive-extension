@@ -2,18 +2,20 @@ import { useEffect, useState } from "react";
 import type { PostRecord } from "../../../types/archive";
 import { requestDeletePost, requestPosts } from "../../runtime/client";
 
-type ViewerStatus = "idle" | "loading" | "ready" | "error";
+type ViewerStatus = "idle" | "loading" | "ready";
 
 export function ViewerApp() {
   const [posts, setPosts] = useState<PostRecord[]>([]);
   const [status, setStatus] = useState<ViewerStatus>("idle");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [loadNotice, setLoadNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadPosts() {
       setStatus("loading");
+      setLoadNotice(null);
 
       try {
         const response = await requestPosts();
@@ -26,7 +28,9 @@ export function ViewerApp() {
         console.error("Failed to load posts.", error);
 
         if (!cancelled) {
-          setStatus("error");
+          setPosts([]);
+          setStatus("ready");
+          setLoadNotice("Posts could not be loaded. Showing an empty list.");
         }
       }
     }
@@ -60,7 +64,7 @@ export function ViewerApp() {
         <p className="viewer-eyebrow">Initial Release</p>
         <h1 className="viewer-title">Saved X posts</h1>
         <p className="viewer-copy">
-          X 上で保存した投稿を、保存日時の新しい順に一覧表示します。
+          Saved posts are listed here in descending order of saved time.
         </p>
       </section>
 
@@ -70,14 +74,12 @@ export function ViewerApp() {
           <span>{posts.length} posts</span>
         </div>
 
-        {status === "loading" && <p className="viewer-message">保存済み投稿を読み込み中です。</p>}
-        {status === "error" && (
-          <p className="viewer-message viewer-message-error">
-            一覧の読み込みに失敗しました。拡張を再読み込みして再確認してください。
-          </p>
+        {status === "loading" && <p className="viewer-message">Loading saved posts...</p>}
+        {loadNotice !== null && (
+          <p className="viewer-message viewer-message-error">{loadNotice}</p>
         )}
         {status === "ready" && posts.length === 0 && (
-          <p className="viewer-message">まだ保存済み投稿はありません。</p>
+          <p className="viewer-message">No saved posts.</p>
         )}
 
         {posts.length > 0 && (
@@ -97,7 +99,7 @@ export function ViewerApp() {
                     }}
                     disabled={deletingId === post.x_post_id}
                   >
-                    {deletingId === post.x_post_id ? "削除中..." : "削除"}
+                    {deletingId === post.x_post_id ? "Deleting..." : "Delete"}
                   </button>
                 </div>
 

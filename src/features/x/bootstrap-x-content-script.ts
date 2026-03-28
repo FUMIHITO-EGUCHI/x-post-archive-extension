@@ -70,6 +70,6 @@ async function attachSaveButton(article: HTMLElement): Promise<void> {
     setButtonState(button, exists ? "saved" : "idle");
   } catch (error) {
     console.error("Failed to check saved state.", error);
-    setButtonState(button, "error");
+    setButtonState(button, "idle");
   }
 }

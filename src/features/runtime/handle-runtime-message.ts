@@ -9,6 +9,7 @@ import type {
   HasPostResponse,
   ListPostsResponse,
   RuntimeMessage,
+  RuntimeErrorResponse,
   RuntimeResponse,
   SavePostResponse
 } from "../../types/runtime";
@@ -75,4 +76,11 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/list" ||
     candidate.type === "posts/delete"
   );
+}
+
+export function createRuntimeErrorResponse(error: unknown): RuntimeErrorResponse {
+  return {
+    type: "runtime/error",
+    message: error instanceof Error ? error.message : "Unexpected runtime error."
+  };
 }

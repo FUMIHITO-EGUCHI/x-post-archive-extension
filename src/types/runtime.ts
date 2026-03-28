@@ -46,8 +46,14 @@ export type DeletePostResponse = {
   deleted: boolean;
 };
 
+export type RuntimeErrorResponse = {
+  type: "runtime/error";
+  message: string;
+};
+
 export type RuntimeResponse =
   | SavePostResponse
   | HasPostResponse
   | ListPostsResponse
-  | DeletePostResponse;
+  | DeletePostResponse
+  | RuntimeErrorResponse;

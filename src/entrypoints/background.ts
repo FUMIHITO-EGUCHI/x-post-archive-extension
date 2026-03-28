@@ -1,4 +1,7 @@
-import { handleRuntimeMessage } from "../features/runtime/handle-runtime-message";
+import {
+  createRuntimeErrorResponse,
+  handleRuntimeMessage
+} from "../features/runtime/handle-runtime-message";
 
 export default defineBackground({
   type: "module",
@@ -14,9 +17,14 @@ export default defineBackground({
     });
 
     chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-      void handleRuntimeMessage(message).then((response) => {
-        sendResponse(response);
-      });
+      void handleRuntimeMessage(message)
+        .then((response) => {
+          sendResponse(response);
+        })
+        .catch((error: unknown) => {
+          console.error("Runtime message handling failed.", error);
+          sendResponse(createRuntimeErrorResponse(error));
+        });
 
       return true;
     });

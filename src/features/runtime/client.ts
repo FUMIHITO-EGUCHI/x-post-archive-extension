@@ -8,6 +8,8 @@ import type {
   SavePostResponse
 } from "../../types/runtime";
 
+const RUNTIME_TIMEOUT_MS = 5000;
+
 export async function requestSavePost(post: SavePostInput): Promise<SavePostResponse> {
   const response = await sendMessage({
     type: "posts/save",
@@ -60,5 +62,22 @@ export async function requestDeletePost(xPostId: string): Promise<DeletePostResp
 }
 
 async function sendMessage(message: RuntimeMessage): Promise<RuntimeResponse> {
-  return (await chrome.runtime.sendMessage(message)) as RuntimeResponse;
+  const response = (await Promise.race([
+    chrome.runtime.sendMessage(message),
+    createTimeoutPromise()
+  ])) as RuntimeResponse;
+
+  if (response?.type === "runtime/error") {
+    throw new Error(response.message);
+  }
+
+  return response;
+}
+
+function createTimeoutPromise(): Promise<RuntimeResponse> {
+  return new Promise((_, reject) => {
+    window.setTimeout(() => {
+      reject(new Error(`Runtime request timed out after ${RUNTIME_TIMEOUT_MS}ms.`));
+    }, RUNTIME_TIMEOUT_MS);
+  });
 }
