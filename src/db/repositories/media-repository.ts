@@ -30,6 +30,13 @@ export async function updateMediaAfterWrite(
   await archiveDb.media.update(mediaId, update);
 }
 
+export async function updateMediaPreview(
+  mediaId: string,
+  update: Pick<MediaRecord, "preview_image_opfs_path">
+): Promise<void> {
+  await archiveDb.media.update(mediaId, update);
+}
+
 export async function deleteMediaRecordsByPostId(xPostId: string): Promise<void> {
   await archiveDb.media.where("x_post_id").equals(xPostId).delete();
 }

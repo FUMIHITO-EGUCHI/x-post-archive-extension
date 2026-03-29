@@ -10,6 +10,10 @@ export function buildMediaOpfsPath(
   return `/${[...MEDIA_ROOT_SEGMENTS, getMediaDirectory(mediaType), xPostId, `${mediaId}.bin`].join("/")}`;
 }
 
+export function buildVideoPreviewOpfsPath(xPostId: string, mediaId: string): string {
+  return `/${[...MEDIA_ROOT_SEGMENTS, "video-previews", xPostId, `${mediaId}.jpg`].join("/")}`;
+}
+
 export async function writeBlobToOpfs(opfsPath: string, blob: Blob): Promise<void> {
   const fileHandle = await getFileHandle(opfsPath, true);
   const writable = await fileHandle.createWritable();
