@@ -7,7 +7,7 @@ const MP4_PATH_PATTERN = /\.mp4($|\?)/i;
 export function extractVideoCandidatesFromArticle(
   article: HTMLElement
 ): SaveVideoCandidateInput[] {
-  const videos = article.querySelectorAll<HTMLVideoElement>("video[src]");
+  const videos = article.querySelectorAll<HTMLVideoElement>("video");
   const candidates: SaveVideoCandidateInput[] = [];
   const seenKeys = new Set<string>();
 
@@ -32,7 +32,13 @@ export function extractVideoCandidatesFromArticle(
 }
 
 function extractVideoCandidate(video: HTMLVideoElement): SaveVideoCandidateInput | null {
-  const sourceUrl = normalizeVideoUrl(video.currentSrc || video.src);
+  const resolvedSource = resolveVideoSource(video);
+
+  if (resolvedSource === null) {
+    return null;
+  }
+
+  const sourceUrl = normalizeVideoUrl(resolvedSource.src);
 
   if (sourceUrl === null) {
     return null;
@@ -51,10 +57,37 @@ function extractVideoCandidate(video: HTMLVideoElement): SaveVideoCandidateInput
     width: normalizeDimension(video.videoWidth || video.clientWidth),
     height: normalizeDimension(video.videoHeight || video.clientHeight),
     duration_sec: normalizeDuration(video.duration),
-    mime_type: normalizeMimeType(video.getAttribute("type")),
+    mime_type: normalizeMimeType(resolvedSource.type ?? video.getAttribute("type")),
     download_mode: downloadMode,
     variant_key: buildVariantKey(sourceUrl, downloadMode)
   };
+}
+
+function resolveVideoSource(
+  video: HTMLVideoElement
+): {
+  src: string;
+  type: string | null;
+} | null {
+  const directSrc = video.currentSrc || video.src;
+
+  if (directSrc.trim() !== "") {
+    return {
+      src: directSrc,
+      type: video.getAttribute("type")
+    };
+  }
+
+  const source = video.querySelector<HTMLSourceElement>("source[src]");
+
+  if (source !== null && source.src.trim() !== "") {
+    return {
+      src: source.src,
+      type: source.getAttribute("type")
+    };
+  }
+
+  return null;
 }
 
 function normalizeVideoUrl(rawUrl: string): string | null {
