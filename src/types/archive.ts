@@ -17,6 +17,7 @@ export type MediaRecord = {
   x_post_id: string;
   media_type: MediaType;
   source_url: string;
+  preview_image_url: string | null;
   opfs_path: string;
   position: number;
   alt_text: string | null;

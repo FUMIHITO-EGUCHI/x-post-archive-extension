@@ -12,6 +12,11 @@ type ActiveMedia = {
   items: ActiveMediaItem[];
   currentIndex: number;
 };
+type ActiveVideo = {
+  media: MediaRecord;
+  objectUrl: string | null;
+  status: "loading" | "ready" | "error";
+};
 
 export function ViewerApp() {
   const [posts, setPosts] = useState<ArchivePostRecord[]>([]);
@@ -20,6 +25,7 @@ export function ViewerApp() {
   const [loadNotice, setLoadNotice] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [activeMedia, setActiveMedia] = useState<ActiveMedia | null>(null);
+  const [activeVideo, setActiveVideo] = useState<ActiveVideo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +67,7 @@ export function ViewerApp() {
       const entries = await Promise.all(
         posts.flatMap((post) =>
           post.media
-            .filter((media) => media.storage_status === "ready")
+            .filter((media) => media.storage_status === "ready" && media.media_type === "image")
             .map(async (media) => {
               try {
                 const blob = await readBlobFromOpfs(media.opfs_path);
@@ -99,6 +105,56 @@ export function ViewerApp() {
       });
     };
   }, [posts]);
+
+  useEffect(() => {
+    if (activeVideo === null) {
+      return undefined;
+    }
+
+    const currentVideo = activeVideo;
+    let cancelled = false;
+    let createdUrl: string | null = null;
+
+    async function loadVideo() {
+      try {
+        const blob = await readBlobFromOpfs(currentVideo.media.opfs_path);
+        createdUrl = URL.createObjectURL(blob);
+
+        if (!cancelled) {
+          setActiveVideo({
+            media: currentVideo.media,
+            objectUrl: createdUrl,
+            status: "ready"
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load video from OPFS.", {
+          mediaId: currentVideo.media.media_id,
+          error
+        });
+
+        if (!cancelled) {
+          setActiveVideo({
+            media: currentVideo.media,
+            objectUrl: null,
+            status: "error"
+          });
+        }
+      }
+    }
+
+    if (currentVideo.status === "loading" && currentVideo.objectUrl === null) {
+      void loadVideo();
+    }
+
+    return () => {
+      cancelled = true;
+
+      if (createdUrl !== null) {
+        URL.revokeObjectURL(createdUrl);
+      }
+    };
+  }, [activeVideo]);
 
   useEffect(() => {
     if (activeMedia === null) {
@@ -220,6 +276,13 @@ export function ViewerApp() {
                             currentIndex
                           });
                         }}
+                        onOpenVideo={() => {
+                          setActiveVideo({
+                            media,
+                            objectUrl: null,
+                            status: "loading"
+                          });
+                        }}
                       />
                     ))}
                   </div>
@@ -306,6 +369,55 @@ export function ViewerApp() {
           </figure>
         </div>
       )}
+
+      {activeVideo !== null && (
+        <div
+          className="media-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Expanded video viewer"
+          onClick={() => {
+            setActiveVideo(null);
+          }}
+        >
+          <button
+            className="media-lightbox-close"
+            type="button"
+            aria-label="Close video viewer"
+            onClick={() => {
+              setActiveVideo(null);
+            }}
+          >
+            Close
+          </button>
+          <figure
+            className="media-lightbox-panel"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            {activeVideo.status === "loading" && (
+              <div className="post-media-status">Loading video...</div>
+            )}
+            {activeVideo.status === "error" && (
+              <div className="post-media-status post-media-status-error">
+                <strong>Video load failed.</strong>
+                <span>{activeVideo.media.last_error ?? "Unknown media error."}</span>
+              </div>
+            )}
+            {activeVideo.status === "ready" && activeVideo.objectUrl !== null && (
+              <video
+                className="media-lightbox-video"
+                src={activeVideo.objectUrl}
+                controls
+                autoPlay
+                preload="metadata"
+                playsInline
+              />
+            )}
+          </figure>
+        </div>
+      )}
     </main>
   );
 }
@@ -313,11 +425,13 @@ export function ViewerApp() {
 function MediaCard({
   media,
   objectUrl,
-  onOpen
+  onOpen,
+  onOpenVideo
 }: {
   media: MediaRecord;
   objectUrl: string | null;
   onOpen: () => void;
+  onOpenVideo: () => void;
 }) {
   if (media.storage_status === "failed") {
     return (
@@ -328,25 +442,36 @@ function MediaCard({
     );
   }
 
-  if (media.storage_status === "pending" || objectUrl === null) {
+  if (media.media_type === "video") {
     return (
-      <div className="post-media-status">
-        {media.media_type === "video" ? "Video is still being prepared." : "Image is still being prepared."}
-      </div>
+      <figure className="post-media-card post-media-card-video">
+        <button
+          className="post-media-button post-media-video-button"
+          type="button"
+          onClick={() => {
+            onOpenVideo();
+          }}
+        >
+          {media.preview_image_url !== null ? (
+            <img
+              className="post-media-image"
+              src={media.preview_image_url}
+              alt=""
+              width={media.width ?? undefined}
+              height={media.height ?? undefined}
+            />
+          ) : (
+            <div className="post-media-video-fallback">Video</div>
+          )}
+          <span className="post-media-video-badge">Play video</span>
+        </button>
+      </figure>
     );
   }
 
-  if (media.media_type === "video") {
+  if (media.storage_status === "pending" || objectUrl === null) {
     return (
-      <figure className="post-media-card">
-        <video
-          className="post-media-video"
-          src={objectUrl}
-          controls
-          preload="metadata"
-          playsInline
-        />
-      </figure>
+      <div className="post-media-status">Image is still being prepared.</div>
     );
   }
 
