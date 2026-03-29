@@ -1,6 +1,8 @@
-export type MediaType = "image";
+export type MediaType = "image" | "video";
 
 export type MediaStorageStatus = "pending" | "ready" | "failed";
+
+export type VideoDownloadMode = "direct_mp4" | "hls";
 
 export type PostRecord = {
   x_post_id: string;
@@ -35,12 +37,25 @@ export type SaveImageInput = {
   height: number | null;
 };
 
+export type SaveVideoCandidateInput = {
+  source_url: string;
+  poster_url: string | null;
+  thumbnail_url: string | null;
+  width: number | null;
+  height: number | null;
+  duration_sec: number | null;
+  mime_type: string | null;
+  download_mode: VideoDownloadMode;
+  variant_key: string | null;
+};
+
 export type SavePostInput = {
   x_post_id: string;
   x_username: string;
   post_text: string;
   post_url: string;
   media: SaveImageInput[];
+  video_candidates?: SaveVideoCandidateInput[];
 };
 
 export type ArchivePostRecord = PostRecord & {

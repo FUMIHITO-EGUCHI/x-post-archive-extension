@@ -148,3 +148,65 @@ type ViewerImage = {
 ```
 
 検索対象は `posts` を中心にし、画像表示は `media` を join して構成する。
+
+## Future Video Extension
+
+動画対応を追加するときは、既存の `media` ストアを壊さずに拡張する。
+
+### Extended `media`
+
+- `media_type` は `"image" | "video"` に拡張する
+- 画像専用だった `source_url` は、動画でも「抽出時点で最も直接的に取得できた URL」を保持する用途で残す
+- 動画向けに次のフィールド追加を想定する
+  - `download_mode: "direct_mp4" | "hls" | null`
+  - `variant_key: string | null`
+  - `thumbnail_url: string | null`
+  - `duration_sec: number | null`
+  - `playlist_url: string | null`
+
+### New `media_files`
+
+動画を 1 ファイル前提で固定しないため、物理保存単位を別ストアで持つ案を第一候補にする。
+
+フィールド案:
+
+- `file_id: string`
+- `media_id: string`
+- `role: "original" | "playlist" | "segment" | "thumbnail"`
+- `opfs_path: string`
+- `mime_type: string | null`
+- `byte_size: number | null`
+- `sequence: number | null`
+- `saved_at: number`
+- `storage_status: "pending" | "downloading" | "ready" | "partial" | "failed"`
+- `last_error: string | null`
+
+Key Design 案:
+
+```ts
+media: "&media_id, x_post_id, [x_post_id+position], media_type, storage_status, saved_at"
+media_files: "&file_id, media_id, [media_id+role], storage_status, saved_at"
+```
+
+### Relationship
+
+- `posts` 1 件に対して `media` は 0..n 件
+- `media` 1 件に対して `media_files` は 0..n 件
+- 画像は `media_files` を導入せず現状維持もできるが、動画対応を先に考えるなら将来的に画像も同じ物理ファイルモデルへ寄せられる
+- viewer の表示単位は引き続き投稿で、再生単位だけを `media` / `media_files` で表現する
+
+### OPFS Layout for Video
+
+例:
+
+```text
+/media/videos/{x_post_id}/{media_id}/master.m3u8
+/media/videos/{x_post_id}/{media_id}/segments/0001.m4s
+/media/videos/{x_post_id}/{media_id}/video.mp4
+```
+
+方針:
+
+- `media_id` 単位のディレクトリで動画関連ファイルを束管理する
+- `mp4` 直保存と `HLS` 保存のどちらでも同じ `media_id` を親キーにする
+- 論理メディアと物理ファイル群を分け、途中失敗時に `partial` 状態を表現できるようにする

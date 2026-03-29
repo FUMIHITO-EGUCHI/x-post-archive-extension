@@ -1,7 +1,13 @@
-const MEDIA_ROOT_SEGMENTS = ["media", "images"] as const;
+import type { MediaType } from "../../types/archive";
 
-export function buildMediaOpfsPath(xPostId: string, mediaId: string): string {
-  return `/${[...MEDIA_ROOT_SEGMENTS, xPostId, `${mediaId}.bin`].join("/")}`;
+const MEDIA_ROOT_SEGMENTS = ["media"] as const;
+
+export function buildMediaOpfsPath(
+  xPostId: string,
+  mediaId: string,
+  mediaType: MediaType
+): string {
+  return `/${[...MEDIA_ROOT_SEGMENTS, getMediaDirectory(mediaType), xPostId, `${mediaId}.bin`].join("/")}`;
 }
 
 export async function writeBlobToOpfs(opfsPath: string, blob: Blob): Promise<void> {
@@ -115,6 +121,15 @@ function splitOpfsPath(opfsPath: string): string[] {
   }
 
   return segments;
+}
+
+function getMediaDirectory(mediaType: MediaType): string {
+  switch (mediaType) {
+    case "image":
+      return "images";
+    case "video":
+      return "videos";
+  }
 }
 
 function isDirectoryNotEmptyError(error: unknown): boolean {
