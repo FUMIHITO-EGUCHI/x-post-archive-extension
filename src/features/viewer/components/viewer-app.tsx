@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ArchivePostRecord, MediaRecord } from "../../../types/archive";
 import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
 import { requestDeletePost, requestPosts } from "../../runtime/client";
@@ -26,6 +26,7 @@ export function ViewerApp() {
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [activeMedia, setActiveMedia] = useState<ActiveMedia | null>(null);
   const [activeVideo, setActiveVideo] = useState<ActiveVideo | null>(null);
+  const activeVideoUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,12 +114,12 @@ export function ViewerApp() {
 
     const currentVideo = activeVideo;
     let cancelled = false;
-    let createdUrl: string | null = null;
 
     async function loadVideo() {
       try {
         const blob = await readBlobFromOpfs(currentVideo.media.opfs_path);
-        createdUrl = URL.createObjectURL(blob);
+        const createdUrl = URL.createObjectURL(blob);
+        activeVideoUrlRef.current = createdUrl;
 
         if (!cancelled) {
           setActiveVideo({
@@ -144,16 +145,30 @@ export function ViewerApp() {
     }
 
     if (currentVideo.status === "loading" && currentVideo.objectUrl === null) {
+      if (activeVideoUrlRef.current !== null) {
+        URL.revokeObjectURL(activeVideoUrlRef.current);
+        activeVideoUrlRef.current = null;
+      }
+
       void loadVideo();
     }
 
     return () => {
       cancelled = true;
-
-      if (createdUrl !== null) {
-        URL.revokeObjectURL(createdUrl);
-      }
     };
+  }, [activeVideo]);
+
+  useEffect(() => {
+    if (activeVideo !== null) {
+      return;
+    }
+
+    if (activeVideoUrlRef.current !== null) {
+      URL.revokeObjectURL(activeVideoUrlRef.current);
+      activeVideoUrlRef.current = null;
+    }
+
+    return undefined;
   }, [activeVideo]);
 
   useEffect(() => {
