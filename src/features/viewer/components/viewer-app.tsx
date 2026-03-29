@@ -199,7 +199,12 @@ export function ViewerApp() {
                         media={media}
                         objectUrl={mediaUrls[media.media_id] ?? null}
                         onOpen={() => {
+                          if (media.media_type === "video") {
+                            return;
+                          }
+
                           const items = post.media
+                            .filter((postMedia) => postMedia.media_type === "image")
                             .map((postMedia) => createActiveMediaItem(postMedia, mediaUrls))
                             .filter((item): item is ActiveMediaItem => item !== null);
                           const currentIndex = items.findIndex(
@@ -317,14 +322,32 @@ function MediaCard({
   if (media.storage_status === "failed") {
     return (
       <div className="post-media-status post-media-status-error">
-        <strong>Image save failed.</strong>
+        <strong>{media.media_type === "video" ? "Video save failed." : "Image save failed."}</strong>
         <span>{media.last_error ?? "Unknown media error."}</span>
       </div>
     );
   }
 
   if (media.storage_status === "pending" || objectUrl === null) {
-    return <div className="post-media-status">Image is still being prepared.</div>;
+    return (
+      <div className="post-media-status">
+        {media.media_type === "video" ? "Video is still being prepared." : "Image is still being prepared."}
+      </div>
+    );
+  }
+
+  if (media.media_type === "video") {
+    return (
+      <figure className="post-media-card">
+        <video
+          className="post-media-video"
+          src={objectUrl}
+          controls
+          preload="metadata"
+          playsInline
+        />
+      </figure>
+    );
   }
 
   return (
