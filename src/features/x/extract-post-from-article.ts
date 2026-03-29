@@ -1,4 +1,8 @@
-import type { SaveImageInput, SavePostInput } from "../../types/archive";
+import type {
+  SaveImageInput,
+  SavePostInput
+} from "../../types/archive";
+import { getCachedGraphqlVideoCandidates } from "./graphql-video-candidate-cache";
 
 const POST_PATH_PATTERN = /^\/([^/]+)\/status\/(\d+)$/;
 const PHOTO_PATH_PATTERN = /\/photo\/(\d+)$/;
@@ -12,20 +16,26 @@ export function extractPostFromArticle(article: HTMLElement): SavePostInput | nu
 
   const media = extractPostImages(article);
   const text = extractPostText(article);
+  const videoCandidates = getCachedGraphqlVideoCandidates(permalink.xPostId);
 
-  if (text === "" && media.length === 0) {
+  if (text === "" && media.length === 0 && videoCandidates.length === 0) {
     return null;
   }
 
-  return {
+  const post: SavePostInput = {
     x_post_id: permalink.xPostId,
     x_username: permalink.xUsername,
     post_text: text,
     post_url: permalink.postUrl,
     media
   };
-}
 
+  if (videoCandidates.length > 0) {
+    post.video_candidates = videoCandidates;
+  }
+
+  return post;
+}
 export function extractPostIdFromArticle(article: HTMLElement): string | null {
   const permalink = findPermalink(article);
   return permalink?.xPostId ?? null;

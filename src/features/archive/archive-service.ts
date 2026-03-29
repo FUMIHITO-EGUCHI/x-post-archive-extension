@@ -18,7 +18,8 @@ import type {
   MediaRecord,
   PostRecord,
   SaveImageInput,
-  SavePostInput
+  SavePostInput,
+  SaveVideoCandidateInput
 } from "../../types/archive";
 import {
   buildMediaOpfsPath,
@@ -53,14 +54,22 @@ export async function saveArchivePost(input: SavePostInput): Promise<{
     post_url: input.post_url.trim(),
     saved_at: savedAt
   };
-  const media = input.media.map((image) => createPendingMediaRecord(input.x_post_id, image, savedAt));
+  const imageMedia = input.media.map((image) =>
+    createPendingImageRecord(input.x_post_id, image, savedAt)
+  );
+  const videoMedia = (input.video_candidates ?? [])
+    .filter((candidate) => candidate.download_mode === "direct_mp4")
+    .map((candidate, index) =>
+      createPendingVideoRecord(input.x_post_id, candidate, savedAt, imageMedia.length + index)
+    );
+  const media = [...imageMedia, ...videoMedia];
 
   await archiveDb.transaction("rw", archiveDb.posts, archiveDb.media, async () => {
     await addPost(post);
     await addMediaRecords(media);
   });
 
-  await Promise.all(media.map((record) => persistImage(record)));
+  await Promise.all(media.map((record) => persistMedia(record)));
 
   return {
     status: "saved",
@@ -124,14 +133,14 @@ export async function deleteArchivePost(xPostId: string): Promise<boolean> {
   return true;
 }
 
-async function persistImage(record: MediaRecord): Promise<void> {
+async function persistMedia(record: MediaRecord): Promise<void> {
   try {
     const response = await fetch(record.source_url, {
       credentials: "omit"
     });
 
     if (!response.ok) {
-      throw new Error(`Image fetch failed with status ${response.status}.`);
+      throw new Error(`Media fetch failed with status ${response.status}.`);
     }
 
     const blob = await response.blob();
@@ -143,18 +152,18 @@ async function persistImage(record: MediaRecord): Promise<void> {
       byte_size: blob.size,
       storage_status: "ready",
       last_error: null
-    });
+        });
   } catch (error) {
     await updateMediaAfterWrite(record.media_id, {
       mime_type: null,
       byte_size: null,
       storage_status: "failed",
-      last_error: error instanceof Error ? error.message : "Image persistence failed."
+      last_error: error instanceof Error ? error.message : "Media persistence failed."
     });
   }
 }
 
-function createPendingMediaRecord(
+function createPendingImageRecord(
   xPostId: string,
   image: SaveImageInput,
   savedAt: number
@@ -168,12 +177,40 @@ function createPendingMediaRecord(
     x_post_id: xPostId,
     media_type: "image",
     source_url: image.source_url,
-    opfs_path: buildMediaOpfsPath(xPostId, mediaId),
+    opfs_path: buildMediaOpfsPath(xPostId, mediaId, "image"),
     position: image.position,
     alt_text: image.alt_text,
     width: image.width,
     height: image.height,
     mime_type: null,
+    byte_size: null,
+    storage_status: "pending",
+    saved_at: savedAt,
+    last_error: null
+  };
+}
+
+function createPendingVideoRecord(
+  xPostId: string,
+  video: SaveVideoCandidateInput,
+  savedAt: number,
+  position: number
+): MediaRecord {
+  validateSaveVideoCandidateInput(video);
+
+  const mediaId = crypto.randomUUID();
+
+  return {
+    media_id: mediaId,
+    x_post_id: xPostId,
+    media_type: "video",
+    source_url: video.source_url,
+    opfs_path: buildMediaOpfsPath(xPostId, mediaId, "video"),
+    position,
+    alt_text: null,
+    width: video.width,
+    height: video.height,
+    mime_type: video.mime_type,
     byte_size: null,
     storage_status: "pending",
     saved_at: savedAt,
@@ -194,8 +231,19 @@ function validateSavePostInput(input: SavePostInput): void {
     throw new Error("Invalid media list.");
   }
 
-  if (input.post_text.trim() === "" && input.media.length === 0) {
-    throw new Error("A post without text must include at least one image.");
+  if (
+    input.video_candidates !== undefined &&
+    !Array.isArray(input.video_candidates)
+  ) {
+    throw new Error("Invalid video candidate list.");
+  }
+
+  const directMp4Candidates = (input.video_candidates ?? []).filter(
+    (candidate) => candidate.download_mode === "direct_mp4"
+  );
+
+  if (input.post_text.trim() === "" && input.media.length === 0 && directMp4Candidates.length === 0) {
+    throw new Error("A post without text must include at least one savable media item.");
   }
 }
 
@@ -211,6 +259,33 @@ function validateSaveImageInput(image: SaveImageInput): void {
 
   if (image.alt_text !== null && typeof image.alt_text !== "string") {
     throw new Error("Invalid alt_text.");
+  }
+}
+
+function validateSaveVideoCandidateInput(video: SaveVideoCandidateInput): void {
+  requireNonEmptyString(video.source_url, "video.source_url");
+  requireNullableFiniteNumber(video.width, "video.width");
+  requireNullableFiniteNumber(video.height, "video.height");
+  requireNullableFiniteNumber(video.duration_sec, "video.duration_sec");
+
+  if (video.poster_url !== null && typeof video.poster_url !== "string") {
+    throw new Error("Invalid video.poster_url.");
+  }
+
+  if (video.thumbnail_url !== null && typeof video.thumbnail_url !== "string") {
+    throw new Error("Invalid video.thumbnail_url.");
+  }
+
+  if (video.mime_type !== null && typeof video.mime_type !== "string") {
+    throw new Error("Invalid video.mime_type.");
+  }
+
+  if (video.variant_key !== null && typeof video.variant_key !== "string") {
+    throw new Error("Invalid video.variant_key.");
+  }
+
+  if (video.download_mode !== "direct_mp4" && video.download_mode !== "hls") {
+    throw new Error("Invalid video.download_mode.");
   }
 }
 
