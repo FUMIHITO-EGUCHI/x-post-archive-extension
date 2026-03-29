@@ -1,5 +1,10 @@
-import type { SaveImageInput, SavePostInput } from "../../types/archive";
+import type {
+  SaveImageInput,
+  SavePostInput,
+  SaveVideoCandidateInput
+} from "../../types/archive";
 import { extractVideoCandidatesFromArticle } from "./extract-video-candidates-from-article";
+import { getCachedGraphqlVideoCandidates } from "./graphql-video-candidate-cache";
 
 const POST_PATH_PATTERN = /^\/([^/]+)\/status\/(\d+)$/;
 const PHOTO_PATH_PATTERN = /\/photo\/(\d+)$/;
@@ -12,10 +17,13 @@ export function extractPostFromArticle(article: HTMLElement): SavePostInput | nu
   }
 
   const media = extractPostImages(article);
-  const videoCandidates = extractVideoCandidatesFromArticle(article);
   const text = extractPostText(article);
+  const videoCandidates = selectPreferredVideoCandidates(
+    getCachedGraphqlVideoCandidates(permalink.xPostId),
+    extractVideoCandidatesFromArticle(article)
+  );
 
-  if (text === "" && media.length === 0) {
+  if (text === "" && media.length === 0 && videoCandidates.length === 0) {
     return null;
   }
 
@@ -32,6 +40,26 @@ export function extractPostFromArticle(article: HTMLElement): SavePostInput | nu
   }
 
   return post;
+}
+
+function selectPreferredVideoCandidates(
+  ...candidateSets: ReadonlyArray<ReadonlyArray<SaveVideoCandidateInput>>
+): SaveVideoCandidateInput[] {
+  const preferredByMode = new Map<string, SaveVideoCandidateInput>();
+
+  for (const candidateSet of candidateSets) {
+    for (const candidate of candidateSet) {
+      const dedupeKey = candidate.download_mode;
+
+      if (preferredByMode.has(dedupeKey)) {
+        continue;
+      }
+
+      preferredByMode.set(dedupeKey, candidate);
+    }
+  }
+
+  return [...preferredByMode.values()];
 }
 
 export function extractPostIdFromArticle(article: HTMLElement): string | null {

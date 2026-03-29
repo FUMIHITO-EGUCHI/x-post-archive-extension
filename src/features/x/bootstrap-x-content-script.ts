@@ -1,12 +1,14 @@
 import { requestHasPost, requestSavePost } from "../runtime/client";
 import { extractPostFromArticle, extractPostIdFromArticle } from "./extract-post-from-article";
 import { findTweetArticles } from "./find-tweet-articles";
+import { ensureGraphqlVideoCandidateListener } from "./graphql-video-candidate-cache";
 import { injectSaveButton, setButtonState } from "./inject-save-button";
 
 const processedArticles = new WeakSet<HTMLElement>();
 let scheduled = false;
 
 export function bootstrapXContentScript(): void {
+  ensureGraphqlVideoCandidateListener();
   scanTweetArticles();
   observeDomChanges();
 }
