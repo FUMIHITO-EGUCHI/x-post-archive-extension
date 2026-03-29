@@ -5,15 +5,36 @@ import { ensureGraphqlVideoCandidateListener } from "./graphql-video-candidate-c
 import { injectSaveButton, setButtonState } from "./inject-save-button";
 
 const processedArticles = new WeakSet<HTMLElement>();
+let initialized = false;
 let scheduled = false;
 
 export function bootstrapXContentScript(): void {
   ensureGraphqlVideoCandidateListener();
+  startWhenBodyReady();
+}
+
+function startWhenBodyReady(): void {
+  if (initialized) {
+    return;
+  }
+
+  if (document.body === null) {
+    document.addEventListener("DOMContentLoaded", startWhenBodyReady, {
+      once: true
+    });
+    return;
+  }
+
+  initialized = true;
   scanTweetArticles();
   observeDomChanges();
 }
 
 function observeDomChanges(): void {
+  if (document.body === null) {
+    return;
+  }
+
   const observer = new MutationObserver(() => {
     if (scheduled) {
       return;
