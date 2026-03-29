@@ -1,4 +1,5 @@
 import type { SaveImageInput, SavePostInput } from "../../types/archive";
+import { extractVideoCandidatesFromArticle } from "./extract-video-candidates-from-article";
 
 const POST_PATH_PATTERN = /^\/([^/]+)\/status\/(\d+)$/;
 const PHOTO_PATH_PATTERN = /\/photo\/(\d+)$/;
@@ -11,19 +12,26 @@ export function extractPostFromArticle(article: HTMLElement): SavePostInput | nu
   }
 
   const media = extractPostImages(article);
+  const videoCandidates = extractVideoCandidatesFromArticle(article);
   const text = extractPostText(article);
 
   if (text === "" && media.length === 0) {
     return null;
   }
 
-  return {
+  const post: SavePostInput = {
     x_post_id: permalink.xPostId,
     x_username: permalink.xUsername,
     post_text: text,
     post_url: permalink.postUrl,
     media
   };
+
+  if (videoCandidates.length > 0) {
+    post.video_candidates = videoCandidates;
+  }
+
+  return post;
 }
 
 export function extractPostIdFromArticle(article: HTMLElement): string | null {
