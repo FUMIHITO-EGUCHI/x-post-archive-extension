@@ -4,7 +4,8 @@ import {
   deleteMediaRecordsByPostId,
   listMediaByPostId,
   listMediaByPostIds,
-  updateMediaAfterWrite
+  updateMediaAfterWrite,
+  updateMediaPreview
 } from "../../db/repositories/media-repository";
 import {
   addPost,
@@ -23,6 +24,7 @@ import type {
 } from "../../types/archive";
 import {
   buildMediaOpfsPath,
+  buildVideoPreviewOpfsPath,
   deleteBlobFromOpfs,
   writeBlobToOpfs
 } from "../media-storage/opfs-media-storage";
@@ -88,20 +90,35 @@ export async function listArchivePosts(): Promise<ArchivePostRecord[]> {
   const mediaMap = new Map<string, MediaRecord[]>();
 
   for (const item of media) {
-    const current = mediaMap.get(item.x_post_id);
+    const normalizedItem = normalizeMediaRecord(item);
+    const current = mediaMap.get(normalizedItem.x_post_id);
 
     if (current === undefined) {
-      mediaMap.set(item.x_post_id, [item]);
+      mediaMap.set(normalizedItem.x_post_id, [normalizedItem]);
       continue;
     }
 
-    current.push(item);
+    current.push(normalizedItem);
   }
 
   return posts.map((post) => ({
     ...post,
     media: mediaMap.get(post.x_post_id) ?? []
   }));
+}
+
+export async function persistVideoThumbnailPreview(
+  media: Pick<MediaRecord, "media_id" | "x_post_id">,
+  thumbnailBlob: Blob
+): Promise<string> {
+  const previewPath = buildVideoPreviewOpfsPath(media.x_post_id, media.media_id);
+
+  await writeBlobToOpfs(previewPath, thumbnailBlob);
+  await updateMediaPreview(media.media_id, {
+    preview_image_opfs_path: previewPath
+  });
+
+  return previewPath;
 }
 
 export async function deleteArchivePost(xPostId: string): Promise<boolean> {
@@ -122,6 +139,18 @@ export async function deleteArchivePost(xPostId: string): Promise<boolean> {
         xPostId,
         error
       });
+    }
+
+    if (typeof item.preview_image_opfs_path === "string") {
+      try {
+        await deleteBlobFromOpfs(item.preview_image_opfs_path);
+      } catch (error) {
+        console.warn("Failed to delete OPFS preview media file.", {
+          mediaId: item.media_id,
+          xPostId,
+          error
+        });
+      }
     }
   }
 
@@ -178,6 +207,7 @@ function createPendingImageRecord(
     media_type: "image",
     source_url: image.source_url,
     preview_image_url: null,
+    preview_image_opfs_path: null,
     opfs_path: buildMediaOpfsPath(xPostId, mediaId, "image"),
     position: image.position,
     alt_text: image.alt_text,
@@ -207,6 +237,7 @@ function createPendingVideoRecord(
     media_type: "video",
     source_url: video.source_url,
     preview_image_url: video.thumbnail_url ?? video.poster_url,
+    preview_image_opfs_path: null,
     opfs_path: buildMediaOpfsPath(xPostId, mediaId, "video"),
     position,
     alt_text: null,
@@ -301,4 +332,12 @@ function requireNullableFiniteNumber(value: number | null, field: string): void 
   if (value !== null && (!Number.isFinite(value) || value < 0)) {
     throw new Error(`Invalid ${field}.`);
   }
+}
+
+function normalizeMediaRecord(media: MediaRecord): MediaRecord {
+  return {
+    ...media,
+    preview_image_url: media.preview_image_url ?? null,
+    preview_image_opfs_path: media.preview_image_opfs_path ?? null
+  };
 }
