@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ArchivePostRecord, MediaRecord } from "../../../types/archive";
 import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
+import { persistVideoThumbnailPreview } from "../../archive/archive-service";
 import { requestDeletePost, requestPosts } from "../../runtime/client";
 
 type ViewerStatus = "idle" | "loading" | "ready";
@@ -27,6 +28,7 @@ export function ViewerApp() {
   const [activeMedia, setActiveMedia] = useState<ActiveMedia | null>(null);
   const [activeVideo, setActiveVideo] = useState<ActiveVideo | null>(null);
   const activeVideoUrlRef = useRef<string | null>(null);
+  const generatingThumbnailIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -68,10 +70,27 @@ export function ViewerApp() {
       const entries = await Promise.all(
         posts.flatMap((post) =>
           post.media
-            .filter((media) => media.storage_status === "ready" && media.media_type === "image")
+            .filter((media) => {
+              const previewPath = media.preview_image_opfs_path ?? null;
+
+              if (media.storage_status !== "ready") {
+                return false;
+              }
+
+              if (media.media_type === "image") {
+                return true;
+              }
+
+              return previewPath !== null;
+            })
             .map(async (media) => {
               try {
-                const blob = await readBlobFromOpfs(media.opfs_path);
+                const previewPath = media.preview_image_opfs_path ?? null;
+                const blob = await readBlobFromOpfs(
+                  media.media_type === "image"
+                    ? media.opfs_path
+                    : previewPath ?? media.opfs_path
+                );
                 const objectUrl = URL.createObjectURL(blob);
                 createdUrls.push(objectUrl);
                 return [media.media_id, objectUrl] as const;
@@ -104,6 +123,67 @@ export function ViewerApp() {
       createdUrls.forEach((url) => {
         URL.revokeObjectURL(url);
       });
+    };
+  }, [posts]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function generateMissingVideoThumbnails() {
+      const videoMedia = posts
+        .flatMap((post) => post.media)
+        .filter(
+          (media) =>
+            media.media_type === "video" &&
+            media.storage_status === "ready" &&
+            (media.preview_image_opfs_path ?? null) === null &&
+            !generatingThumbnailIdsRef.current.has(media.media_id)
+        );
+
+      for (const media of videoMedia) {
+        if (cancelled) {
+          return;
+        }
+
+        generatingThumbnailIdsRef.current.add(media.media_id);
+
+        try {
+          const videoBlob = await readBlobFromOpfs(media.opfs_path);
+          const thumbnailBlob = await createVideoThumbnailBlob(videoBlob);
+          const previewPath = await persistVideoThumbnailPreview(media, thumbnailBlob);
+
+          if (!cancelled) {
+            setPosts((currentPosts) =>
+              currentPosts.map((post) => ({
+                ...post,
+                media: post.media.map((postMedia) =>
+                  postMedia.media_id === media.media_id
+                    ? {
+                        ...postMedia,
+                        preview_image_opfs_path: previewPath
+                      }
+                    : postMedia
+                )
+              }))
+            );
+          }
+        } catch (error) {
+          console.error("Failed to generate local video thumbnail.", {
+            mediaId: media.media_id,
+            error
+          });
+        } finally {
+          generatingThumbnailIdsRef.current.delete(media.media_id);
+        }
+      }
+    }
+
+    if (posts.length > 0) {
+      void generateMissingVideoThumbnails();
+    }
+
+    return () => {
+      cancelled = true;
     };
   }, [posts]);
 
@@ -458,6 +538,8 @@ function MediaCard({
   }
 
   if (media.media_type === "video") {
+    const previewSource = objectUrl ?? media.preview_image_url ?? null;
+
     return (
       <figure className="post-media-card post-media-card-video">
         <button
@@ -467,10 +549,10 @@ function MediaCard({
             onOpenVideo();
           }}
         >
-          {media.preview_image_url !== null ? (
+          {previewSource !== null ? (
             <img
               className="post-media-image"
-              src={media.preview_image_url}
+              src={previewSource}
               alt=""
               width={media.width ?? undefined}
               height={media.height ?? undefined}
@@ -533,6 +615,94 @@ function createActiveMediaItem(
     objectUrl,
     altText: media.alt_text
   };
+}
+
+async function createVideoThumbnailBlob(videoBlob: Blob): Promise<Blob> {
+  const objectUrl = URL.createObjectURL(videoBlob);
+  const video = document.createElement("video");
+  video.preload = "metadata";
+  video.muted = true;
+  video.playsInline = true;
+  video.src = objectUrl;
+
+  try {
+    await waitForVideoEvent(video, "loadedmetadata");
+
+    const seekTime = getThumbnailSeekTime(video.duration);
+
+    if (seekTime > 0) {
+      video.currentTime = seekTime;
+      await waitForVideoEvent(video, "seeked");
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, video.videoWidth);
+    canvas.height = Math.max(1, video.videoHeight);
+
+    const context = canvas.getContext("2d");
+
+    if (context === null) {
+      throw new Error("Canvas context could not be created.");
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const thumbnailBlob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", 0.85);
+    });
+
+    if (thumbnailBlob === null) {
+      throw new Error("Thumbnail blob could not be created.");
+    }
+
+    return thumbnailBlob;
+  } finally {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function waitForVideoEvent(
+  video: HTMLVideoElement,
+  eventName: "loadedmetadata" | "seeked"
+): Promise<void> {
+  if (eventName === "loadedmetadata" && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const handleSuccess = () => {
+      cleanup();
+      resolve();
+    };
+
+    const handleError = () => {
+      cleanup();
+      reject(new Error(`Video ${eventName} failed.`));
+    };
+
+    const cleanup = () => {
+      video.removeEventListener(eventName, handleSuccess);
+      video.removeEventListener("error", handleError);
+    };
+
+    video.addEventListener(eventName, handleSuccess, {
+      once: true
+    });
+    video.addEventListener("error", handleError, {
+      once: true
+    });
+  });
+}
+
+function getThumbnailSeekTime(duration: number): number {
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return 0;
+  }
+
+  return Math.min(duration / 2, 1);
 }
 
 function moveActiveMedia(
