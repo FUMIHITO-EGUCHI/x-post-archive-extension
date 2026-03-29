@@ -49,3 +49,7 @@
 - 画像の URL だけ保存して後で毎回ネットワーク取得する構成にはしない
 - Base64 を IndexedDB に直接詰め込む構成にはしない
 - viewer から直接 X の CDN URL を参照する構成にはしない
+
+## Follow-up Memo
+
+MVP の外にある将来候補は [future-features.md](/c:/Users/kurah/Documents/Git/x-post-archive-extension/docs/future-features.md) で管理する。
