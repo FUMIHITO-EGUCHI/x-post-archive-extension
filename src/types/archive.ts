@@ -1,6 +1,7 @@
 export type MediaType = "image" | "video";
 
 export type MediaStorageStatus = "pending" | "ready" | "failed";
+export type TagSource = "auto" | "manual";
 
 export type VideoDownloadMode = "direct_mp4" | "hls";
 
@@ -29,6 +30,30 @@ export type MediaRecord = {
   storage_status: MediaStorageStatus;
   saved_at: number;
   last_error: string | null;
+};
+
+export type TagRecord = {
+  tag_id: string;
+  normalized_name: string;
+  display_name: string;
+  created_at: number;
+};
+
+export type PostTagRecord = {
+  post_tag_id: string;
+  x_post_id: string;
+  tag_id: string;
+  normalized_name: string;
+  display_name: string;
+  source: TagSource;
+  assigned_at: number;
+};
+
+export type ArchiveTagRecord = {
+  tag_id: string;
+  normalized_name: string;
+  display_name: string;
+  source: TagSource;
 };
 
 export type SaveImageInput = {
@@ -62,4 +87,5 @@ export type SavePostInput = {
 
 export type ArchivePostRecord = PostRecord & {
   media: MediaRecord[];
+  tags: ArchiveTagRecord[];
 };

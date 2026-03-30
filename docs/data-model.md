@@ -210,3 +210,28 @@ media_files: "&file_id, media_id, [media_id+role], storage_status, saved_at"
 - `media_id` 単位のディレクトリで動画関連ファイルを束管理する
 - `mp4` 直保存と `HLS` 保存のどちらでも同じ `media_id` を親キーにする
 - 論理メディアと物理ファイル群を分け、途中失敗時に `partial` 状態を表現できるようにする
+## Tagging Extension
+
+### `tags`
+
+- `tag_id: string`
+- `normalized_name: string`
+- `display_name: string`
+- `created_at: number`
+
+### `post_tags`
+
+- `post_tag_id: string`
+- `x_post_id: string`
+- `tag_id: string`
+- `normalized_name: string`
+- `display_name: string`
+- `source: "auto" | "manual"`
+- `assigned_at: number`
+
+### Tagging Notes
+
+- `tags` keeps canonical tag labels.
+- `post_tags` keeps the relation between a saved post and each tag.
+- hashtag auto tags are created from saved snapshot text.
+- manual tags are added later from the viewer and can override an existing auto relation for the same normalized tag.

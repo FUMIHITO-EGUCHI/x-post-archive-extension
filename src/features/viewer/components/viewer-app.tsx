@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import type { ArchivePostRecord, MediaRecord } from "../../../types/archive";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ArchivePostRecord, ArchiveTagRecord, MediaRecord } from "../../../types/archive";
 import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
-import { requestDeletePost, requestPosts } from "../../runtime/client";
+import {
+  requestAddPostTag,
+  requestDeletePost,
+  requestPosts,
+  requestRemovePostTag
+} from "../../runtime/client";
 
 type ViewerStatus = "idle" | "loading" | "ready";
 type ActiveMedia = {
@@ -21,7 +26,36 @@ export function ViewerApp() {
   const [loadNotice, setLoadNotice] = useState<string | null>(null);
   const [activeMedia, setActiveMedia] = useState<ActiveMedia | null>(null);
   const [activeVideo, setActiveVideo] = useState<ActiveVideo | null>(null);
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
+  const [tagActionPostId, setTagActionPostId] = useState<string | null>(null);
   const activeVideoUrlRef = useRef<string | null>(null);
+
+  const visiblePosts = useMemo(
+    () =>
+      activeTagFilter === null
+        ? posts
+        : posts.filter((post) =>
+            post.tags.some((tag) => tag.normalized_name === activeTagFilter)
+          ),
+    [activeTagFilter, posts]
+  );
+
+  const availableTags = useMemo(() => {
+    const tagMap = new Map<string, ArchiveTagRecord>();
+
+    for (const post of posts) {
+      for (const tag of post.tags) {
+        if (!tagMap.has(tag.normalized_name)) {
+          tagMap.set(tag.normalized_name, tag);
+        }
+      }
+    }
+
+    return [...tagMap.values()].sort((left, right) =>
+      left.display_name.localeCompare(right.display_name)
+    );
+  }, [posts]);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,8 +149,6 @@ export function ViewerApp() {
       URL.revokeObjectURL(activeVideoUrlRef.current);
       activeVideoUrlRef.current = null;
     }
-
-    return undefined;
   }, [activeVideo]);
 
   useEffect(() => {
@@ -163,33 +195,121 @@ export function ViewerApp() {
     }
   }
 
+  async function handleAddTag(xPostId: string) {
+    const draft = tagDrafts[xPostId]?.trim() ?? "";
+
+    if (draft === "") {
+      return;
+    }
+
+    setTagActionPostId(xPostId);
+
+    try {
+      const response = await requestAddPostTag(xPostId, draft);
+      setPosts((current) =>
+        current.map((post) =>
+          post.x_post_id === xPostId ? { ...post, tags: response.tags } : post
+        )
+      );
+      setTagDrafts((current) => ({
+        ...current,
+        [xPostId]: ""
+      }));
+    } catch (error) {
+      console.error("Failed to add tag.", error);
+    } finally {
+      setTagActionPostId(null);
+    }
+  }
+
+  async function handleRemoveTag(xPostId: string, tag: ArchiveTagRecord) {
+    if (tag.source !== "manual") {
+      setActiveTagFilter((current) =>
+        current === tag.normalized_name ? null : tag.normalized_name
+      );
+      return;
+    }
+
+    setTagActionPostId(xPostId);
+
+    try {
+      const response = await requestRemovePostTag(xPostId, tag.normalized_name);
+      setPosts((current) =>
+        current.map((post) =>
+          post.x_post_id === xPostId ? { ...post, tags: response.tags } : post
+        )
+      );
+    } catch (error) {
+      console.error("Failed to remove tag.", error);
+    } finally {
+      setTagActionPostId(null);
+    }
+  }
+
   return (
     <main className="viewer-shell">
       <section className="viewer-hero">
         <p className="viewer-eyebrow">Image Archive</p>
         <h1 className="viewer-title">Saved X posts</h1>
         <p className="viewer-copy">
-          Saved posts and their images are listed here in descending order of saved time.
+          Saved posts, media, and tags are listed here in descending order of saved time.
         </p>
       </section>
 
       <section className="viewer-list-panel">
         <div className="viewer-list-header">
           <h2>Archive</h2>
-          <span>{posts.length} posts</span>
+          <span>{visiblePosts.length} posts</span>
         </div>
+
+        {availableTags.length > 0 && (
+          <div className="viewer-tag-filter-panel">
+            <div className="viewer-tag-filter-header">
+              <h3>Filter by tag</h3>
+              {activeTagFilter !== null && (
+                <button
+                  className="viewer-tag-filter-clear"
+                  type="button"
+                  onClick={() => {
+                    setActiveTagFilter(null);
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="tag-list">
+              {availableTags.map((tag) => (
+                <button
+                  key={tag.tag_id}
+                  className={
+                    tag.normalized_name === activeTagFilter ? "tag-chip tag-chip-active" : "tag-chip"
+                  }
+                  type="button"
+                  onClick={() => {
+                    setActiveTagFilter((current) =>
+                      current === tag.normalized_name ? null : tag.normalized_name
+                    );
+                  }}
+                >
+                  {tag.display_name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {status === "loading" && <p className="viewer-message">Loading saved posts...</p>}
         {loadNotice !== null && (
           <p className="viewer-message viewer-message-error">{loadNotice}</p>
         )}
-        {status === "ready" && posts.length === 0 && (
+        {status === "ready" && visiblePosts.length === 0 && (
           <p className="viewer-message">No saved posts.</p>
         )}
 
-        {posts.length > 0 && (
+        {visiblePosts.length > 0 && (
           <div className="viewer-list">
-            {posts.map((post) => (
+            {visiblePosts.map((post) => (
               <article className="post-card" key={post.x_post_id}>
                 <div className="post-card-header">
                   <div>
@@ -210,23 +330,92 @@ export function ViewerApp() {
 
                 {post.post_text.trim() !== "" && <p className="post-text">{post.post_text}</p>}
 
+                <div className="post-tag-section">
+                  {post.tags.length > 0 && (
+                    <div className="tag-list">
+                      {post.tags.map((tag) => (
+                        <span
+                          className={tag.source === "manual" ? "tag-chip tag-chip-manual" : "tag-chip"}
+                          key={`${post.x_post_id}-${tag.tag_id}`}
+                        >
+                          <button
+                            className="tag-chip-button"
+                            type="button"
+                            onClick={() => {
+                              setActiveTagFilter((current) =>
+                                current === tag.normalized_name ? null : tag.normalized_name
+                              );
+                            }}
+                          >
+                            {tag.display_name}
+                          </button>
+                          {tag.source === "manual" && (
+                            <button
+                              className="tag-chip-remove"
+                              type="button"
+                              aria-label={`Remove tag ${tag.display_name}`}
+                              onClick={() => {
+                                void handleRemoveTag(post.x_post_id, tag);
+                              }}
+                              disabled={tagActionPostId === post.x_post_id}
+                            >
+                              x
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="tag-editor">
+                    <input
+                      className="tag-input"
+                      type="text"
+                      value={tagDrafts[post.x_post_id] ?? ""}
+                      placeholder="Add manual tag"
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
+                        setTagDrafts((current) => ({
+                          ...current,
+                          [post.x_post_id]: value
+                        }));
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void handleAddTag(post.x_post_id);
+                        }
+                      }}
+                    />
+                    <button
+                      className="tag-add-button"
+                      type="button"
+                      onClick={() => {
+                        void handleAddTag(post.x_post_id);
+                      }}
+                      disabled={tagActionPostId === post.x_post_id}
+                    >
+                      {tagActionPostId === post.x_post_id ? "Saving..." : "Add tag"}
+                    </button>
+                  </div>
+                </div>
+
                 {post.media.length > 0 && (
                   <div className="post-media-grid">
-                    {post.media.map((media, index) => (
-                        <MediaCard
-                          key={media.media_id}
-                          media={media}
-                          onOpen={() => {
-                            if (media.media_type === "video") {
-                              return;
-                            }
+                    {post.media.map((media) => (
+                      <MediaCard
+                        key={media.media_id}
+                        media={media}
+                        onOpen={() => {
+                          if (media.media_type === "video") {
+                            return;
+                          }
 
-                          const items = post.media
-                            .filter(
-                              (postMedia) =>
-                                postMedia.media_type === "image" &&
-                                postMedia.storage_status === "ready"
-                            );
+                          const items = post.media.filter(
+                            (postMedia) =>
+                              postMedia.media_type === "image" &&
+                              postMedia.storage_status === "ready"
+                          );
                           const currentIndex = items.findIndex(
                             (item) => item.media_id === media.media_id
                           );
@@ -484,10 +673,7 @@ function formatSavedAt(savedAt: number): string {
   }).format(savedAt);
 }
 
-function moveActiveMedia(
-  activeMedia: ActiveMedia | null,
-  delta: number
-): ActiveMedia | null {
+function moveActiveMedia(activeMedia: ActiveMedia | null, delta: number): ActiveMedia | null {
   if (activeMedia === null || activeMedia.items.length <= 1) {
     return activeMedia;
   }

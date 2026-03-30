@@ -1,4 +1,9 @@
-import type { ArchivePostRecord, PostRecord, SavePostInput } from "./archive";
+import type {
+  ArchivePostRecord,
+  ArchiveTagRecord,
+  PostRecord,
+  SavePostInput
+} from "./archive";
 
 export type SavePostMessage = {
   type: "posts/save";
@@ -19,11 +24,25 @@ export type DeletePostMessage = {
   xPostId: string;
 };
 
+export type AddPostTagMessage = {
+  type: "posts/tags/add";
+  xPostId: string;
+  tagName: string;
+};
+
+export type RemovePostTagMessage = {
+  type: "posts/tags/remove";
+  xPostId: string;
+  normalizedTagName: string;
+};
+
 export type RuntimeMessage =
   | SavePostMessage
   | HasPostMessage
   | ListPostsMessage
-  | DeletePostMessage;
+  | DeletePostMessage
+  | AddPostTagMessage
+  | RemovePostTagMessage;
 
 export type SavePostResponse = {
   type: "posts/save-result";
@@ -46,6 +65,12 @@ export type DeletePostResponse = {
   deleted: boolean;
 };
 
+export type UpdatePostTagsResponse = {
+  type: "posts/tags/update-result";
+  xPostId: string;
+  tags: ArchiveTagRecord[];
+};
+
 export type RuntimeErrorResponse = {
   type: "runtime/error";
   message: string;
@@ -56,4 +81,5 @@ export type RuntimeResponse =
   | HasPostResponse
   | ListPostsResponse
   | DeletePostResponse
+  | UpdatePostTagsResponse
   | RuntimeErrorResponse;
