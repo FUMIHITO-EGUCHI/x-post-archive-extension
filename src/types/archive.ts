@@ -10,6 +10,10 @@ export type PostRecord = {
   x_username: string;
   post_text: string;
   post_url: string;
+  posted_at: number;
+  reply_count: number;
+  repost_count: number;
+  like_count: number;
   saved_at: number;
 };
 
@@ -81,6 +85,10 @@ export type SavePostInput = {
   x_username: string;
   post_text: string;
   post_url: string;
+  posted_at: number;
+  reply_count: number;
+  repost_count: number;
+  like_count: number;
   media: SaveImageInput[];
   video_candidates?: SaveVideoCandidateInput[];
 };

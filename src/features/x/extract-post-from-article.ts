@@ -17,6 +17,7 @@ export function extractPostFromArticle(article: HTMLElement): SavePostInput | nu
   const media = extractPostImages(article);
   const text = extractPostText(article);
   const videoCandidates = getCachedGraphqlVideoCandidates(permalink.xPostId);
+  const engagement = extractEngagementCounts(article);
 
   if (text === "" && media.length === 0 && videoCandidates.length === 0) {
     return null;
@@ -27,6 +28,10 @@ export function extractPostFromArticle(article: HTMLElement): SavePostInput | nu
     x_username: permalink.xUsername,
     post_text: text,
     post_url: permalink.postUrl,
+    posted_at: extractPostedAt(article),
+    reply_count: engagement.reply_count,
+    repost_count: engagement.repost_count,
+    like_count: engagement.like_count,
     media
   };
 
@@ -192,6 +197,115 @@ function findPermalink(article: HTMLElement): {
   }
 
   return null;
+}
+
+function extractPostedAt(article: HTMLElement): number {
+  const timeElement = article.querySelector<HTMLTimeElement>("time[datetime]");
+  const datetimeValue = timeElement?.dateTime ?? timeElement?.getAttribute("datetime");
+  const parsed = datetimeValue === undefined || datetimeValue === null ? Number.NaN : Date.parse(datetimeValue);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error("Post timestamp could not be extracted.");
+  }
+
+  return parsed;
+}
+
+function extractEngagementCounts(article: HTMLElement): {
+  reply_count: number;
+  repost_count: number;
+  like_count: number;
+} {
+  return {
+    reply_count: extractActionCount(article, ["reply"]),
+    repost_count: extractActionCount(article, ["retweet", "unretweet"]),
+    like_count: extractActionCount(article, ["like", "unlike"])
+  };
+}
+
+function extractActionCount(article: HTMLElement, testIds: string[]): number {
+  for (const testId of testIds) {
+    const action = article.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+
+    if (action === null) {
+      continue;
+    }
+
+    const count = readCountFromAction(action);
+
+    if (count !== null) {
+      return count;
+    }
+  }
+
+  return 0;
+}
+
+function readCountFromAction(action: HTMLElement): number | null {
+  const labelledElement = action.querySelector<HTMLElement>("[aria-label]");
+  const labelCount = parseCountFromText(
+    labelledElement?.getAttribute("aria-label") ?? action.getAttribute("aria-label")
+  );
+
+  if (labelCount !== null) {
+    return labelCount;
+  }
+
+  const transitionText = action.querySelector<HTMLElement>('[data-testid="app-text-transition-container"]');
+  const textCount = parseCountFromText(transitionText?.textContent ?? action.textContent);
+
+  return textCount;
+}
+
+function parseCountFromText(value: string | null | undefined): number | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.replace(/\s+/g, " ").trim();
+
+  if (normalized === "") {
+    return 0;
+  }
+
+  const match = normalized.match(/(\d+(?:[.,]\d+)?)\s*([KMBkmb万億]?)/u);
+
+  if (match === null) {
+    return 0;
+  }
+
+  const numericPart = match[1]?.replace(/,/g, "");
+  const suffix = match[2] ?? "";
+
+  if (numericPart === undefined) {
+    return 0;
+  }
+
+  const parsedNumber = Number.parseFloat(numericPart);
+
+  if (!Number.isFinite(parsedNumber) || parsedNumber < 0) {
+    return 0;
+  }
+
+  const multiplier = getCountMultiplier(suffix);
+  return Math.round(parsedNumber * multiplier);
+}
+
+function getCountMultiplier(suffix: string): number {
+  switch (suffix.toUpperCase()) {
+    case "K":
+      return 1_000;
+    case "M":
+      return 1_000_000;
+    case "B":
+      return 1_000_000_000;
+    case "万":
+      return 10_000;
+    case "億":
+      return 100_000_000;
+    default:
+      return 1;
+  }
 }
 
 function parsePermalink(href: string): {

@@ -72,6 +72,10 @@ export async function saveArchivePost(input: SavePostInput): Promise<{
     x_username: input.x_username.trim(),
     post_text: input.post_text.trim(),
     post_url: input.post_url.trim(),
+    posted_at: input.posted_at,
+    reply_count: input.reply_count,
+    repost_count: input.repost_count,
+    like_count: input.like_count,
     saved_at: savedAt
   };
   const imageMedia = input.media.map((image) =>
@@ -493,6 +497,10 @@ function validateSavePostInput(input: SavePostInput): void {
   requireNonEmptyString(input.x_post_id, "x_post_id");
   requireNonEmptyString(input.x_username, "x_username");
   requireNonEmptyString(input.post_url, "post_url");
+  requireFiniteTimestamp(input.posted_at, "posted_at");
+  requireFiniteCount(input.reply_count, "reply_count");
+  requireFiniteCount(input.repost_count, "repost_count");
+  requireFiniteCount(input.like_count, "like_count");
 
   if (typeof input.post_text !== "string") {
     throw new Error("Invalid post_text.");
@@ -569,6 +577,18 @@ function requireNonEmptyString(value: string, field: string): void {
 
 function requireNullableFiniteNumber(value: number | null, field: string): void {
   if (value !== null && (!Number.isFinite(value) || value < 0)) {
+    throw new Error(`Invalid ${field}.`);
+  }
+}
+
+function requireFiniteTimestamp(value: number, field: string): void {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`Invalid ${field}.`);
+  }
+}
+
+function requireFiniteCount(value: number, field: string): void {
+  if (!Number.isFinite(value) || value < 0) {
     throw new Error(`Invalid ${field}.`);
   }
 }

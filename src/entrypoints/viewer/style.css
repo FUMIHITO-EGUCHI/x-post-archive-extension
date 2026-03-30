@@ -216,6 +216,11 @@ body {
   margin-bottom: 20px;
 }
 
+.viewer-list-heading {
+  display: grid;
+  gap: 4px;
+}
+
 .viewer-list-header h2 {
   margin: 0;
   font-size: calc(24px * var(--viewer-font-scale));
@@ -224,6 +229,44 @@ body {
 .viewer-list-header span {
   font-size: calc(14px * var(--viewer-font-scale));
   color: #526479;
+}
+
+.viewer-sort-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.viewer-sort-label {
+  display: grid;
+  gap: 6px;
+  font-size: calc(12px * var(--viewer-font-scale));
+  font-weight: 700;
+  color: #526479;
+}
+
+.viewer-sort-select {
+  min-width: 144px;
+  border: 1px solid rgba(16, 32, 51, 0.12);
+  border-radius: 14px;
+  padding: 10px 14px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-size: calc(14px * var(--viewer-font-scale));
+}
+
+.viewer-sort-direction-button {
+  border: 1px solid rgba(16, 32, 51, 0.12);
+  border-radius: 14px;
+  padding: 10px 14px;
+  background: #fff;
+  color: #17324d;
+  font-size: calc(13px * var(--viewer-font-scale));
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .viewer-tag-filter-panel {
@@ -297,9 +340,25 @@ body {
 }
 
 .post-date {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 6px 0 0;
   font-size: calc(13px * var(--viewer-font-scale));
   color: #5e7389;
+}
+
+.post-date-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.post-date-label {
+  min-width: 44px;
+  font-weight: 700;
+  color: #435166;
 }
 
 .post-text {
@@ -307,6 +366,36 @@ body {
   font-size: calc(24px * var(--viewer-font-scale));
   white-space: pre-wrap;
   line-height: 1.7;
+}
+
+.post-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.post-metric {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(16, 32, 51, 0.08);
+  border-radius: 16px;
+  background: #f7fbff;
+}
+
+.post-metric dt {
+  margin: 0 0 6px;
+  font-size: calc(12px * var(--viewer-font-scale));
+  color: #5e7389;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.post-metric dd {
+  margin: 0;
+  font-size: calc(18px * var(--viewer-font-scale));
+  font-weight: 700;
+  color: #102033;
 }
 
 .post-tag-section {
@@ -638,8 +727,25 @@ body {
     flex-direction: column;
   }
 
+  .viewer-list-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .viewer-sort-controls {
+    justify-content: flex-start;
+  }
+
   .post-media-grid {
     grid-template-columns: 1fr;
+  }
+
+  .post-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .post-date-list {
+    gap: 8px;
   }
 
   .tag-editor {
