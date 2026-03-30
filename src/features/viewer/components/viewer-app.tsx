@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArchivePostRecord, ArchiveTagRecord, MediaRecord } from "../../../types/archive";
 import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
@@ -9,6 +10,8 @@ import {
 } from "../../runtime/client";
 
 type ViewerStatus = "idle" | "loading" | "ready";
+type ViewerScreen = "archive" | "settings";
+type FontSizeOption = "small" | "medium" | "large";
 type ActiveMedia = {
   items: MediaRecord[];
   currentIndex: number;
@@ -18,8 +21,23 @@ type ActiveVideo = {
   objectUrl: string | null;
   status: "loading" | "ready" | "error";
 };
+type StorageEstimateState = {
+  usage: number | null;
+  quota: number | null;
+  available: number | null;
+  status: "idle" | "ready" | "unsupported";
+};
+
+const VIEWER_FONT_SIZE_STORAGE_KEY = "viewer.fontSize";
+const FONT_SIZE_SCALE: Record<FontSizeOption, number> = {
+  small: 0.92,
+  medium: 1,
+  large: 1.12
+};
 
 export function ViewerApp() {
+  const [screen, setScreen] = useState<ViewerScreen>("archive");
+  const [fontSize, setFontSize] = useState<FontSizeOption>("medium");
   const [posts, setPosts] = useState<ArchivePostRecord[]>([]);
   const [status, setStatus] = useState<ViewerStatus>("idle");
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -29,7 +47,15 @@ export function ViewerApp() {
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
   const [tagActionPostId, setTagActionPostId] = useState<string | null>(null);
+  const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState>({
+    usage: null,
+    quota: null,
+    available: null,
+    status: "idle"
+  });
   const activeVideoUrlRef = useRef<string | null>(null);
+
+  const viewerScale = FONT_SIZE_SCALE[fontSize];
 
   const visiblePosts = useMemo(
     () =>
@@ -71,6 +97,42 @@ export function ViewerApp() {
     );
   }, [posts]);
 
+  const archiveSummary = useMemo(() => {
+    let imageCount = 0;
+    let videoCount = 0;
+    let mediaBytes = 0;
+    const usernames = new Set<string>();
+    const tagNames = new Set<string>();
+
+    for (const post of posts) {
+      usernames.add(post.x_username);
+
+      for (const tag of post.tags) {
+        tagNames.add(tag.normalized_name);
+      }
+
+      for (const media of post.media) {
+        if (media.media_type === "image") {
+          imageCount += 1;
+        } else if (media.media_type === "video") {
+          videoCount += 1;
+        }
+
+        mediaBytes += media.byte_size ?? 0;
+      }
+    }
+
+    return {
+      postCount: posts.length,
+      imageCount,
+      videoCount,
+      mediaCount: imageCount + videoCount,
+      accountCount: usernames.size,
+      tagCount: tagNames.size,
+      mediaBytes
+    };
+  }, [posts]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -102,6 +164,76 @@ export function ViewerApp() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadViewerSettings() {
+      const stored = await browser.storage.local.get(VIEWER_FONT_SIZE_STORAGE_KEY);
+      const storedValue = stored[VIEWER_FONT_SIZE_STORAGE_KEY];
+
+      if (!cancelled && isFontSizeOption(storedValue)) {
+        setFontSize(storedValue);
+      }
+    }
+
+    void loadViewerSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStorageEstimate() {
+      if (typeof navigator.storage?.estimate !== "function") {
+        if (!cancelled) {
+          setStorageEstimate({
+            usage: null,
+            quota: null,
+            available: null,
+            status: "unsupported"
+          });
+        }
+
+        return;
+      }
+
+      try {
+        const result = await navigator.storage.estimate();
+        const usage = typeof result.usage === "number" ? result.usage : null;
+        const quota = typeof result.quota === "number" ? result.quota : null;
+
+        if (!cancelled) {
+          setStorageEstimate({
+            usage,
+            quota,
+            available: usage !== null && quota !== null ? Math.max(quota - usage, 0) : null,
+            status: "ready"
+          });
+        }
+      } catch (error) {
+        console.warn("Storage estimate is unavailable.", error);
+
+        if (!cancelled) {
+          setStorageEstimate({
+            usage: null,
+            quota: null,
+            available: null,
+            status: "unsupported"
+          });
+        }
+      }
+    }
+
+    void loadStorageEstimate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [posts.length, archiveSummary.mediaBytes]);
 
   useEffect(() => {
     if (activeVideo === null) {
@@ -260,214 +392,382 @@ export function ViewerApp() {
     }
   }
 
+  async function handleFontSizeChange(nextValue: FontSizeOption) {
+    setFontSize(nextValue);
+
+    try {
+      await browser.storage.local.set({
+        [VIEWER_FONT_SIZE_STORAGE_KEY]: nextValue
+      });
+    } catch (error) {
+      console.error("Failed to persist viewer font size.", error);
+    }
+  }
+
   return (
-    <main className="viewer-shell">
-      <section className="viewer-hero">
-        <p className="viewer-eyebrow">Image Archive</p>
-        <h1 className="viewer-title">Saved X posts</h1>
-        <p className="viewer-copy">
-          Saved posts, media, and tags are listed here in descending order of saved time.
-        </p>
-      </section>
-
-      <section className="viewer-list-panel">
-        <div className="viewer-list-header">
-          <h2>Archive</h2>
-          <span>{visiblePosts.length} posts</span>
-        </div>
-
-        {availableTags.length > 0 && (
-          <div className="viewer-tag-filter-panel">
-            <div className="viewer-tag-filter-header">
-              <h3>Filter by tag</h3>
-              {activeTagFilter !== null && (
-                <button
-                  className="viewer-tag-filter-clear"
-                  type="button"
-                  onClick={() => {
-                    setActiveTagFilter(null);
-                  }}
-                >
-                  Clear
-                </button>
-              )}
+    <main
+      className="viewer-shell"
+      style={
+        {
+          "--viewer-font-scale": viewerScale
+        } as CSSProperties
+      }
+    >
+      {screen === "archive" ? (
+        <>
+          <section className="viewer-hero">
+            <div className="viewer-eyebrow-row">
+              <p className="viewer-eyebrow">Image Archive</p>
+              <button
+                className="viewer-icon-button"
+                type="button"
+                aria-label="Open settings"
+                onClick={() => {
+                  setScreen("settings");
+                }}
+              >
+                <GearIcon />
+              </button>
             </div>
-            <div className="tag-list">
-              {availableTags.map(({ tag, postCount }) => (
-                <button
-                  key={tag.tag_id}
-                  className={
-                    tag.normalized_name === activeTagFilter ? "tag-chip tag-chip-active" : "tag-chip"
-                  }
-                  type="button"
-                  onClick={() => {
-                    setActiveTagFilter((current) =>
-                      current === tag.normalized_name ? null : tag.normalized_name
-                    );
-                  }}
-                >
-                  {formatTagFilterLabel(tag.display_name, postCount)}
-                </button>
-              ))}
+            <h1 className="viewer-title">Saved X posts</h1>
+            <p className="viewer-copy">
+              Saved posts, media, and tags are listed here in descending order of saved time.
+            </p>
+          </section>
+
+          <section className="viewer-list-panel">
+            <div className="viewer-list-header">
+              <h2>Archive</h2>
+              <span>{visiblePosts.length} posts</span>
             </div>
-          </div>
-        )}
 
-        {status === "loading" && <p className="viewer-message">Loading saved posts...</p>}
-        {loadNotice !== null && (
-          <p className="viewer-message viewer-message-error">{loadNotice}</p>
-        )}
-        {status === "ready" && visiblePosts.length === 0 && (
-          <p className="viewer-message">No saved posts.</p>
-        )}
-
-        {visiblePosts.length > 0 && (
-          <div className="viewer-list">
-            {visiblePosts.map((post) => (
-              <article className="post-card" key={post.x_post_id}>
-                <div className="post-card-header">
-                  <div>
-                    <p className="post-username">@{post.x_username}</p>
-                    <p className="post-date">{formatSavedAt(post.saved_at)}</p>
-                  </div>
-                  <button
-                    className="post-delete-button"
-                    type="button"
-                    onClick={() => {
-                      void handleDelete(post.x_post_id);
-                    }}
-                    disabled={deletingId === post.x_post_id}
-                  >
-                    {deletingId === post.x_post_id ? "Deleting..." : "Delete"}
-                  </button>
-                </div>
-
-                {post.post_text.trim() !== "" && <p className="post-text">{post.post_text}</p>}
-
-                {post.media.length > 0 && (
-                  <div className="post-media-grid">
-                    {post.media.map((media) => (
-                      <MediaCard
-                        key={media.media_id}
-                        media={media}
-                        onOpen={() => {
-                          if (media.media_type === "video") {
-                            return;
-                          }
-
-                          const items = post.media.filter(
-                            (postMedia) =>
-                              postMedia.media_type === "image" &&
-                              postMedia.storage_status === "ready"
-                          );
-                          const currentIndex = items.findIndex(
-                            (item) => item.media_id === media.media_id
-                          );
-
-                          if (items.length === 0 || currentIndex < 0) {
-                            return;
-                          }
-
-                          setActiveMedia({
-                            items,
-                            currentIndex
-                          });
-                        }}
-                        onOpenVideo={() => {
-                          setActiveVideo({
-                            media,
-                            objectUrl: null,
-                            status: "loading"
-                          });
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                <div className="post-tag-section">
-                  {post.tags.length > 0 && (
-                    <div className="tag-list">
-                      {post.tags.map((tag) => (
-                        <span
-                          className={tag.source === "manual" ? "tag-chip tag-chip-manual" : "tag-chip"}
-                          key={`${post.x_post_id}-${tag.tag_id}`}
-                        >
-                          <button
-                            className="tag-chip-button"
-                            type="button"
-                            onClick={() => {
-                              setActiveTagFilter((current) =>
-                                current === tag.normalized_name ? null : tag.normalized_name
-                              );
-                            }}
-                          >
-                            {tag.display_name}
-                          </button>
-                          {tag.source === "manual" && (
-                            <button
-                              className="tag-chip-remove"
-                              type="button"
-                              aria-label={`Remove tag ${tag.display_name}`}
-                              onClick={() => {
-                                void handleRemoveTag(post.x_post_id, tag);
-                              }}
-                              disabled={tagActionPostId === post.x_post_id}
-                            >
-                              x
-                            </button>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="tag-editor">
-                    <input
-                      className="tag-input"
-                      type="text"
-                      value={tagDrafts[post.x_post_id] ?? ""}
-                      placeholder="Add manual tag"
-                      onChange={(event) => {
-                        const value = event.currentTarget.value;
-                        setTagDrafts((current) => ({
-                          ...current,
-                          [post.x_post_id]: value
-                        }));
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          void handleAddTag(post.x_post_id);
-                        }
-                      }}
-                    />
+            {availableTags.length > 0 && (
+              <div className="viewer-tag-filter-panel">
+                <div className="viewer-tag-filter-header">
+                  <h3>Filter by tag</h3>
+                  {activeTagFilter !== null && (
                     <button
-                      className="tag-add-button"
+                      className="viewer-tag-filter-clear"
                       type="button"
                       onClick={() => {
-                        void handleAddTag(post.x_post_id);
+                        setActiveTagFilter(null);
                       }}
-                      disabled={tagActionPostId === post.x_post_id}
                     >
-                      {tagActionPostId === post.x_post_id ? "Saving..." : "Add tag"}
+                      Clear
                     </button>
-                  </div>
+                  )}
                 </div>
+                <div className="tag-list">
+                  {availableTags.map(({ tag, postCount }) => (
+                    <button
+                      key={tag.tag_id}
+                      className={
+                        tag.normalized_name === activeTagFilter
+                          ? "tag-chip tag-chip-active"
+                          : "tag-chip"
+                      }
+                      type="button"
+                      onClick={() => {
+                        setActiveTagFilter((current) =>
+                          current === tag.normalized_name ? null : tag.normalized_name
+                        );
+                      }}
+                    >
+                      {formatTagFilterLabel(tag.display_name, postCount)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
-                <a
-                  className="post-link"
-                  href={post.post_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {post.post_url}
-                </a>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+            {status === "loading" && <p className="viewer-message">Loading saved posts...</p>}
+            {loadNotice !== null && (
+              <p className="viewer-message viewer-message-error">{loadNotice}</p>
+            )}
+            {status === "ready" && visiblePosts.length === 0 && (
+              <p className="viewer-message">No saved posts.</p>
+            )}
+
+            {visiblePosts.length > 0 && (
+              <div className="viewer-list">
+                {visiblePosts.map((post) => (
+                  <article className="post-card" key={post.x_post_id}>
+                    <div className="post-card-header">
+                      <div>
+                        <p className="post-username">@{post.x_username}</p>
+                        <p className="post-date">{formatSavedAt(post.saved_at)}</p>
+                      </div>
+                      <button
+                        className="post-delete-button"
+                        type="button"
+                        onClick={() => {
+                          void handleDelete(post.x_post_id);
+                        }}
+                        disabled={deletingId === post.x_post_id}
+                      >
+                        {deletingId === post.x_post_id ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+
+                    {post.post_text.trim() !== "" && <p className="post-text">{post.post_text}</p>}
+
+                    {post.media.length > 0 && (
+                      <div className="post-media-grid">
+                        {post.media.map((media) => (
+                          <MediaCard
+                            key={media.media_id}
+                            media={media}
+                            onOpen={() => {
+                              if (media.media_type === "video") {
+                                return;
+                              }
+
+                              const items = post.media.filter(
+                                (postMedia) =>
+                                  postMedia.media_type === "image" &&
+                                  postMedia.storage_status === "ready"
+                              );
+                              const currentIndex = items.findIndex(
+                                (item) => item.media_id === media.media_id
+                              );
+
+                              if (items.length === 0 || currentIndex < 0) {
+                                return;
+                              }
+
+                              setActiveMedia({
+                                items,
+                                currentIndex
+                              });
+                            }}
+                            onOpenVideo={() => {
+                              setActiveVideo({
+                                media,
+                                objectUrl: null,
+                                status: "loading"
+                              });
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="post-tag-section">
+                      {post.tags.length > 0 && (
+                        <div className="tag-list">
+                          {post.tags.map((tag) => (
+                            <span
+                              className={
+                                tag.source === "manual"
+                                  ? "tag-chip tag-chip-manual"
+                                  : "tag-chip"
+                              }
+                              key={`${post.x_post_id}-${tag.tag_id}`}
+                            >
+                              <button
+                                className="tag-chip-button"
+                                type="button"
+                                onClick={() => {
+                                  setActiveTagFilter((current) =>
+                                    current === tag.normalized_name ? null : tag.normalized_name
+                                  );
+                                }}
+                              >
+                                {tag.display_name}
+                              </button>
+                              {tag.source === "manual" && (
+                                <button
+                                  className="tag-chip-remove"
+                                  type="button"
+                                  aria-label={`Remove tag ${tag.display_name}`}
+                                  onClick={() => {
+                                    void handleRemoveTag(post.x_post_id, tag);
+                                  }}
+                                  disabled={tagActionPostId === post.x_post_id}
+                                >
+                                  x
+                                </button>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="tag-editor">
+                        <input
+                          className="tag-input"
+                          type="text"
+                          value={tagDrafts[post.x_post_id] ?? ""}
+                          placeholder="Add manual tag"
+                          onChange={(event) => {
+                            const value = event.currentTarget.value;
+                            setTagDrafts((current) => ({
+                              ...current,
+                              [post.x_post_id]: value
+                            }));
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              void handleAddTag(post.x_post_id);
+                            }
+                          }}
+                        />
+                        <button
+                          className="tag-add-button"
+                          type="button"
+                          onClick={() => {
+                            void handleAddTag(post.x_post_id);
+                          }}
+                          disabled={tagActionPostId === post.x_post_id}
+                        >
+                          {tagActionPostId === post.x_post_id ? "Saving..." : "Add tag"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <a
+                      className="post-link"
+                      href={post.post_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {post.post_url}
+                    </a>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      ) : (
+        <>
+          <section className="viewer-hero viewer-settings-hero">
+            <div className="viewer-hero-header">
+              <button
+                className="viewer-icon-button"
+                type="button"
+                aria-label="Back to archive"
+                onClick={() => {
+                  setScreen("archive");
+                }}
+              >
+                <ArrowLeftIcon />
+              </button>
+            </div>
+            <p className="viewer-eyebrow">Settings</p>
+            <h1 className="viewer-title">Viewer options</h1>
+            <p className="viewer-copy">
+              Settings will be added here. The navigation shell is in place.
+            </p>
+          </section>
+
+          <section className="viewer-list-panel viewer-settings-panel">
+            <div className="viewer-list-header">
+              <h2>Options</h2>
+            </div>
+            <div className="viewer-settings-grid">
+              <section className="viewer-settings-card">
+                <div className="viewer-settings-card-header">
+                  <h3>Font size</h3>
+                  <p>Adjust text size in the archive viewer.</p>
+                </div>
+                <div className="viewer-font-option-list" role="radiogroup" aria-label="Font size">
+                  {(
+                    [
+                      ["small", "Small"],
+                      ["medium", "Medium"],
+                      ["large", "Large"]
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      className={
+                        fontSize === value
+                          ? "viewer-font-option viewer-font-option-active"
+                          : "viewer-font-option"
+                      }
+                      type="button"
+                      role="radio"
+                      aria-checked={fontSize === value}
+                      onClick={() => {
+                        void handleFontSizeChange(value);
+                      }}
+                    >
+                      <span>{label}</span>
+                      <strong>{formatFontSizePreview(value)}</strong>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="viewer-settings-card">
+                <div className="viewer-settings-card-header">
+                  <h3>Storage usage</h3>
+                  <p>Estimated browser-managed storage for this extension.</p>
+                </div>
+                {storageEstimate.status === "unsupported" ? (
+                  <p className="viewer-message">
+                    Storage estimate is not available in this environment.
+                  </p>
+                ) : (
+                  <dl className="viewer-settings-metric-list">
+                    <div className="viewer-settings-metric">
+                      <dt>Used</dt>
+                      <dd>{formatBytes(storageEstimate.usage)}</dd>
+                    </div>
+                    <div className="viewer-settings-metric">
+                      <dt>Available</dt>
+                      <dd>{formatBytes(storageEstimate.available)}</dd>
+                    </div>
+                    <div className="viewer-settings-metric">
+                      <dt>Estimated quota</dt>
+                      <dd>{formatBytes(storageEstimate.quota)}</dd>
+                    </div>
+                    <div className="viewer-settings-metric">
+                      <dt>Saved media total</dt>
+                      <dd>{formatBytes(archiveSummary.mediaBytes)}</dd>
+                    </div>
+                  </dl>
+                )}
+              </section>
+
+              <section className="viewer-settings-card">
+                <div className="viewer-settings-card-header">
+                  <h3>Archive summary</h3>
+                  <p>Current counts for saved content in this archive.</p>
+                </div>
+                <dl className="viewer-settings-metric-list">
+                  <div className="viewer-settings-metric">
+                    <dt>Posts</dt>
+                    <dd>{formatCount(archiveSummary.postCount)}</dd>
+                  </div>
+                  <div className="viewer-settings-metric">
+                    <dt>Media</dt>
+                    <dd>{formatCount(archiveSummary.mediaCount)}</dd>
+                  </div>
+                  <div className="viewer-settings-metric">
+                    <dt>Images</dt>
+                    <dd>{formatCount(archiveSummary.imageCount)}</dd>
+                  </div>
+                  <div className="viewer-settings-metric">
+                    <dt>Videos</dt>
+                    <dd>{formatCount(archiveSummary.videoCount)}</dd>
+                  </div>
+                  <div className="viewer-settings-metric">
+                    <dt>Accounts</dt>
+                    <dd>{formatCount(archiveSummary.accountCount)}</dd>
+                  </div>
+                  <div className="viewer-settings-metric">
+                    <dt>Tags</dt>
+                    <dd>{formatCount(archiveSummary.tagCount)}</dd>
+                  </div>
+                </dl>
+              </section>
+            </div>
+          </section>
+        </>
+      )}
 
       {activeMedia !== null && (
         <div
@@ -582,6 +882,65 @@ export function ViewerApp() {
         </div>
       )}
     </main>
+  );
+}
+
+function isFontSizeOption(value: unknown): value is FontSizeOption {
+  return value === "small" || value === "medium" || value === "large";
+}
+
+function formatFontSizePreview(value: FontSizeOption): string {
+  switch (value) {
+    case "small":
+      return "90%";
+    case "medium":
+      return "100%";
+    case "large":
+      return "112%";
+  }
+}
+
+function formatBytes(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "Unknown";
+  }
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let currentValue = value;
+  let unitIndex = 0;
+
+  while (currentValue >= 1024 && unitIndex < units.length - 1) {
+    currentValue /= 1024;
+    unitIndex += 1;
+  }
+
+  const digits = currentValue >= 100 || unitIndex === 0 ? 0 : 1;
+  return `${currentValue.toFixed(digits)} ${units[unitIndex]}`;
+}
+
+function formatCount(value: number): string {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
+function GearIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.15 7.15 0 0 0-1.63-.94L14.4 2.8a.49.49 0 0 0-.49-.4h-3.84a.49.49 0 0 0-.49.4L9.2 5.32c-.58.22-1.13.53-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.66 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.43 7.43 0 0 0-.05.94 7.43 7.43 0 0 0 .05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.5.41 1.05.72 1.63.94l.38 2.52c.05.24.25.4.49.4h3.84c.24 0 .44-.16.49-.4l.38-2.52c.58-.22 1.13-.53 1.63-.94l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function ArrowLeftIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M14.7 5.3a1 1 0 0 1 0 1.4L10.41 11H20a1 1 0 1 1 0 2h-9.59l4.29 4.3a1 1 0 0 1-1.41 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.41 0Z"
+        fill="currentColor"
+      />
+    </svg>
   );
 }
 
