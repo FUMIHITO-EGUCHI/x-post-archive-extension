@@ -42,18 +42,32 @@ export function ViewerApp() {
   );
 
   const availableTags = useMemo(() => {
-    const tagMap = new Map<string, ArchiveTagRecord>();
+    const tagMap = new Map<
+      string,
+      {
+        tag: ArchiveTagRecord;
+        postCount: number;
+      }
+    >();
 
     for (const post of posts) {
       for (const tag of post.tags) {
-        if (!tagMap.has(tag.normalized_name)) {
-          tagMap.set(tag.normalized_name, tag);
+        const existing = tagMap.get(tag.normalized_name);
+
+        if (existing === undefined) {
+          tagMap.set(tag.normalized_name, {
+            tag,
+            postCount: 1
+          });
+          continue;
         }
+
+        existing.postCount += 1;
       }
     }
 
     return [...tagMap.values()].sort((left, right) =>
-      left.display_name.localeCompare(right.display_name)
+      left.tag.display_name.localeCompare(right.tag.display_name)
     );
   }, [posts]);
 
@@ -279,7 +293,7 @@ export function ViewerApp() {
               )}
             </div>
             <div className="tag-list">
-              {availableTags.map((tag) => (
+              {availableTags.map(({ tag, postCount }) => (
                 <button
                   key={tag.tag_id}
                   className={
@@ -292,7 +306,7 @@ export function ViewerApp() {
                     );
                   }}
                 >
-                  {tag.display_name}
+                  {formatTagFilterLabel(tag.display_name, postCount)}
                 </button>
               ))}
             </div>
@@ -329,6 +343,47 @@ export function ViewerApp() {
                 </div>
 
                 {post.post_text.trim() !== "" && <p className="post-text">{post.post_text}</p>}
+
+                {post.media.length > 0 && (
+                  <div className="post-media-grid">
+                    {post.media.map((media) => (
+                      <MediaCard
+                        key={media.media_id}
+                        media={media}
+                        onOpen={() => {
+                          if (media.media_type === "video") {
+                            return;
+                          }
+
+                          const items = post.media.filter(
+                            (postMedia) =>
+                              postMedia.media_type === "image" &&
+                              postMedia.storage_status === "ready"
+                          );
+                          const currentIndex = items.findIndex(
+                            (item) => item.media_id === media.media_id
+                          );
+
+                          if (items.length === 0 || currentIndex < 0) {
+                            return;
+                          }
+
+                          setActiveMedia({
+                            items,
+                            currentIndex
+                          });
+                        }}
+                        onOpenVideo={() => {
+                          setActiveVideo({
+                            media,
+                            objectUrl: null,
+                            status: "loading"
+                          });
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
 
                 <div className="post-tag-section">
                   {post.tags.length > 0 && (
@@ -399,47 +454,6 @@ export function ViewerApp() {
                     </button>
                   </div>
                 </div>
-
-                {post.media.length > 0 && (
-                  <div className="post-media-grid">
-                    {post.media.map((media) => (
-                      <MediaCard
-                        key={media.media_id}
-                        media={media}
-                        onOpen={() => {
-                          if (media.media_type === "video") {
-                            return;
-                          }
-
-                          const items = post.media.filter(
-                            (postMedia) =>
-                              postMedia.media_type === "image" &&
-                              postMedia.storage_status === "ready"
-                          );
-                          const currentIndex = items.findIndex(
-                            (item) => item.media_id === media.media_id
-                          );
-
-                          if (items.length === 0 || currentIndex < 0) {
-                            return;
-                          }
-
-                          setActiveMedia({
-                            items,
-                            currentIndex
-                          });
-                        }}
-                        onOpenVideo={() => {
-                          setActiveVideo({
-                            media,
-                            objectUrl: null,
-                            status: "loading"
-                          });
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
 
                 <a
                   className="post-link"
@@ -671,6 +685,10 @@ function formatSavedAt(savedAt: number): string {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(savedAt);
+}
+
+function formatTagFilterLabel(tagName: string, postCount: number): string {
+  return `${tagName}(${postCount})`;
 }
 
 function moveActiveMedia(activeMedia: ActiveMedia | null, delta: number): ActiveMedia | null {
