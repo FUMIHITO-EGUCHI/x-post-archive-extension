@@ -21,6 +21,10 @@
 - `x_username: string`
 - `post_text: string`
 - `post_url: string`
+- `posted_at: number`
+- `reply_count: number`
+- `repost_count: number`
+- `like_count: number`
 - `saved_at: number`
 
 ### `media`
@@ -51,6 +55,7 @@
 
 - primary key: `x_post_id`
 - secondary index: `saved_at`
+- secondary index: `posted_at`
 
 ### `media`
 
@@ -63,7 +68,7 @@
 Dexie schema の初期案:
 
 ```ts
-posts: "&x_post_id, saved_at"
+posts: "&x_post_id, saved_at, posted_at"
 media: "&media_id, x_post_id, [x_post_id+position], storage_status, saved_at"
 ```
 
