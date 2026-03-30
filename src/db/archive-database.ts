@@ -33,7 +33,50 @@ export class ArchiveDatabase extends Dexie {
       post_tags:
         "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, assigned_at"
     });
+
+    this.version(4)
+      .stores({
+        posts: "&x_post_id, saved_at, posted_at",
+        media: "&media_id, x_post_id, [x_post_id+position], storage_status, saved_at",
+        tags: "&tag_id, &normalized_name, display_name, created_at",
+        post_tags:
+          "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, assigned_at"
+      })
+      .upgrade(async (transaction) => {
+        await transaction
+          .table<PostRecord, string>("posts")
+          .toCollection()
+          .modify((post) => {
+            post.posted_at =
+              typeof post.posted_at === "number" && Number.isFinite(post.posted_at)
+                ? post.posted_at
+                : post.saved_at;
+          });
+      });
+
+    this.version(5)
+      .stores({
+        posts: "&x_post_id, saved_at, posted_at",
+        media: "&media_id, x_post_id, [x_post_id+position], storage_status, saved_at",
+        tags: "&tag_id, &normalized_name, display_name, created_at",
+        post_tags:
+          "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, assigned_at"
+      })
+      .upgrade(async (transaction) => {
+        await transaction
+          .table<PostRecord, string>("posts")
+          .toCollection()
+          .modify((post) => {
+            post.reply_count = normalizeStoredCount(post.reply_count);
+            post.repost_count = normalizeStoredCount(post.repost_count);
+            post.like_count = normalizeStoredCount(post.like_count);
+          });
+      });
   }
 }
 
 export const archiveDb = new ArchiveDatabase();
+
+function normalizeStoredCount(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+}

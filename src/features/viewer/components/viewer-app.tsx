@@ -12,6 +12,8 @@ import {
 type ViewerStatus = "idle" | "loading" | "ready";
 type ViewerScreen = "archive" | "settings";
 type FontSizeOption = "small" | "medium" | "large";
+type PostSortField = "posted_at" | "saved_at" | "reply_count" | "repost_count" | "like_count";
+type SortDirection = "desc" | "asc";
 type ActiveMedia = {
   items: MediaRecord[];
   currentIndex: number;
@@ -39,6 +41,8 @@ export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
   const [fontSize, setFontSize] = useState<FontSizeOption>("medium");
   const [posts, setPosts] = useState<ArchivePostRecord[]>([]);
+  const [sortField, setSortField] = useState<PostSortField>("saved_at");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [status, setStatus] = useState<ViewerStatus>("idle");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadNotice, setLoadNotice] = useState<string | null>(null);
@@ -57,7 +61,7 @@ export function ViewerApp() {
 
   const viewerScale = FONT_SIZE_SCALE[fontSize];
 
-  const visiblePosts = useMemo(
+  const filteredPosts = useMemo(
     () =>
       activeTagFilter === null
         ? posts
@@ -65,6 +69,11 @@ export function ViewerApp() {
             post.tags.some((tag) => tag.normalized_name === activeTagFilter)
           ),
     [activeTagFilter, posts]
+  );
+
+  const visiblePosts = useMemo(
+    () => sortPosts(filteredPosts, sortField, sortDirection),
+    [filteredPosts, sortDirection, sortField]
   );
 
   const availableTags = useMemo(() => {
@@ -431,14 +440,44 @@ export function ViewerApp() {
             </div>
             <h1 className="viewer-title">Saved X posts</h1>
             <p className="viewer-copy">
-              Saved posts, media, and tags are listed here in descending order of saved time.
+              Saved posts, media, and tags are listed here in descending order of saved time, while
+              each card shows the original post time.
             </p>
           </section>
 
           <section className="viewer-list-panel">
             <div className="viewer-list-header">
-              <h2>Archive</h2>
-              <span>{visiblePosts.length} posts</span>
+              <div className="viewer-list-heading">
+                <h2>Archive</h2>
+                <span>{visiblePosts.length} posts</span>
+              </div>
+              <div className="viewer-sort-controls" aria-label="Sort posts">
+                <label className="viewer-sort-label">
+                  <span>Sort</span>
+                  <select
+                    className="viewer-sort-select"
+                    value={sortField}
+                    onChange={(event) => {
+                      setSortField(event.currentTarget.value as PostSortField);
+                    }}
+                  >
+                    <option value="posted_at">投稿日</option>
+                    <option value="saved_at">登録日</option>
+                    <option value="reply_count">リプライ数</option>
+                    <option value="repost_count">リポスト数</option>
+                    <option value="like_count">いいね数</option>
+                  </select>
+                </label>
+                <button
+                  className="viewer-sort-direction-button"
+                  type="button"
+                  onClick={() => {
+                    setSortDirection((current) => (current === "desc" ? "asc" : "desc"));
+                  }}
+                >
+                  {sortDirection === "desc" ? "降順" : "昇順"}
+                </button>
+              </div>
             </div>
 
             {availableTags.length > 0 && (
@@ -495,7 +534,16 @@ export function ViewerApp() {
                     <div className="post-card-header">
                       <div>
                         <p className="post-username">@{post.x_username}</p>
-                        <p className="post-date">{formatSavedAt(post.saved_at)}</p>
+                        <div className="post-date-list">
+                          <p className="post-date">
+                            <span className="post-date-label">投稿日</span>
+                            <span>{formatPostedAt(post.posted_at)}</span>
+                          </p>
+                          <p className="post-date">
+                            <span className="post-date-label">登録日</span>
+                            <span>{formatSavedAt(post.saved_at)}</span>
+                          </p>
+                        </div>
                       </div>
                       <button
                         className="post-delete-button"
@@ -551,6 +599,21 @@ export function ViewerApp() {
                         ))}
                       </div>
                     )}
+
+                    <dl className="post-metrics" aria-label="Post engagement">
+                      <div className="post-metric">
+                        <dt>Replies</dt>
+                        <dd>{formatCount(post.reply_count)}</dd>
+                      </div>
+                      <div className="post-metric">
+                        <dt>Reposts</dt>
+                        <dd>{formatCount(post.repost_count)}</dd>
+                      </div>
+                      <div className="post-metric">
+                        <dt>Likes</dt>
+                        <dd>{formatCount(post.like_count)}</dd>
+                      </div>
+                    </dl>
 
                     <div className="post-tag-section">
                       {post.tags.length > 0 && (
@@ -1039,6 +1102,13 @@ function MediaCard({
   );
 }
 
+function formatPostedAt(postedAt: number): string {
+  return new Intl.DateTimeFormat("ja-JP", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(postedAt);
+}
+
 function formatSavedAt(savedAt: number): string {
   return new Intl.DateTimeFormat("ja-JP", {
     dateStyle: "medium",
@@ -1048,6 +1118,32 @@ function formatSavedAt(savedAt: number): string {
 
 function formatTagFilterLabel(tagName: string, postCount: number): string {
   return `${tagName}(${postCount})`;
+}
+
+function sortPosts(
+  posts: ArchivePostRecord[],
+  sortField: PostSortField,
+  sortDirection: SortDirection
+): ArchivePostRecord[] {
+  const direction = sortDirection === "desc" ? -1 : 1;
+
+  return [...posts].sort((left, right) => {
+    const primaryDifference = compareSortableValue(left[sortField], right[sortField], direction);
+
+    if (primaryDifference !== 0) {
+      return primaryDifference;
+    }
+
+    return compareSortableValue(left.saved_at, right.saved_at, -1);
+  });
+}
+
+function compareSortableValue(left: number, right: number, direction: 1 | -1): number {
+  if (left === right) {
+    return 0;
+  }
+
+  return left > right ? direction : -direction;
 }
 
 function moveActiveMedia(activeMedia: ActiveMedia | null, delta: number): ActiveMedia | null {
