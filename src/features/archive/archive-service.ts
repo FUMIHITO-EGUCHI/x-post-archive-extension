@@ -483,7 +483,7 @@ function createPostTagInput(
   return {
     x_post_id: xPostId,
     normalized_name: normalizedName,
-    display_name: source === "auto" ? `#${cleanedTagName}` : cleanedTagName,
+    display_name: cleanedTagName,
     source,
     assigned_at: assignedAt
   };
@@ -598,12 +598,15 @@ function normalizeArchiveTag(record: PostTagRecord): {
   x_post_id: string;
   tag: ArchiveTagRecord;
 } {
+  const displayName =
+    record.source === "auto" ? cleanupTagName(record.display_name) : record.display_name;
+
   return {
     x_post_id: record.x_post_id,
     tag: {
       tag_id: record.tag_id,
       normalized_name: record.normalized_name,
-      display_name: record.display_name,
+      display_name: displayName,
       source: record.source
     }
   };
