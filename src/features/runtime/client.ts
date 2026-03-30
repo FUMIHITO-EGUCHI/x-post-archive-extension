@@ -1,11 +1,14 @@
 import type { SavePostInput } from "../../types/archive";
 import type {
+  AddPostTagMessage,
   DeletePostResponse,
   HasPostResponse,
   ListPostsResponse,
+  RemovePostTagMessage,
   RuntimeMessage,
   RuntimeResponse,
-  SavePostResponse
+  SavePostResponse,
+  UpdatePostTagsResponse
 } from "../../types/runtime";
 
 const RUNTIME_TIMEOUT_MS = 5000;
@@ -56,6 +59,40 @@ export async function requestDeletePost(xPostId: string): Promise<DeletePostResp
 
   if (response.type !== "posts/delete-result") {
     throw new Error("Unexpected runtime response for delete request.");
+  }
+
+  return response;
+}
+
+export async function requestAddPostTag(
+  xPostId: string,
+  tagName: string
+): Promise<UpdatePostTagsResponse> {
+  const response = await sendMessage({
+    type: "posts/tags/add",
+    xPostId,
+    tagName
+  } satisfies AddPostTagMessage);
+
+  if (response.type !== "posts/tags/update-result") {
+    throw new Error("Unexpected runtime response for add tag request.");
+  }
+
+  return response;
+}
+
+export async function requestRemovePostTag(
+  xPostId: string,
+  normalizedTagName: string
+): Promise<UpdatePostTagsResponse> {
+  const response = await sendMessage({
+    type: "posts/tags/remove",
+    xPostId,
+    normalizedTagName
+  } satisfies RemovePostTagMessage);
+
+  if (response.type !== "posts/tags/update-result") {
+    throw new Error("Unexpected runtime response for remove tag request.");
   }
 
   return response;

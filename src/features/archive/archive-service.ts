@@ -14,13 +14,31 @@ import {
   hasPost,
   listPosts
 } from "../../db/repositories/posts-repository";
+import {
+  addPostTag,
+  countPostTagLinksByTagId,
+  deletePostTag,
+  deletePostTagsByPostId,
+  getPostTagByNormalizedName,
+  listPostTagsByPostId,
+  listPostTagsByPostIds
+} from "../../db/repositories/post-tags-repository";
+import {
+  addTag,
+  deleteTagsByIds,
+  getTagByNormalizedName
+} from "../../db/repositories/tags-repository";
 import type {
   ArchivePostRecord,
+  ArchiveTagRecord,
   MediaRecord,
   PostRecord,
+  PostTagRecord,
   SaveImageInput,
   SavePostInput,
-  SaveVideoCandidateInput
+  SaveVideoCandidateInput,
+  TagRecord,
+  TagSource
 } from "../../types/archive";
 import {
   buildMediaOpfsPath,
@@ -65,11 +83,20 @@ export async function saveArchivePost(input: SavePostInput): Promise<{
       createPendingVideoRecord(input.x_post_id, candidate, savedAt, imageMedia.length + index)
     );
   const media = [...imageMedia, ...videoMedia];
+  const autoTags = buildAutoTagRecords(post.x_post_id, post.post_text, savedAt);
 
-  await archiveDb.transaction("rw", archiveDb.posts, archiveDb.media, async () => {
-    await addPost(post);
-    await addMediaRecords(media);
-  });
+  await archiveDb.transaction(
+    "rw",
+    archiveDb.posts,
+    archiveDb.media,
+    archiveDb.tags,
+    archiveDb.post_tags,
+    async () => {
+      await addPost(post);
+      await addMediaRecords(media);
+      await ensureTagAssignments(autoTags);
+    }
+  );
 
   await Promise.all(media.map((record) => persistMedia(record)));
 
@@ -86,8 +113,11 @@ export async function listArchivePosts(): Promise<ArchivePostRecord[]> {
     return [];
   }
 
-  const media = await listMediaByPostIds(posts.map((post) => post.x_post_id));
+  const postIds = posts.map((post) => post.x_post_id);
+  const media = await listMediaByPostIds(postIds);
+  const postTags = await listPostTagsByPostIds(postIds);
   const mediaMap = new Map<string, MediaRecord[]>();
+  const tagMap = new Map<string, ArchiveTagRecord[]>();
 
   for (const item of media) {
     const normalizedItem = normalizeMediaRecord(item);
@@ -101,10 +131,80 @@ export async function listArchivePosts(): Promise<ArchivePostRecord[]> {
     current.push(normalizedItem);
   }
 
+  for (const item of postTags) {
+    const normalizedItem = normalizeArchiveTag(item);
+    const current = tagMap.get(normalizedItem.x_post_id);
+
+    if (current === undefined) {
+      tagMap.set(normalizedItem.x_post_id, [normalizedItem.tag]);
+      continue;
+    }
+
+    current.push(normalizedItem.tag);
+  }
+
   return posts.map((post) => ({
     ...post,
-    media: mediaMap.get(post.x_post_id) ?? []
+    media: mediaMap.get(post.x_post_id) ?? [],
+    tags: sortArchiveTags(tagMap.get(post.x_post_id) ?? [])
   }));
+}
+
+export async function addManualTagToArchivePost(
+  xPostId: string,
+  tagName: string
+): Promise<ArchiveTagRecord[]> {
+  const post = await getPost(xPostId);
+
+  if (post === undefined) {
+    throw new Error("Post not found.");
+  }
+
+  const prepared = createPostTagInput(xPostId, tagName, "manual");
+
+  await archiveDb.transaction(
+    "rw",
+    archiveDb.tags,
+    archiveDb.post_tags,
+    async () => {
+      await ensureTagAssignments([prepared]);
+    }
+  );
+
+  return listArchiveTagsForPost(xPostId);
+}
+
+export async function removeManualTagFromArchivePost(
+  xPostId: string,
+  normalizedTagName: string
+): Promise<ArchiveTagRecord[]> {
+  const normalizedName = normalizeTagName(normalizedTagName);
+
+  if (normalizedName === null) {
+    throw new Error("Invalid tag name.");
+  }
+
+  const record = await getPostTagByNormalizedName(xPostId, normalizedName);
+
+  if (record === undefined) {
+    return listArchiveTagsForPost(xPostId);
+  }
+
+  if (record.source !== "manual") {
+    throw new Error("Auto tags cannot be removed manually.");
+  }
+
+  await archiveDb.transaction(
+    "rw",
+    archiveDb.tags,
+    archiveDb.post_tags,
+    async () => {
+      await deletePostTag(record.post_tag_id);
+      await deleteOrphanedTag(record.tag_id);
+    }
+  );
+
+  return listArchiveTagsForPost(xPostId);
 }
 
 export async function persistVideoThumbnailPreview(
@@ -154,10 +254,22 @@ export async function deleteArchivePost(xPostId: string): Promise<boolean> {
     }
   }
 
-  await archiveDb.transaction("rw", archiveDb.posts, archiveDb.media, async () => {
-    await deleteMediaRecordsByPostId(xPostId);
-    await deletePostRecord(xPostId);
-  });
+  await archiveDb.transaction(
+    "rw",
+    archiveDb.posts,
+    archiveDb.media,
+    archiveDb.tags,
+    archiveDb.post_tags,
+    async () => {
+      const postTags = await listPostTagsByPostId(xPostId);
+      const orphanedTagIds = [...new Set(postTags.map((item) => item.tag_id))];
+
+      await deletePostTagsByPostId(xPostId);
+      await deleteMediaRecordsByPostId(xPostId);
+      await deletePostRecord(xPostId);
+      await deleteOrphanedTags(orphanedTagIds);
+    }
+  );
 
   return true;
 }
@@ -181,7 +293,7 @@ async function persistMedia(record: MediaRecord): Promise<void> {
       byte_size: blob.size,
       storage_status: "ready",
       last_error: null
-        });
+    });
   } catch (error) {
     await updateMediaAfterWrite(record.media_id, {
       mime_type: null,
@@ -190,6 +302,109 @@ async function persistMedia(record: MediaRecord): Promise<void> {
       last_error: error instanceof Error ? error.message : "Media persistence failed."
     });
   }
+}
+
+async function listArchiveTagsForPost(xPostId: string): Promise<ArchiveTagRecord[]> {
+  const postTags = await listPostTagsByPostId(xPostId);
+  return sortArchiveTags(postTags.map((item) => normalizeArchiveTag(item).tag));
+}
+
+async function ensureTagAssignments(inputs: PostTagInput[]): Promise<void> {
+  for (const item of inputs) {
+    const existingPostTag = await getPostTagByNormalizedName(item.x_post_id, item.normalized_name);
+
+    if (existingPostTag !== undefined) {
+      if (existingPostTag.source === "auto" && item.source === "manual") {
+        await deletePostTag(existingPostTag.post_tag_id);
+        await deleteOrphanedTag(existingPostTag.tag_id);
+      } else {
+        continue;
+      }
+    }
+
+    const tag = await ensureTagRecord(item.normalized_name, item.display_name, item.assigned_at);
+
+    await addPostTag({
+      post_tag_id: crypto.randomUUID(),
+      x_post_id: item.x_post_id,
+      tag_id: tag.tag_id,
+      normalized_name: tag.normalized_name,
+      display_name: item.display_name,
+      source: item.source,
+      assigned_at: item.assigned_at
+    });
+  }
+}
+
+async function ensureTagRecord(
+  normalizedName: string,
+  displayName: string,
+  createdAt: number
+): Promise<TagRecord> {
+  const existing = await getTagByNormalizedName(normalizedName);
+
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const record: TagRecord = {
+    tag_id: crypto.randomUUID(),
+    normalized_name: normalizedName,
+    display_name: displayName,
+    created_at: createdAt
+  };
+
+  await addTag(record);
+  return record;
+}
+
+async function deleteOrphanedTag(tagId: string): Promise<void> {
+  const count = await countPostTagLinksByTagId(tagId);
+
+  if (count === 0) {
+    await deleteTagsByIds([tagId]);
+  }
+}
+
+async function deleteOrphanedTags(tagIds: string[]): Promise<void> {
+  const orphanedIds: string[] = [];
+
+  for (const tagId of tagIds) {
+    const count = await countPostTagLinksByTagId(tagId);
+
+    if (count === 0) {
+      orphanedIds.push(tagId);
+    }
+  }
+
+  await deleteTagsByIds(orphanedIds);
+}
+
+function buildAutoTagRecords(
+  xPostId: string,
+  postText: string,
+  assignedAt: number
+): PostTagInput[] {
+  const hashtags = extractHashtags(postText);
+  return hashtags.map((tagName) => createPostTagInput(xPostId, tagName, "auto", assignedAt));
+}
+
+function extractHashtags(postText: string): string[] {
+  const matches = postText.matchAll(/(^|\s)#([\p{L}\p{N}_]+)/gu);
+  const uniqueTags = new Map<string, string>();
+
+  for (const match of matches) {
+    const candidate = match[2];
+    const normalizedName = candidate === undefined ? null : normalizeTagName(candidate);
+
+    if (candidate === undefined || normalizedName === null || uniqueTags.has(normalizedName)) {
+      continue;
+    }
+
+    uniqueTags.set(normalizedName, candidate.trim());
+  }
+
+  return [...uniqueTags.values()];
 }
 
 function createPendingImageRecord(
@@ -251,6 +466,29 @@ function createPendingVideoRecord(
   };
 }
 
+function createPostTagInput(
+  xPostId: string,
+  tagName: string,
+  source: TagSource,
+  assignedAt = Date.now()
+): PostTagInput {
+  const normalizedName = normalizeTagName(tagName);
+
+  if (normalizedName === null) {
+    throw new Error("Invalid tag name.");
+  }
+
+  const cleanedTagName = cleanupTagName(tagName);
+
+  return {
+    x_post_id: xPostId,
+    normalized_name: normalizedName,
+    display_name: source === "auto" ? `#${cleanedTagName}` : cleanedTagName,
+    source,
+    assigned_at: assignedAt
+  };
+}
+
 function validateSavePostInput(input: SavePostInput): void {
   requireNonEmptyString(input.x_post_id, "x_post_id");
   requireNonEmptyString(input.x_username, "x_username");
@@ -264,10 +502,7 @@ function validateSavePostInput(input: SavePostInput): void {
     throw new Error("Invalid media list.");
   }
 
-  if (
-    input.video_candidates !== undefined &&
-    !Array.isArray(input.video_candidates)
-  ) {
+  if (input.video_candidates !== undefined && !Array.isArray(input.video_candidates)) {
     throw new Error("Invalid video candidate list.");
   }
 
@@ -275,7 +510,11 @@ function validateSavePostInput(input: SavePostInput): void {
     (candidate) => candidate.download_mode === "direct_mp4"
   );
 
-  if (input.post_text.trim() === "" && input.media.length === 0 && directMp4Candidates.length === 0) {
+  if (
+    input.post_text.trim() === "" &&
+    input.media.length === 0 &&
+    directMp4Candidates.length === 0
+  ) {
     throw new Error("A post without text must include at least one savable media item.");
   }
 }
@@ -334,6 +573,19 @@ function requireNullableFiniteNumber(value: number | null, field: string): void 
   }
 }
 
+function cleanupTagName(tagName: string): string {
+  return tagName.trim().replace(/^#+/, "");
+}
+
+function normalizeTagName(tagName: string): string | null {
+  if (typeof tagName !== "string") {
+    return null;
+  }
+
+  const cleaned = cleanupTagName(tagName).replace(/\s+/g, " ").trim().toLocaleLowerCase("en-US");
+  return cleaned === "" ? null : cleaned;
+}
+
 function normalizeMediaRecord(media: MediaRecord): MediaRecord {
   return {
     ...media,
@@ -341,3 +593,36 @@ function normalizeMediaRecord(media: MediaRecord): MediaRecord {
     preview_image_opfs_path: media.preview_image_opfs_path ?? null
   };
 }
+
+function normalizeArchiveTag(record: PostTagRecord): {
+  x_post_id: string;
+  tag: ArchiveTagRecord;
+} {
+  return {
+    x_post_id: record.x_post_id,
+    tag: {
+      tag_id: record.tag_id,
+      normalized_name: record.normalized_name,
+      display_name: record.display_name,
+      source: record.source
+    }
+  };
+}
+
+function sortArchiveTags(tags: ArchiveTagRecord[]): ArchiveTagRecord[] {
+  return [...tags].sort((left, right) => {
+    if (left.source !== right.source) {
+      return left.source === "manual" ? -1 : 1;
+    }
+
+    return left.display_name.localeCompare(right.display_name);
+  });
+}
+
+type PostTagInput = {
+  x_post_id: string;
+  normalized_name: string;
+  display_name: string;
+  source: TagSource;
+  assigned_at: number;
+};

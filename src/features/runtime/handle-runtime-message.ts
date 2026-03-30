@@ -1,17 +1,21 @@
 import {
+  addManualTagToArchivePost,
   deleteArchivePost,
   hasSavedPost,
   listArchivePosts,
+  removeManualTagFromArchivePost,
   saveArchivePost
 } from "../archive/archive-service";
 import type {
+  DeletePostMessage,
   DeletePostResponse,
   HasPostResponse,
   ListPostsResponse,
-  RuntimeMessage,
   RuntimeErrorResponse,
+  RuntimeMessage,
   RuntimeResponse,
-  SavePostResponse
+  SavePostResponse,
+  UpdatePostTagsResponse
 } from "../../types/runtime";
 
 export async function handleRuntimeMessage(
@@ -61,6 +65,27 @@ export async function handleRuntimeMessage(
       };
       return response;
     }
+
+    case "posts/tags/add": {
+      const response: UpdatePostTagsResponse = {
+        type: "posts/tags/update-result",
+        xPostId: message.xPostId,
+        tags: await addManualTagToArchivePost(message.xPostId, message.tagName)
+      };
+      return response;
+    }
+
+    case "posts/tags/remove": {
+      const response: UpdatePostTagsResponse = {
+        type: "posts/tags/update-result",
+        xPostId: message.xPostId,
+        tags: await removeManualTagFromArchivePost(
+          message.xPostId,
+          message.normalizedTagName
+        )
+      };
+      return response;
+    }
   }
 }
 
@@ -74,7 +99,9 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/save" ||
     candidate.type === "posts/has" ||
     candidate.type === "posts/list" ||
-    candidate.type === "posts/delete"
+    candidate.type === "posts/delete" ||
+    candidate.type === "posts/tags/add" ||
+    candidate.type === "posts/tags/remove"
   );
 }
 

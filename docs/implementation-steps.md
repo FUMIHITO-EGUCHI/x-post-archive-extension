@@ -92,3 +92,10 @@
 - 長尺動画でのメモリ使用量確認
 - 再読み込み後のローカル再生確認
 - 失敗時の `partial` / `failed` 表示確認
+## Tagging Steps
+
+1. Extend archive types and Dexie schema with `tags` and `post_tags`.
+2. Generate auto tags from hashtags when a post snapshot is saved.
+3. Add runtime messages for manual tag add/remove.
+4. Show tags in the viewer and support filter by tag.
+5. Verify duplicate prevention, delete cleanup, `npm run typecheck`, and `npm run build`.
