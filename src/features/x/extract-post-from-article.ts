@@ -45,7 +45,7 @@ function extractPostText(article: HTMLElement): string {
   const tweetText = article.querySelector<HTMLElement>('[data-testid="tweetText"]');
 
   if (tweetText !== null) {
-    const exactText = normalizeText(tweetText.textContent);
+    const exactText = normalizePostText(tweetText);
 
     if (exactText !== null) {
       return exactText;
@@ -60,7 +60,7 @@ function extractPostText(article: HTMLElement): string {
       continue;
     }
 
-    const text = normalizeText(candidate.textContent);
+    const text = normalizePostText(candidate);
 
     if (text === null) {
       continue;
@@ -72,6 +72,16 @@ function extractPostText(article: HTMLElement): string {
   }
 
   return bestCandidate ?? "";
+}
+
+function normalizePostText(element: HTMLElement): string | null {
+  const rawText = element.innerText || element.textContent || "";
+  const normalized = rawText
+    .replace(/\r\n?/g, "\n")
+    .replace(/[^\S\n]+/g, " ")
+    .trim();
+
+  return normalized === "" ? null : normalized;
 }
 
 function extractPostImages(article: HTMLElement): SaveImageInput[] {
