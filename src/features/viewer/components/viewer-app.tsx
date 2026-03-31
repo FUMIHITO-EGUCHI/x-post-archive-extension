@@ -17,6 +17,7 @@ type ViewerScreen = "archive" | "settings";
 type FontSizeOption = "small" | "medium" | "large";
 type PostSortField = "posted_at" | "saved_at" | "reply_count" | "repost_count" | "like_count";
 type SortDirection = "desc" | "asc";
+type TagSortOption = "count" | "name";
 type ActiveMedia = {
   items: MediaRecord[];
   currentIndex: number;
@@ -53,6 +54,9 @@ export function ViewerApp() {
   const [activeMedia, setActiveMedia] = useState<ActiveMedia | null>(null);
   const [activeVideo, setActiveVideo] = useState<ActiveVideo | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [isTagFilterModalOpen, setIsTagFilterModalOpen] = useState(false);
+  const [tagSearchQuery, setTagSearchQuery] = useState("");
+  const [tagSortOption, setTagSortOption] = useState<TagSortOption>("count");
   const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
   const [tagActionPostId, setTagActionPostId] = useState<string | null>(null);
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState>({
@@ -105,10 +109,39 @@ export function ViewerApp() {
       }
     }
 
-    return [...tagMap.values()].sort((left, right) =>
-      left.tag.display_name.localeCompare(right.tag.display_name)
-    );
+    return [...tagMap.values()];
   }, [posts]);
+
+  const selectedTagFilter = useMemo(
+    () => availableTags.find(({ tag }) => tag.normalized_name === activeTagFilter) ?? null,
+    [activeTagFilter, availableTags]
+  );
+
+  const visibleTagOptions = useMemo(() => {
+    const normalizedQuery = normalizeTagSearchQuery(tagSearchQuery);
+    const filtered = availableTags.filter(({ tag }) => {
+      if (normalizedQuery === "") {
+        return true;
+      }
+
+      const displayName = tag.display_name.toLocaleLowerCase("ja-JP");
+      return (
+        displayName.includes(normalizedQuery) || tag.normalized_name.includes(normalizedQuery)
+      );
+    });
+
+    return filtered.sort((left, right) => {
+      if (tagSortOption === "count") {
+        const countDifference = right.postCount - left.postCount;
+
+        if (countDifference !== 0) {
+          return countDifference;
+        }
+      }
+
+      return left.tag.display_name.localeCompare(right.tag.display_name, "ja-JP");
+    });
+  }, [availableTags, tagSearchQuery, tagSortOption]);
 
   const archiveSummary = useMemo(() => {
     let imageCount = 0;
@@ -373,6 +406,24 @@ export function ViewerApp() {
     };
   }, [activeMedia]);
 
+  useEffect(() => {
+    if (!isTagFilterModalOpen) {
+      return undefined;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsTagFilterModalOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isTagFilterModalOpen]);
+
   async function handleDelete(xPostId: string) {
     setDeletingId(xPostId);
 
@@ -478,6 +529,10 @@ export function ViewerApp() {
     }
   }
 
+  function handleToggleTagFilter(normalizedName: string) {
+    setActiveTagFilter((current) => (current === normalizedName ? null : normalizedName));
+  }
+
   return (
     <main
       className="viewer-shell"
@@ -517,6 +572,17 @@ export function ViewerApp() {
                 <span>{visiblePosts.length} posts</span>
               </div>
               <div className="viewer-sort-controls" aria-label="Sort posts">
+                {availableTags.length > 0 && (
+                  <button
+                    className="viewer-secondary-button"
+                    type="button"
+                    onClick={() => {
+                      setIsTagFilterModalOpen(true);
+                    }}
+                  >
+                    Tag filter
+                  </button>
+                )}
                 <label className="viewer-sort-label">
                   <span>Sort</span>
                   <select
@@ -545,41 +611,27 @@ export function ViewerApp() {
               </div>
             </div>
 
-            {availableTags.length > 0 && (
-              <div className="viewer-tag-filter-panel">
-                <div className="viewer-tag-filter-header">
-                  <h3>Filter by tag</h3>
-                  {activeTagFilter !== null && (
-                    <button
-                      className="viewer-tag-filter-clear"
-                      type="button"
-                      onClick={() => {
-                        setActiveTagFilter(null);
-                      }}
-                    >
-                      Clear
-                    </button>
-                  )}
+            {selectedTagFilter !== null && (
+              <div className="viewer-active-tag-filter">
+                <div className="viewer-active-tag-copy">
+                  <strong>Filtered by tag</strong>
+                  <span>
+                    {formatTagFilterLabel(
+                      selectedTagFilter.tag.display_name,
+                      selectedTagFilter.postCount
+                    )}
+                  </span>
                 </div>
-                <div className="tag-list">
-                  {availableTags.map(({ tag, postCount }) => (
-                    <button
-                      key={tag.tag_id}
-                      className={
-                        tag.normalized_name === activeTagFilter
-                          ? "tag-chip tag-chip-active"
-                          : "tag-chip"
-                      }
-                      type="button"
-                      onClick={() => {
-                        setActiveTagFilter((current) =>
-                          current === tag.normalized_name ? null : tag.normalized_name
-                        );
-                      }}
-                    >
-                      {formatTagFilterLabel(tag.display_name, postCount)}
-                    </button>
-                  ))}
+                <div className="viewer-active-tag-actions">
+                  <button
+                    className="viewer-tag-filter-clear"
+                    type="button"
+                    onClick={() => {
+                      setActiveTagFilter(null);
+                    }}
+                  >
+                    Clear
+                  </button>
                 </div>
               </div>
             )}
@@ -589,7 +641,11 @@ export function ViewerApp() {
               <p className="viewer-message viewer-message-error">{loadNotice}</p>
             )}
             {status === "ready" && visiblePosts.length === 0 && (
-              <p className="viewer-message">No saved posts.</p>
+              <p className="viewer-message">
+                {selectedTagFilter === null
+                  ? "No saved posts."
+                  : `No saved posts match ${selectedTagFilter.tag.display_name}.`}
+              </p>
             )}
 
             {visiblePosts.length > 0 && (
@@ -696,9 +752,7 @@ export function ViewerApp() {
                                 className="tag-chip-button"
                                 type="button"
                                 onClick={() => {
-                                  setActiveTagFilter((current) =>
-                                    current === tag.normalized_name ? null : tag.normalized_name
-                                  );
+                                  handleToggleTagFilter(tag.normalized_name);
                                 }}
                               >
                                 {tag.display_name}
@@ -907,6 +961,116 @@ export function ViewerApp() {
             </div>
           </section>
         </>
+      )}
+
+      {isTagFilterModalOpen && (
+        <div
+          className="viewer-modal-backdrop"
+          role="presentation"
+          onClick={() => {
+            setIsTagFilterModalOpen(false);
+          }}
+        >
+          <section
+            className="viewer-modal viewer-tag-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Tag filter"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <div className="viewer-modal-header">
+              <div className="viewer-modal-copy">
+                <h2>Filter by tag</h2>
+                <p>Search tags in real time and choose one tag to narrow the archive list.</p>
+              </div>
+              <button
+                className="viewer-secondary-button"
+                type="button"
+                onClick={() => {
+                  setIsTagFilterModalOpen(false);
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="viewer-tag-modal-controls">
+              <label className="viewer-sort-label">
+                <span>Search</span>
+                <input
+                  className="tag-input"
+                  type="search"
+                  value={tagSearchQuery}
+                  placeholder="Search tags"
+                  onChange={(event) => {
+                    setTagSearchQuery(event.currentTarget.value);
+                  }}
+                />
+              </label>
+              <label className="viewer-sort-label">
+                <span>Order</span>
+                <select
+                  className="viewer-sort-select"
+                  value={tagSortOption}
+                  onChange={(event) => {
+                    setTagSortOption(event.currentTarget.value as TagSortOption);
+                  }}
+                >
+                  <option value="count">Most used</option>
+                  <option value="name">A to Z</option>
+                </select>
+              </label>
+            </div>
+
+            {selectedTagFilter !== null && (
+              <div className="viewer-tag-modal-summary">
+                <span>
+                  Active:{" "}
+                  {formatTagFilterLabel(
+                    selectedTagFilter.tag.display_name,
+                    selectedTagFilter.postCount
+                  )}
+                </span>
+                <button
+                  className="viewer-tag-filter-clear"
+                  type="button"
+                  onClick={() => {
+                    setActiveTagFilter(null);
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+
+            {visibleTagOptions.length === 0 ? (
+              <p className="viewer-message">No tags match the current search.</p>
+            ) : (
+              <div className="viewer-tag-option-list">
+                {visibleTagOptions.map(({ tag, postCount }) => (
+                  <button
+                    key={tag.tag_id}
+                    className={
+                      tag.normalized_name === activeTagFilter
+                        ? "viewer-tag-option viewer-tag-option-active"
+                        : "viewer-tag-option"
+                    }
+                    type="button"
+                    onClick={() => {
+                      handleToggleTagFilter(tag.normalized_name);
+                      setIsTagFilterModalOpen(false);
+                    }}
+                  >
+                    <strong>{tag.display_name}</strong>
+                    <span>{formatCount(postCount)} posts</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
       )}
 
       {activeMedia !== null && (
@@ -1195,6 +1359,10 @@ function formatSavedAt(savedAt: number): string {
 
 function formatTagFilterLabel(tagName: string, postCount: number): string {
   return `${tagName}(${postCount})`;
+}
+
+function normalizeTagSearchQuery(value: string): string {
+  return value.trim().toLocaleLowerCase("ja-JP");
 }
 
 function sortPosts(
