@@ -261,6 +261,9 @@ X 風デザインを模倣する必要はない。
 - release 用の version bump は feature branch 上では行わず、`master` にマージした後に行うこと
 - release tag は `master` 上の version bump commit にのみ付けること
 - feature branch 上の version bump commit や merge 前の commit に release tag を付けないこと
+- version bump を行ったときは、対応する release tag を付けること
+- version bump を行ったときは、対応する日本語のリリースノートを `docs/release-notes/` に作成または更新すること
+- リリースノートは GitHub Release にそのまま転用できる粒度で、ユーザー向けの変更点を簡潔にまとめること
 
 ## Tooling Rules
 - 新規セットアップ時は package manager を早い段階で固定し、以後は混在させないこと
