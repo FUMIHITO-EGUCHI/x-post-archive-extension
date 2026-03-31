@@ -3,20 +3,27 @@ import {
   handleRuntimeMessage
 } from "../features/runtime/handle-runtime-message";
 import { resumePendingMediaPersistence } from "../features/archive/archive-service";
+import { createLogger } from "../features/logging/logger";
+
+const logger = createLogger("background");
 
 export default defineBackground({
   type: "module",
   main() {
     chrome.runtime.onInstalled.addListener(() => {
-      console.info("X Post Archive Extension initialized.");
+      logger.info("extension.installed", {
+        message: "X Post Archive Extension initialized."
+      });
       void resumePendingMediaPersistence();
     });
 
     chrome.runtime.onStartup?.addListener?.(() => {
+      logger.info("extension.startup");
       void resumePendingMediaPersistence();
     });
 
     chrome.action.onClicked.addListener(() => {
+      logger.info("viewer.opened");
       void chrome.tabs.create({
         url: chrome.runtime.getURL("/viewer.html")
       });
@@ -28,7 +35,12 @@ export default defineBackground({
           sendResponse(response);
         })
         .catch((error: unknown) => {
-          console.error("Runtime message handling failed.", error);
+          logger.error("runtime.message.unhandled_error", {
+            message: "Runtime message handling failed.",
+            context: {
+              error
+            }
+          });
           sendResponse(createRuntimeErrorResponse(error));
         });
 
