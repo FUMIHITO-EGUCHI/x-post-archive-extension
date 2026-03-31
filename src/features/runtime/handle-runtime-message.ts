@@ -4,6 +4,7 @@ import {
   hasSavedPost,
   listArchivePosts,
   removeManualTagFromArchivePost,
+  resumePendingMediaPersistence,
   saveArchivePost
 } from "../archive/archive-service";
 import type {
@@ -15,12 +16,15 @@ import type {
   RuntimeMessage,
   RuntimeResponse,
   SavePostResponse,
+  SavePostsBatchResponse,
   UpdatePostTagsResponse
 } from "../../types/runtime";
 
 export async function handleRuntimeMessage(
   message: unknown
 ): Promise<RuntimeResponse | undefined> {
+  await resumePendingMediaPersistence();
+
   if (!isRuntimeMessage(message)) {
     return undefined;
   }
@@ -39,6 +43,34 @@ export async function handleRuntimeMessage(
               status: result.status,
               post: result.post
             };
+      return response;
+    }
+
+    case "posts/save-batch": {
+      let saved = 0;
+      let duplicates = 0;
+      let failed = 0;
+
+      for (const post of message.posts) {
+        try {
+          const result = await saveArchivePost(post);
+
+          if (result.status === "saved") {
+            saved += 1;
+          } else {
+            duplicates += 1;
+          }
+        } catch {
+          failed += 1;
+        }
+      }
+
+      const response: SavePostsBatchResponse = {
+        type: "posts/save-batch-result",
+        saved,
+        duplicates,
+        failed
+      };
       return response;
     }
 
@@ -97,6 +129,7 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
   const candidate = value as Partial<RuntimeMessage>;
   return (
     candidate.type === "posts/save" ||
+    candidate.type === "posts/save-batch" ||
     candidate.type === "posts/has" ||
     candidate.type === "posts/list" ||
     candidate.type === "posts/delete" ||

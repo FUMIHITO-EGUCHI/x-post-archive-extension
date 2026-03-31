@@ -2,12 +2,18 @@ import {
   createRuntimeErrorResponse,
   handleRuntimeMessage
 } from "../features/runtime/handle-runtime-message";
+import { resumePendingMediaPersistence } from "../features/archive/archive-service";
 
 export default defineBackground({
   type: "module",
   main() {
     chrome.runtime.onInstalled.addListener(() => {
       console.info("X Post Archive Extension initialized.");
+      void resumePendingMediaPersistence();
+    });
+
+    chrome.runtime.onStartup?.addListener?.(() => {
+      void resumePendingMediaPersistence();
     });
 
     chrome.action.onClicked.addListener(() => {
