@@ -1,5 +1,5 @@
 import { archiveDb } from "../archive-database";
-import type { LogListFilter, LogRecord } from "../../types/logger";
+import type { LogLevel, LogListFilter, LogRecord } from "../../types/logger";
 
 export async function addLogRecord(record: LogRecord): Promise<void> {
   await archiveDb.logs.add(record);
@@ -9,22 +9,29 @@ export async function listLogRecords(filter: LogListFilter = {}): Promise<LogRec
   const lowerBound = normalizeLowerBound(filter.from);
   const upperBound = normalizeUpperBound(filter.to);
   const limit = normalizeLimit(filter.limit);
+  const levels = normalizeLevels(filter);
 
-  if (filter.level !== undefined && filter.level !== null) {
+  if (levels !== null && levels.length === 1) {
     return archiveDb.logs
       .where("[level+created_at]")
-      .between([filter.level, lowerBound], [filter.level, upperBound])
+      .between([levels[0], lowerBound], [levels[0], upperBound])
       .reverse()
       .limit(limit)
       .toArray();
   }
 
-  return archiveDb.logs
+  const records = await archiveDb.logs
     .where("created_at")
     .between(lowerBound, upperBound)
     .reverse()
-    .limit(limit)
     .toArray();
+
+  if (levels === null) {
+    return records.slice(0, limit);
+  }
+
+  const allowedLevels = new Set(levels);
+  return records.filter((record) => allowedLevels.has(record.level)).slice(0, limit);
 }
 
 export async function pruneLogRecords(maxCount: number): Promise<void> {
@@ -57,4 +64,21 @@ function normalizeLimit(value: number | undefined): number {
   }
 
   return Math.min(Math.max(Math.trunc(value), 1), 500);
+}
+
+function normalizeLevels(filter: LogListFilter): LogLevel[] | null {
+  if (Array.isArray(filter.levels)) {
+    const uniqueLevels = [...new Set(filter.levels.filter(isLogLevel))];
+    return uniqueLevels.length > 0 ? uniqueLevels : [];
+  }
+
+  if (filter.level !== undefined && filter.level !== null) {
+    return isLogLevel(filter.level) ? [filter.level] : [];
+  }
+
+  return null;
+}
+
+function isLogLevel(value: unknown): value is LogLevel {
+  return value === "debug" || value === "info" || value === "warn" || value === "error";
 }

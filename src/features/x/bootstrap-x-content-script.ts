@@ -1,10 +1,13 @@
 import { requestHasPost, requestSavePost } from "../runtime/client";
+import {
+  buildLocalizedDefaultAutoTags,
+  loadArchiveLanguage
+} from "../settings/archive-language";
 import { extractPostFromArticle, extractPostIdFromArticle } from "./extract-post-from-article";
 import { findTweetArticles } from "./find-tweet-articles";
 import { ensureGraphqlVideoCandidateListener } from "./graphql-video-candidate-cache";
 import { injectSaveButton, setButtonState } from "./inject-save-button";
 import {
-  LIKED_AUTO_TAG,
   ensureLikesImportControls,
   isLikesTimelinePage,
   removeLikesImportControls
@@ -81,9 +84,10 @@ async function attachSaveButton(article: HTMLElement): Promise<void> {
       throw new Error("Post extraction failed.");
     }
 
-    if (isLikesTimelinePage()) {
-      post.auto_tags = [LIKED_AUTO_TAG];
-    }
+    const language = await loadArchiveLanguage();
+    post.auto_tags = buildLocalizedDefaultAutoTags(language, post, {
+      includeLikedTag: isLikesTimelinePage()
+    });
 
     const response = await requestSavePost(post);
 
