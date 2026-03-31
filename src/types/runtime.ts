@@ -4,6 +4,11 @@ import type {
   PostRecord,
   SavePostInput
 } from "./archive";
+import type {
+  ArchiveSummaryRecord,
+  ArchiveTagSummaryRecord,
+  ListPostsPageInput
+} from "./viewer";
 
 export type SavePostMessage = {
   type: "posts/save";
@@ -22,6 +27,19 @@ export type HasPostMessage = {
 
 export type ListPostsMessage = {
   type: "posts/list";
+};
+
+export type ListPostsPageMessage = {
+  type: "posts/list-page";
+  input: ListPostsPageInput;
+};
+
+export type ListPostTagSummariesMessage = {
+  type: "posts/tags/list";
+};
+
+export type GetArchiveSummaryMessage = {
+  type: "posts/summary";
 };
 
 export type DeletePostMessage = {
@@ -46,6 +64,9 @@ export type RuntimeMessage =
   | SavePostsBatchMessage
   | HasPostMessage
   | ListPostsMessage
+  | ListPostsPageMessage
+  | ListPostTagSummariesMessage
+  | GetArchiveSummaryMessage
   | DeletePostMessage
   | AddPostTagMessage
   | RemovePostTagMessage;
@@ -73,6 +94,24 @@ export type ListPostsResponse = {
   posts: ArchivePostRecord[];
 };
 
+export type ListPostsPageResponse = {
+  type: "posts/list-page-result";
+  posts: ArchivePostRecord[];
+  totalCount: number;
+  nextOffset: number;
+  hasMore: boolean;
+};
+
+export type ListPostTagSummariesResponse = {
+  type: "posts/tags/list-result";
+  tags: ArchiveTagSummaryRecord[];
+};
+
+export type GetArchiveSummaryResponse = {
+  type: "posts/summary-result";
+  summary: ArchiveSummaryRecord;
+};
+
 export type DeletePostResponse = {
   type: "posts/delete-result";
   deleted: boolean;
@@ -94,6 +133,9 @@ export type RuntimeResponse =
   | SavePostsBatchResponse
   | HasPostResponse
   | ListPostsResponse
+  | ListPostsPageResponse
+  | ListPostTagSummariesResponse
+  | GetArchiveSummaryResponse
   | DeletePostResponse
   | UpdatePostTagsResponse
   | RuntimeErrorResponse;

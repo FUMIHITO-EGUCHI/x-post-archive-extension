@@ -27,6 +27,19 @@ export async function listPostTagsByPostId(xPostId: string): Promise<PostTagReco
   return archiveDb.post_tags.where("x_post_id").equals(xPostId).sortBy("assigned_at");
 }
 
+export async function listPostIdsByNormalizedName(normalizedName: string): Promise<string[]> {
+  const records = await archiveDb.post_tags
+    .where("normalized_name")
+    .equals(normalizedName)
+    .toArray();
+
+  return records.map((record) => record.x_post_id);
+}
+
+export async function listAllPostTags(): Promise<PostTagRecord[]> {
+  return archiveDb.post_tags.toArray();
+}
+
 export async function deletePostTag(postTagId: string): Promise<void> {
   await archiveDb.post_tags.delete(postTagId);
 }
