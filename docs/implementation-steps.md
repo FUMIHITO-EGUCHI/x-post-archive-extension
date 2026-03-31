@@ -139,3 +139,11 @@
 5. Add a settings card for full archive delete with two-step confirmation.
 6. Reload viewer archive data after restore or delete.
 7. Verify backup, restore, full delete, `npm run typecheck`, and `npm run build`.
+
+## Viewer Language Steps
+
+1. Add a lightweight archive language setting backed by `browser.storage.local`.
+2. Add a settings card that lets the user choose `ja` or `en`.
+3. Route localized default auto tags through the save entry points used by single-save and likes import.
+4. Automatically add image and video default tags when media is attached to the saved post.
+5. Verify language switching, default-tag assignment, `npm run typecheck`, and `npm run build`.
