@@ -11,10 +11,12 @@ import {
 } from "../../db/repositories/media-repository";
 import {
   addPost,
+  countPosts,
   deletePostRecord,
   getPost,
   hasPost,
-  listPosts
+  listPosts,
+  listPostsSliceBySort
 } from "../../db/repositories/posts-repository";
 import {
   addPostTag,
@@ -22,6 +24,8 @@ import {
   deletePostTag,
   deletePostTagsByPostId,
   getPostTagByNormalizedName,
+  listAllPostTags,
+  listPostIdsByNormalizedName,
   listPostTagsByPostId,
   listPostTagsByPostIds
 } from "../../db/repositories/post-tags-repository";
@@ -42,6 +46,11 @@ import type {
   TagRecord,
   TagSource
 } from "../../types/archive";
+import type {
+  ArchiveSummaryRecord,
+  ArchiveTagSummaryRecord,
+  ListPostsPageInput
+} from "../../types/viewer";
 import {
   buildMediaOpfsPath,
   buildVideoPreviewOpfsPath,
@@ -181,41 +190,125 @@ export async function listArchivePosts(): Promise<ArchivePostRecord[]> {
     return [];
   }
 
-  const postIds = posts.map((post) => post.x_post_id);
-  const media = await listMediaByPostIds(postIds);
-  const postTags = await listPostTagsByPostIds(postIds);
-  const mediaMap = new Map<string, MediaRecord[]>();
-  const tagMap = new Map<string, ArchiveTagRecord[]>();
+  return hydrateArchivePosts(posts);
+}
+
+export async function listArchivePostsPage(
+  input: ListPostsPageInput
+): Promise<{
+  posts: ArchivePostRecord[];
+  totalCount: number;
+  hasMore: boolean;
+  nextOffset: number;
+}> {
+  const normalizedOffset = normalizePageOffset(input.offset);
+  const normalizedLimit = normalizePageLimit(input.limit);
+  const matchingPostIds =
+    input.tagFilter === null ? null : new Set(await listPostIdsByNormalizedName(input.tagFilter));
+  const totalCount = matchingPostIds === null ? await countPosts() : matchingPostIds.size;
+
+  if (totalCount === 0) {
+    return {
+      posts: [],
+      totalCount: 0,
+      hasMore: false,
+      nextOffset: normalizedOffset
+    };
+  }
+
+  const pagePosts =
+    matchingPostIds === null
+      ? await listPostsSliceBySort(
+          input.sortField,
+          input.sortDirection,
+          normalizedOffset,
+          normalizedLimit
+        )
+      : await listTaggedPostsPage(input, matchingPostIds, normalizedOffset, normalizedLimit);
+
+  return {
+    posts: await hydrateArchivePosts(pagePosts),
+    totalCount,
+    hasMore: normalizedOffset + pagePosts.length < totalCount,
+    nextOffset: normalizedOffset + pagePosts.length
+  };
+}
+
+export async function listArchiveTagSummaries(): Promise<ArchiveTagSummaryRecord[]> {
+  const postTags = await listAllPostTags();
+  const summaryMap = new Map<
+    string,
+    {
+      tag: ArchiveTagRecord;
+      postIds: Set<string>;
+    }
+  >();
+
+  for (const record of postTags) {
+    const normalized = normalizeArchiveTag(record);
+    const existing = summaryMap.get(normalized.tag.normalized_name);
+
+    if (existing === undefined) {
+      summaryMap.set(normalized.tag.normalized_name, {
+        tag: normalized.tag,
+        postIds: new Set([normalized.x_post_id])
+      });
+      continue;
+    }
+
+    if (existing.tag.source !== "manual" && normalized.tag.source === "manual") {
+      existing.tag = normalized.tag;
+    }
+
+    existing.postIds.add(normalized.x_post_id);
+  }
+
+  return [...summaryMap.values()].map((entry) => ({
+    tag: entry.tag,
+    postCount: entry.postIds.size
+  }));
+}
+
+export async function getArchiveSummary(): Promise<ArchiveSummaryRecord> {
+  const [posts, media, postTags] = await Promise.all([
+    listPosts(),
+    archiveDb.media.toArray(),
+    listAllPostTags()
+  ]);
+
+  let imageCount = 0;
+  let videoCount = 0;
+  let mediaBytes = 0;
+  const usernames = new Set<string>();
+  const tagNames = new Set<string>();
+
+  for (const post of posts) {
+    usernames.add(post.x_username);
+  }
 
   for (const item of media) {
-    const normalizedItem = normalizeMediaRecord(item);
-    const current = mediaMap.get(normalizedItem.x_post_id);
-
-    if (current === undefined) {
-      mediaMap.set(normalizedItem.x_post_id, [normalizedItem]);
-      continue;
+    if (item.media_type === "image") {
+      imageCount += 1;
+    } else if (item.media_type === "video") {
+      videoCount += 1;
     }
 
-    current.push(normalizedItem);
+    mediaBytes += item.byte_size ?? 0;
   }
 
-  for (const item of postTags) {
-    const normalizedItem = normalizeArchiveTag(item);
-    const current = tagMap.get(normalizedItem.x_post_id);
-
-    if (current === undefined) {
-      tagMap.set(normalizedItem.x_post_id, [normalizedItem.tag]);
-      continue;
-    }
-
-    current.push(normalizedItem.tag);
+  for (const record of postTags) {
+    tagNames.add(record.normalized_name);
   }
 
-  return posts.map((post) => ({
-    ...post,
-    media: mediaMap.get(post.x_post_id) ?? [],
-    tags: sortArchiveTags(tagMap.get(post.x_post_id) ?? [])
-  }));
+  return {
+    postCount: posts.length,
+    imageCount,
+    videoCount,
+    mediaCount: imageCount + videoCount,
+    accountCount: usernames.size,
+    tagCount: tagNames.size,
+    mediaBytes
+  };
 }
 
 export async function addManualTagToArchivePost(
@@ -505,6 +598,102 @@ export async function resumePendingMediaPersistence(): Promise<void> {
 async function listArchiveTagsForPost(xPostId: string): Promise<ArchiveTagRecord[]> {
   const postTags = await listPostTagsByPostId(xPostId);
   return sortArchiveTags(postTags.map((item) => normalizeArchiveTag(item).tag));
+}
+
+async function hydrateArchivePosts(posts: PostRecord[]): Promise<ArchivePostRecord[]> {
+  const postIds = posts.map((post) => post.x_post_id);
+  const media = await listMediaByPostIds(postIds);
+  const postTags = await listPostTagsByPostIds(postIds);
+  const mediaMap = new Map<string, MediaRecord[]>();
+  const tagMap = new Map<string, ArchiveTagRecord[]>();
+
+  for (const item of media) {
+    const normalizedItem = normalizeMediaRecord(item);
+    const current = mediaMap.get(normalizedItem.x_post_id);
+
+    if (current === undefined) {
+      mediaMap.set(normalizedItem.x_post_id, [normalizedItem]);
+      continue;
+    }
+
+    current.push(normalizedItem);
+  }
+
+  for (const item of postTags) {
+    const normalizedItem = normalizeArchiveTag(item);
+    const current = tagMap.get(normalizedItem.x_post_id);
+
+    if (current === undefined) {
+      tagMap.set(normalizedItem.x_post_id, [normalizedItem.tag]);
+      continue;
+    }
+
+    current.push(normalizedItem.tag);
+  }
+
+  return posts.map((post) => ({
+    ...post,
+    media: mediaMap.get(post.x_post_id) ?? [],
+    tags: sortArchiveTags(tagMap.get(post.x_post_id) ?? [])
+  }));
+}
+
+async function listTaggedPostsPage(
+  input: ListPostsPageInput,
+  matchingPostIds: Set<string>,
+  offset: number,
+  limit: number
+): Promise<PostRecord[]> {
+  const results: PostRecord[] = [];
+  const scanChunkSize = Math.max(limit * 3, 100);
+  let skippedMatches = 0;
+  let scanOffset = 0;
+
+  while (results.length < limit) {
+    const chunk = await listPostsSliceBySort(
+      input.sortField,
+      input.sortDirection,
+      scanOffset,
+      scanChunkSize
+    );
+
+    if (chunk.length === 0) {
+      break;
+    }
+
+    scanOffset += chunk.length;
+
+    for (const post of chunk) {
+      if (!matchingPostIds.has(post.x_post_id)) {
+        continue;
+      }
+
+      if (skippedMatches < offset) {
+        skippedMatches += 1;
+        continue;
+      }
+
+      results.push(post);
+
+      if (results.length >= limit) {
+        break;
+      }
+    }
+  }
+
+  return results;
+}
+
+function normalizePageOffset(value: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+function normalizePageLimit(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 50;
+  }
+
+  return Math.min(Math.floor(value), 250);
 }
 
 async function ensureTagAssignments(inputs: PostTagInput[]): Promise<void> {

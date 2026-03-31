@@ -1,7 +1,10 @@
 import {
   addManualTagToArchivePost,
   deleteArchivePost,
+  getArchiveSummary,
   hasSavedPost,
+  listArchivePostsPage,
+  listArchiveTagSummaries,
   listArchivePosts,
   removeManualTagFromArchivePost,
   resumePendingMediaPersistence,
@@ -10,7 +13,10 @@ import {
 import type {
   DeletePostMessage,
   DeletePostResponse,
+  GetArchiveSummaryResponse,
   HasPostResponse,
+  ListPostTagSummariesResponse,
+  ListPostsPageResponse,
   ListPostsResponse,
   RuntimeErrorResponse,
   RuntimeMessage,
@@ -143,6 +149,62 @@ export async function handleRuntimeMessage(
       return response;
     }
 
+    case "posts/list-page": {
+      const result = await listArchivePostsPage(message.input);
+      logger.debug("posts.list_page.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          count: result.posts.length,
+          totalCount: result.totalCount,
+          hasMore: result.hasMore,
+          offset: message.input.offset,
+          limit: message.input.limit
+        }
+      });
+      const response: ListPostsPageResponse = {
+        type: "posts/list-page-result",
+        posts: result.posts,
+        totalCount: result.totalCount,
+        nextOffset: result.nextOffset,
+        hasMore: result.hasMore
+      };
+      return response;
+    }
+
+    case "posts/tags/list": {
+      const tags = await listArchiveTagSummaries();
+      logger.debug("posts.tags.list.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          count: tags.length
+        }
+      });
+      const response: ListPostTagSummariesResponse = {
+        type: "posts/tags/list-result",
+        tags
+      };
+      return response;
+    }
+
+    case "posts/summary": {
+      const summary = await getArchiveSummary();
+      logger.debug("posts.summary.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          postCount: summary.postCount,
+          mediaCount: summary.mediaCount
+        }
+      });
+      const response: GetArchiveSummaryResponse = {
+        type: "posts/summary-result",
+        summary
+      };
+      return response;
+    }
+
     case "posts/delete": {
       const deleted = await deleteArchivePost(message.xPostId);
       logger.info("post.delete.completed", {
@@ -214,6 +276,9 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/save-batch" ||
     candidate.type === "posts/has" ||
     candidate.type === "posts/list" ||
+    candidate.type === "posts/list-page" ||
+    candidate.type === "posts/tags/list" ||
+    candidate.type === "posts/summary" ||
     candidate.type === "posts/delete" ||
     candidate.type === "posts/tags/add" ||
     candidate.type === "posts/tags/remove"
