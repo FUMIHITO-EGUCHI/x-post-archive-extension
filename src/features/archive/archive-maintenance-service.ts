@@ -457,6 +457,7 @@ function parseTagRecord(value: unknown): TagRecord {
     tag_id: requireString(value.tag_id, "tag.tag_id"),
     normalized_name: requireString(value.normalized_name, "tag.normalized_name"),
     display_name: requireString(value.display_name, "tag.display_name"),
+    system_key: requireNullableBuiltInTagKey(value.system_key, "tag.system_key"),
     created_at: requireFiniteNumberValue(value.created_at, "tag.created_at")
   };
 }
@@ -474,6 +475,7 @@ function parsePostTagRecord(value: unknown): PostTagRecord {
     tag_id: requireString(value.tag_id, "post_tag.tag_id"),
     normalized_name: requireString(value.normalized_name, "post_tag.normalized_name"),
     display_name: requireString(value.display_name, "post_tag.display_name"),
+    system_key: requireNullableBuiltInTagKey(value.system_key, "post_tag.system_key"),
     source,
     assigned_at: requireFiniteNumberValue(value.assigned_at, "post_tag.assigned_at")
   };
@@ -513,6 +515,17 @@ function requireNullableString(value: unknown, field: string): string | null {
   }
 
   return requireString(value, field);
+}
+
+function requireNullableBuiltInTagKey(
+  value: unknown,
+  field: string
+): "liked" | "image" | "video" | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  return requireUnion(value, ["liked", "image", "video"], field) as "liked" | "image" | "video";
 }
 
 function requireFiniteNumberValue(value: unknown, field: string): number {

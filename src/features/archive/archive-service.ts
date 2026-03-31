@@ -34,9 +34,11 @@ import {
   deleteTagsByIds,
   getTagByNormalizedName
 } from "../../db/repositories/tags-repository";
+import { resolveKnownBuiltInTagKey } from "../settings/archive-language";
 import type {
   ArchivePostRecord,
   ArchiveTagRecord,
+  BuiltInTagKey,
   MediaRecord,
   PostRecord,
   PostTagRecord,
@@ -710,7 +712,12 @@ async function ensureTagAssignments(inputs: PostTagInput[]): Promise<void> {
       }
     }
 
-    const tag = await ensureTagRecord(item.normalized_name, item.display_name, item.assigned_at);
+    const tag = await ensureTagRecord(
+      item.normalized_name,
+      item.display_name,
+      item.system_key,
+      item.assigned_at
+    );
 
     await addPostTag({
       post_tag_id: crypto.randomUUID(),
@@ -718,6 +725,7 @@ async function ensureTagAssignments(inputs: PostTagInput[]): Promise<void> {
       tag_id: tag.tag_id,
       normalized_name: tag.normalized_name,
       display_name: item.display_name,
+      system_key: item.system_key,
       source: item.source,
       assigned_at: item.assigned_at
     });
@@ -727,6 +735,7 @@ async function ensureTagAssignments(inputs: PostTagInput[]): Promise<void> {
 async function ensureTagRecord(
   normalizedName: string,
   displayName: string,
+  systemKey: BuiltInTagKey | null,
   createdAt: number
 ): Promise<TagRecord> {
   const existing = await getTagByNormalizedName(normalizedName);
@@ -739,6 +748,7 @@ async function ensureTagRecord(
     tag_id: crypto.randomUUID(),
     normalized_name: normalizedName,
     display_name: displayName,
+    system_key: systemKey,
     created_at: createdAt
   };
 
@@ -944,6 +954,7 @@ function createPostTagInput(
     x_post_id: xPostId,
     normalized_name: normalizedName,
     display_name: cleanedTagName,
+    system_key: source === "auto" ? resolveKnownBuiltInTagKey(normalizedName, cleanedTagName) : null,
     source,
     assigned_at: assignedAt
   };
@@ -1110,6 +1121,7 @@ function normalizeArchiveTag(record: PostTagRecord): {
       tag_id: record.tag_id,
       normalized_name: record.normalized_name,
       display_name: displayName,
+      system_key: record.system_key ?? null,
       source: record.source
     }
   };
@@ -1129,6 +1141,7 @@ type PostTagInput = {
   x_post_id: string;
   normalized_name: string;
   display_name: string;
+  system_key: BuiltInTagKey | null;
   source: TagSource;
   assigned_at: number;
 };

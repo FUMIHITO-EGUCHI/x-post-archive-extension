@@ -222,6 +222,7 @@ media_files: "&file_id, media_id, [media_id+role], storage_status, saved_at"
 - `tag_id: string`
 - `normalized_name: string`
 - `display_name: string`
+- `system_key: "liked" | "image" | "video" | null`
 - `created_at: number`
 
 ### `post_tags`
@@ -231,14 +232,16 @@ media_files: "&file_id, media_id, [media_id+role], storage_status, saved_at"
 - `tag_id: string`
 - `normalized_name: string`
 - `display_name: string`
+- `system_key: "liked" | "image" | "video" | null`
 - `source: "auto" | "manual"`
 - `assigned_at: number`
 
 ### Tagging Notes
 
-- `tags` keeps canonical tag labels.
+- `tags` keeps canonical tag labels and optional built-in tag keys.
 - `post_tags` keeps the relation between a saved post and each tag.
 - hashtag auto tags are created from saved snapshot text.
+- built-in auto tags keep `system_key` so display text can change per language without rewriting saved data.
 - manual tags are added later from the viewer and can override an existing auto relation for the same normalized tag.
 
 ## Archive Backup Model
