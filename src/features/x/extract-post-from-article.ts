@@ -25,6 +25,7 @@ export function extractPostFromArticle(article: HTMLElement): SavePostInput | nu
 
   const post: SavePostInput = {
     x_post_id: permalink.xPostId,
+    display_name: extractDisplayName(article, permalink.xUsername),
     x_username: permalink.xUsername,
     post_text: text,
     post_url: permalink.postUrl,
@@ -77,6 +78,34 @@ function extractPostText(article: HTMLElement): string {
   }
 
   return bestCandidate ?? "";
+}
+
+function extractDisplayName(article: HTMLElement, fallbackUsername: string): string {
+  const userNameContainer = article.querySelector<HTMLElement>('[data-testid="User-Name"]');
+
+  if (userNameContainer === null) {
+    return fallbackUsername;
+  }
+
+  const candidates = userNameContainer.querySelectorAll<HTMLElement>("span");
+
+  for (const candidate of candidates) {
+    const text = normalizeText(candidate.textContent);
+
+    if (
+      text === null ||
+      text.startsWith("@") ||
+      text === "·" ||
+      text === "•" ||
+      /^\d/.test(text)
+    ) {
+      continue;
+    }
+
+    return text;
+  }
+
+  return fallbackUsername;
 }
 
 function normalizePostText(element: HTMLElement): string | null {
