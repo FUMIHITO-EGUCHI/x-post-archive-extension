@@ -939,7 +939,10 @@ export function ViewerApp() {
                   <article className="post-card" data-post-id={post.x_post_id} key={post.x_post_id}>
                     <div className="post-card-header">
                       <div>
-                        <p className="post-username">@{post.x_username}</p>
+                        <p className="post-username">
+                          <span>{post.display_name}</span>
+                          <span className="post-handle">@{post.x_username}</span>
+                        </p>
                         <div className="post-date-list">
                           <p className="post-date">
                             <span className="post-date-label">投稿日</span>
