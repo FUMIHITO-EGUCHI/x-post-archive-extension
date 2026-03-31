@@ -92,6 +92,27 @@ export class ArchiveDatabase extends Dexie {
         "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, assigned_at",
       logs: "&log_id, created_at, level, [level+created_at], scope, event, request_id"
     });
+
+    this.version(8)
+      .stores({
+        posts: "&x_post_id, saved_at, posted_at, reply_count, repost_count, like_count, display_name",
+        media: "&media_id, x_post_id, [x_post_id+position], storage_status, saved_at",
+        tags: "&tag_id, &normalized_name, display_name, created_at",
+        post_tags:
+          "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, assigned_at",
+        logs: "&log_id, created_at, level, [level+created_at], scope, event, request_id"
+      })
+      .upgrade(async (transaction) => {
+        await transaction
+          .table<PostRecord, string>("posts")
+          .toCollection()
+          .modify((post) => {
+            post.display_name =
+              typeof post.display_name === "string" && post.display_name.trim() !== ""
+                ? post.display_name.trim()
+                : post.x_username;
+          });
+      });
   }
 }
 

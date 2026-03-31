@@ -7,6 +7,7 @@ export type VideoDownloadMode = "direct_mp4" | "hls";
 
 export type PostRecord = {
   x_post_id: string;
+  display_name: string;
   x_username: string;
   post_text: string;
   post_url: string;
@@ -82,6 +83,7 @@ export type SaveVideoCandidateInput = {
 
 export type SavePostInput = {
   x_post_id: string;
+  display_name: string;
   x_username: string;
   post_text: string;
   post_url: string;
