@@ -258,6 +258,9 @@ X 風デザインを模倣する必要はない。
 - ドキュメント変更と実装変更は、可能ならコミットを分けること
 - 破壊的変更は避けること
 - 迷ったら、先に安全な小変更を行うこと
+- release 用の version bump は feature branch 上では行わず、`master` にマージした後に行うこと
+- release tag は `master` 上の version bump commit にのみ付けること
+- feature branch 上の version bump commit や merge 前の commit に release tag を付けないこと
 
 ## Tooling Rules
 - 新規セットアップ時は package manager を早い段階で固定し、以後は混在させないこと
