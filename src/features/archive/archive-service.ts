@@ -1,9 +1,11 @@
 import { archiveDb } from "../../db/archive-database";
 import {
   addMediaRecords,
+  listMediaByStorageStatus,
   deleteMediaRecordsByPostId,
   listMediaByPostId,
   listMediaByPostIds,
+  markMediaPending,
   updateMediaAfterWrite,
   updateMediaPreview
 } from "../../db/repositories/media-repository";
@@ -47,6 +49,10 @@ import {
   writeBlobToOpfs
 } from "../media-storage/opfs-media-storage";
 
+const PENDING_MEDIA_RESUME_BATCH_SIZE = 24;
+const activeMediaPersistenceIds = new Set<string>();
+let pendingResumePromise: Promise<void> | null = null;
+
 export async function hasSavedPost(xPostId: string): Promise<boolean> {
   return hasPost(xPostId);
 }
@@ -57,9 +63,51 @@ export async function saveArchivePost(input: SavePostInput): Promise<{
 }> {
   validateSavePostInput(input);
 
+  const autoTags = buildAutoTagRecords(
+    input.x_post_id,
+    input.post_text,
+    input.auto_tags ?? [],
+    Date.now()
+  );
   const existing = await getPost(input.x_post_id);
 
   if (existing !== undefined) {
+    const duplicateMediaWork = await prepareDuplicateMediaWork(input);
+
+    if (autoTags.length > 0) {
+      await archiveDb.transaction(
+        "rw",
+        archiveDb.media,
+        archiveDb.tags,
+        archiveDb.post_tags,
+        async () => {
+          if (duplicateMediaWork.newRecords.length > 0) {
+            await addMediaRecords(duplicateMediaWork.newRecords);
+          }
+
+          for (const media of duplicateMediaWork.retryRecords) {
+            await markMediaPending(media.media_id);
+          }
+
+          await ensureTagAssignments(autoTags);
+        }
+      );
+    } else if (duplicateMediaWork.newRecords.length > 0 || duplicateMediaWork.retryRecords.length > 0) {
+      await archiveDb.transaction("rw", archiveDb.media, async () => {
+        if (duplicateMediaWork.newRecords.length > 0) {
+          await addMediaRecords(duplicateMediaWork.newRecords);
+        }
+
+        for (const media of duplicateMediaWork.retryRecords) {
+          await markMediaPending(media.media_id);
+        }
+      });
+    }
+
+    if (duplicateMediaWork.persistRecords.length > 0) {
+      enqueueMediaPersistence(duplicateMediaWork.persistRecords);
+    }
+
     return {
       status: "duplicate",
       post: existing
@@ -87,8 +135,6 @@ export async function saveArchivePost(input: SavePostInput): Promise<{
       createPendingVideoRecord(input.x_post_id, candidate, savedAt, imageMedia.length + index)
     );
   const media = [...imageMedia, ...videoMedia];
-  const autoTags = buildAutoTagRecords(post.x_post_id, post.post_text, savedAt);
-
   await archiveDb.transaction(
     "rw",
     archiveDb.posts,
@@ -102,7 +148,7 @@ export async function saveArchivePost(input: SavePostInput): Promise<{
     }
   );
 
-  await Promise.all(media.map((record) => persistMedia(record)));
+  enqueueMediaPersistence(media);
 
   return {
     status: "saved",
@@ -279,6 +325,12 @@ export async function deleteArchivePost(xPostId: string): Promise<boolean> {
 }
 
 async function persistMedia(record: MediaRecord): Promise<void> {
+  if (activeMediaPersistenceIds.has(record.media_id)) {
+    return;
+  }
+
+  activeMediaPersistenceIds.add(record.media_id);
+
   try {
     const response = await fetch(record.source_url, {
       credentials: "omit"
@@ -305,7 +357,49 @@ async function persistMedia(record: MediaRecord): Promise<void> {
       storage_status: "failed",
       last_error: error instanceof Error ? error.message : "Media persistence failed."
     });
+  } finally {
+    activeMediaPersistenceIds.delete(record.media_id);
   }
+}
+
+function enqueueMediaPersistence(media: MediaRecord[]): void {
+  if (media.length === 0) {
+    return;
+  }
+
+  void Promise.allSettled(media.map((record) => persistMedia(record))).then((results) => {
+    for (const [index, result] of results.entries()) {
+      if (result.status === "fulfilled") {
+        continue;
+      }
+
+      console.error("Queued media persistence failed unexpectedly.", {
+        mediaId: media[index]?.media_id,
+        xPostId: media[index]?.x_post_id,
+        reason: result.reason
+      });
+    }
+  });
+}
+
+export async function resumePendingMediaPersistence(): Promise<void> {
+  if (pendingResumePromise !== null) {
+    return pendingResumePromise;
+  }
+
+  pendingResumePromise = (async () => {
+    const pendingMedia = await listMediaByStorageStatus("pending", PENDING_MEDIA_RESUME_BATCH_SIZE);
+
+    if (pendingMedia.length === 0) {
+      return;
+    }
+
+    enqueueMediaPersistence(pendingMedia);
+  })().finally(() => {
+    pendingResumePromise = null;
+  });
+
+  return pendingResumePromise;
 }
 
 async function listArchiveTagsForPost(xPostId: string): Promise<ArchiveTagRecord[]> {
@@ -387,10 +481,25 @@ async function deleteOrphanedTags(tagIds: string[]): Promise<void> {
 function buildAutoTagRecords(
   xPostId: string,
   postText: string,
+  explicitAutoTags: string[],
   assignedAt: number
 ): PostTagInput[] {
-  const hashtags = extractHashtags(postText);
-  return hashtags.map((tagName) => createPostTagInput(xPostId, tagName, "auto", assignedAt));
+  const uniqueTags = new Map<string, string>();
+  const candidates = [...extractHashtags(postText), ...explicitAutoTags];
+
+  for (const tagName of candidates) {
+    const normalizedName = normalizeTagName(tagName);
+
+    if (normalizedName === null || uniqueTags.has(normalizedName)) {
+      continue;
+    }
+
+    uniqueTags.set(normalizedName, cleanupTagName(tagName));
+  }
+
+  return [...uniqueTags.values()].map((tagName) =>
+    createPostTagInput(xPostId, tagName, "auto", assignedAt)
+  );
 }
 
 function extractHashtags(postText: string): string[] {
@@ -470,6 +579,63 @@ function createPendingVideoRecord(
   };
 }
 
+async function prepareDuplicateMediaWork(input: SavePostInput): Promise<{
+  newRecords: MediaRecord[];
+  retryRecords: MediaRecord[];
+  persistRecords: MediaRecord[];
+}> {
+  const existingMedia = await listMediaByPostId(input.x_post_id);
+  const existingBySourceKey = new Map<string, MediaRecord>();
+
+  for (const media of existingMedia) {
+    existingBySourceKey.set(getMediaSourceKey(media.media_type, media.source_url), media);
+  }
+
+  const savedAt = Date.now();
+  const newRecords: MediaRecord[] = [];
+  const retryRecords: MediaRecord[] = [];
+
+  for (const image of input.media) {
+    const sourceKey = getMediaSourceKey("image", image.source_url);
+    const existing = existingBySourceKey.get(sourceKey);
+
+    if (existing === undefined) {
+      newRecords.push(createPendingImageRecord(input.x_post_id, image, savedAt));
+      continue;
+    }
+
+    if (existing.storage_status !== "ready") {
+      retryRecords.push(existing);
+    }
+  }
+
+  for (const [index, candidate] of (input.video_candidates ?? [])
+    .filter((video) => video.download_mode === "direct_mp4")
+    .entries()) {
+    const sourceKey = getMediaSourceKey("video", candidate.source_url);
+    const existing = existingBySourceKey.get(sourceKey);
+
+    if (existing === undefined) {
+      newRecords.push(
+        createPendingVideoRecord(input.x_post_id, candidate, savedAt, input.media.length + index)
+      );
+      continue;
+    }
+
+    if (existing.storage_status !== "ready") {
+      retryRecords.push(existing);
+    }
+  }
+
+  const persistRecords = [...retryRecords, ...newRecords];
+
+  return {
+    newRecords,
+    retryRecords: dedupeMediaRecordsById(retryRecords),
+    persistRecords: dedupeMediaRecordsById(persistRecords)
+  };
+}
+
 function createPostTagInput(
   xPostId: string,
   tagName: string,
@@ -512,6 +678,18 @@ function validateSavePostInput(input: SavePostInput): void {
 
   if (input.video_candidates !== undefined && !Array.isArray(input.video_candidates)) {
     throw new Error("Invalid video candidate list.");
+  }
+
+  if (input.auto_tags !== undefined) {
+    if (!Array.isArray(input.auto_tags)) {
+      throw new Error("Invalid auto_tags.");
+    }
+
+    for (const tagName of input.auto_tags) {
+      if (normalizeTagName(tagName) === null) {
+        throw new Error("Invalid auto tag.");
+      }
+    }
   }
 
   const directMp4Candidates = (input.video_candidates ?? []).filter(
@@ -612,6 +790,20 @@ function normalizeMediaRecord(media: MediaRecord): MediaRecord {
     preview_image_url: media.preview_image_url ?? null,
     preview_image_opfs_path: media.preview_image_opfs_path ?? null
   };
+}
+
+function getMediaSourceKey(mediaType: MediaRecord["media_type"], sourceUrl: string): string {
+  return `${mediaType}:${sourceUrl}`;
+}
+
+function dedupeMediaRecordsById(records: MediaRecord[]): MediaRecord[] {
+  const uniqueRecords = new Map<string, MediaRecord>();
+
+  for (const record of records) {
+    uniqueRecords.set(record.media_id, record);
+  }
+
+  return [...uniqueRecords.values()];
 }
 
 function normalizeArchiveTag(record: PostTagRecord): {

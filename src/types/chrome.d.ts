@@ -7,6 +7,10 @@ declare namespace chrome {
       function addListener(callback: () => void): void;
     }
 
+    namespace onStartup {
+      function addListener(callback: () => void): void;
+    }
+
     namespace onMessage {
       type SendResponse = (response?: unknown) => void;
 
