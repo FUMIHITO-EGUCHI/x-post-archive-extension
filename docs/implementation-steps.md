@@ -116,3 +116,23 @@
 3. On duplicate post saves, backfill missing media records and retry non-ready media.
 4. Keep viewer behavior based on `pending` / `ready` / `failed`.
 5. Verify pending-media recovery, duplicate-media backfill, `npm run typecheck`, and `npm run build`.
+
+## Archive Maintenance Steps
+
+1. Define a ZIP backup model with `manifest.json` plus OPFS media file entries.
+2. Implement archive export, import, and clear functions in a dedicated service layer.
+3. Stream backup ZIP directly to a user-selected file instead of assembling a Blob in memory.
+4. Add a settings card for backup ZIP export.
+5. Add a settings card for restore with file selection and replacement warning.
+6. Add a settings card for full archive delete with two-step confirmation.
+7. Reload viewer archive data after restore or delete.
+8. Verify backup, restore, full delete, `npm run typecheck`, and `npm run build`.
+## Archive Maintenance Steps Updated
+
+1. Define a ZIP backup model with `manifest.json` plus OPFS media file entries.
+2. Implement archive export, import, and clear functions in a dedicated service layer.
+3. Add a settings card for backup ZIP download.
+4. Add a settings card for restore with file selection and replacement warning.
+5. Add a settings card for full archive delete with two-step confirmation.
+6. Reload viewer archive data after restore or delete.
+7. Verify backup, restore, full delete, `npm run typecheck`, and `npm run build`.

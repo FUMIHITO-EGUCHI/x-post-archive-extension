@@ -9,6 +9,7 @@ import {
   requestRemovePostTag
 } from "../../runtime/client";
 import { createLogger } from "../../logging/logger";
+import { SettingsArchiveMaintenancePanel } from "./settings-archive-maintenance-panel";
 import { SettingsLogPanel } from "./settings-log-panel";
 
 type ViewerStatus = "idle" | "loading" | "ready";
@@ -181,6 +182,28 @@ export function ViewerApp() {
       cancelled = true;
     };
   }, []);
+
+  async function refreshArchive(): Promise<void> {
+    setStatus("loading");
+    setLoadNotice(null);
+
+    try {
+      const response = await requestPosts();
+      setPosts(response.posts);
+      setStatus("ready");
+    } catch (error) {
+      logger.error("posts.reload.failed", {
+        message: "Failed to reload posts.",
+        context: {
+          error
+        }
+      });
+
+      setPosts([]);
+      setStatus("ready");
+      setLoadNotice("Posts could not be loaded. Showing an empty list.");
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -763,7 +786,8 @@ export function ViewerApp() {
             <p className="viewer-eyebrow">Settings</p>
             <h1 className="viewer-title">Viewer options</h1>
             <p className="viewer-copy">
-              Settings will be added here. The navigation shell is in place.
+              Manage viewer preferences, backup and restore the archive, and remove saved data from
+              here.
             </p>
           </section>
 
@@ -869,6 +893,15 @@ export function ViewerApp() {
                   </div>
                 </dl>
               </section>
+
+              <SettingsArchiveMaintenancePanel
+                archiveSummary={{
+                  postCount: archiveSummary.postCount,
+                  mediaCount: archiveSummary.mediaCount,
+                  tagCount: archiveSummary.tagCount
+                }}
+                onArchiveChanged={refreshArchive}
+              />
 
               <SettingsLogPanel />
             </div>
