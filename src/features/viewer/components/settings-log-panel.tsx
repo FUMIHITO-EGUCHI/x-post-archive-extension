@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { listLogRecords } from "../../../db/repositories/logs-repository";
-import { createLogger } from "../../logging/logger";
 import type { LogLevel, LogRecord } from "../../../types/logger";
+import { createLogger } from "../../logging/logger";
+import type { ArchiveLanguage } from "../../settings/archive-language";
 
 const LOG_LIMIT = 200;
+const LOG_LEVEL_OPTIONS: LogLevel[] = ["debug", "info", "warn", "error"];
 const viewerLogger = createLogger("viewer-settings");
 
-type LogLevelFilter = LogLevel | "all";
-
-export function SettingsLogPanel() {
-  const [levelFilter, setLevelFilter] = useState<LogLevelFilter>("all");
+export function SettingsLogPanel({ language }: { language: ArchiveLanguage }) {
+  const isJapanese = language === "ja";
+  const [selectedLevels, setSelectedLevels] = useState<LogLevel[]>([]);
   const [fromValue, setFromValue] = useState("");
   const [toValue, setToValue] = useState("");
   const [logs, setLogs] = useState<LogRecord[]>([]);
@@ -28,7 +29,7 @@ export function SettingsLogPanel() {
 
       try {
         const records = await listLogRecords({
-          level: levelFilter === "all" ? null : levelFilter,
+          levels: selectedLevels.length === 0 ? null : selectedLevels,
           from: parseDateFilterValue(fromValue),
           to: parseDateFilterValue(toValue, "end"),
           limit: LOG_LIMIT
@@ -43,7 +44,7 @@ export function SettingsLogPanel() {
           message: "Failed to load logs for settings view.",
           context: {
             error,
-            levelFilter,
+            selectedLevels: selectedLevels.join(","),
             fromValue,
             toValue
           }
@@ -52,7 +53,7 @@ export function SettingsLogPanel() {
         if (!cancelled) {
           setLogs([]);
           setStatus("ready");
-          setNotice("Logs could not be loaded.");
+          setNotice(isJapanese ? "ログを読み込めませんでした。" : "Logs could not be loaded.");
         }
       }
     }
@@ -62,35 +63,48 @@ export function SettingsLogPanel() {
     return () => {
       cancelled = true;
     };
-  }, [fromValue, levelFilter, toValue]);
+  }, [fromValue, isJapanese, selectedLevels, toValue]);
 
   return (
     <section className="viewer-settings-card">
       <div className="viewer-settings-card-header">
-        <h3>App logs</h3>
-        <p>Filter persistent logs by type and time range. The latest 200 matching records are shown.</p>
+        <h3>{isJapanese ? "アプリログ" : "App logs"}</h3>
+        <p>
+          {isJapanese
+            ? "保存されたログを種類と期間で絞り込みます。最新 200 件まで表示します。"
+            : "Filter persistent logs by type and time range. The latest 200 matching records are shown."}
+        </p>
       </div>
 
       <div className="viewer-log-filters" aria-label="Log filters">
-        <label className="viewer-sort-label">
-          <span>Type</span>
-          <select
-            className="viewer-sort-select"
-            value={levelFilter}
-            onChange={(event) => {
-              setLevelFilter(event.currentTarget.value as LogLevelFilter);
-            }}
+        <div className="viewer-sort-label">
+          <span>{isJapanese ? "種類" : "Type"}</span>
+          <div
+            className="viewer-log-export-options viewer-log-level-options"
+            role="group"
+            aria-label="Log levels"
           >
-            <option value="all">All</option>
-            <option value="debug">Debug</option>
-            <option value="info">Info</option>
-            <option value="warn">Warn</option>
-            <option value="error">Error</option>
-          </select>
-        </label>
+            {LOG_LEVEL_OPTIONS.map((level) => (
+              <label className="viewer-log-export-option" key={level}>
+                <input
+                  type="checkbox"
+                  checked={selectedLevels.includes(level)}
+                  onChange={() => {
+                    setSelectedLevels((current) =>
+                      current.includes(level)
+                        ? current.filter((item) => item !== level)
+                        : [...current, level]
+                    );
+                  }}
+                />
+                <span>{formatLevelLabel(level)}</span>
+              </label>
+            ))}
+          </div>
+        </div>
 
         <label className="viewer-sort-label">
-          <span>From</span>
+          <span>{isJapanese ? "開始" : "From"}</span>
           <input
             className="viewer-log-date-input"
             type="datetime-local"
@@ -102,7 +116,7 @@ export function SettingsLogPanel() {
         </label>
 
         <label className="viewer-sort-label">
-          <span>To</span>
+          <span>{isJapanese ? "終了" : "To"}</span>
           <input
             className="viewer-log-date-input"
             type="datetime-local"
@@ -117,19 +131,23 @@ export function SettingsLogPanel() {
           className="viewer-log-clear-button"
           type="button"
           onClick={() => {
-            setLevelFilter("all");
+            setSelectedLevels([]);
             setFromValue("");
             setToValue("");
           }}
         >
-          Clear
+          {isJapanese ? "クリア" : "Clear"}
         </button>
       </div>
 
       <div className="viewer-log-export-panel">
         <div className="viewer-log-export-copy">
-          <strong>Export</strong>
-          <span>Exports the currently filtered logs. Choose which fields to include in the file.</span>
+          <strong>{isJapanese ? "エクスポート" : "Export"}</strong>
+          <span>
+            {isJapanese
+              ? "現在の絞り込み結果を出力します。ファイルに含める項目を選べます。"
+              : "Exports the currently filtered logs. Choose which fields to include in the file."}
+          </span>
         </div>
         <div className="viewer-log-export-options" role="group" aria-label="Log export fields">
           <label className="viewer-log-export-option">
@@ -173,7 +191,7 @@ export function SettingsLogPanel() {
                 includeMessage,
                 includeContext,
                 includeRequestId,
-                levelFilter,
+                selectedLevels,
                 fromValue,
                 toValue
               });
@@ -182,22 +200,28 @@ export function SettingsLogPanel() {
                 message: "Failed to export logs from settings view.",
                 context: {
                   error,
-                  levelFilter,
+                  selectedLevels: selectedLevels.join(","),
                   fromValue,
                   toValue
                 }
               });
-              setNotice("Log export failed.");
+              setNotice(isJapanese ? "ログの書き出しに失敗しました。" : "Log export failed.");
             }
           }}
         >
-          Export JSON
+          {isJapanese ? "JSON を書き出す" : "Export JSON"}
         </button>
       </div>
 
-      {status === "loading" && <p className="viewer-message">Loading logs...</p>}
+      {status === "loading" && (
+        <p className="viewer-message">{isJapanese ? "ログを読み込み中..." : "Loading logs..."}</p>
+      )}
       {notice !== null && <p className="viewer-message viewer-message-error">{notice}</p>}
-      {status === "ready" && logs.length === 0 && <p className="viewer-message">No logs matched the current filters.</p>}
+      {status === "ready" && logs.length === 0 && (
+        <p className="viewer-message">
+          {isJapanese ? "現在の条件に一致するログはありません。" : "No logs matched the current filters."}
+        </p>
+      )}
 
       {logs.length > 0 && (
         <div className="viewer-log-list" role="list" aria-label="Persistent application logs">
@@ -275,13 +299,26 @@ function formatContextValue(value: string | number | boolean | null): string {
   return String(value);
 }
 
+function formatLevelLabel(level: LogLevel): string {
+  switch (level) {
+    case "debug":
+      return "Debug";
+    case "info":
+      return "Info";
+    case "warn":
+      return "Warn";
+    case "error":
+      return "Error";
+  }
+}
+
 function exportLogsAsJson(
   logs: LogRecord[],
   options: {
     includeMessage: boolean;
     includeContext: boolean;
     includeRequestId: boolean;
-    levelFilter: LogLevelFilter;
+    selectedLevels: LogLevel[];
     fromValue: string;
     toValue: string;
   }
@@ -312,7 +349,7 @@ function exportLogsAsJson(
   const payload = {
     exported_at: new Date().toISOString(),
     filters: {
-      level: options.levelFilter === "all" ? null : options.levelFilter,
+      levels: options.selectedLevels.length === 0 ? null : options.selectedLevels,
       from: options.fromValue === "" ? null : options.fromValue,
       to: options.toValue === "" ? null : options.toValue
     },
@@ -321,19 +358,16 @@ function exportLogsAsJson(
       include_context: options.includeContext,
       include_request_id: options.includeRequestId
     },
-    count: exportedLogs.length,
-    logs: exportedLogs
+    records: exportedLogs
   };
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json;charset=utf-8"
+    type: "application/json"
   });
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-
   anchor.href = objectUrl;
-  anchor.download = `x-post-archive-logs-${timestamp}.json`;
+  anchor.download = `x-post-archive-logs-${new Date().toISOString().replaceAll(":", "-")}.json`;
   anchor.click();
   URL.revokeObjectURL(objectUrl);
 }

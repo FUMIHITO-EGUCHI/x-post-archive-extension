@@ -185,7 +185,13 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
-  align-items: end;
+  align-items: start;
+}
+
+.viewer-log-filters .viewer-sort-label > span {
+  display: flex;
+  align-items: center;
+  min-height: 18px;
 }
 
 .viewer-log-date-input {
@@ -208,6 +214,8 @@ body {
   font-size: calc(13px * var(--viewer-font-scale));
   font-weight: 700;
   cursor: pointer;
+  align-self: start;
+  margin-top: 24px;
 }
 
 .viewer-log-export-panel {
@@ -241,6 +249,12 @@ body {
   gap: 10px;
 }
 
+.viewer-log-level-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .viewer-log-export-option {
   display: inline-flex;
   align-items: center;
@@ -251,6 +265,11 @@ body {
   border: 1px solid rgba(16, 32, 51, 0.1);
   font-size: calc(13px * var(--viewer-font-scale));
   color: #17324d;
+}
+
+.viewer-log-level-options .viewer-log-export-option {
+  width: 100%;
+  justify-content: flex-start;
 }
 
 .viewer-log-export-option input {
@@ -481,6 +500,7 @@ body {
 
 .viewer-sort-select {
   min-width: 144px;
+  min-height: 44px;
   border: 1px solid rgba(16, 32, 51, 0.12);
   border-radius: 14px;
   padding: 10px 14px;
@@ -491,6 +511,7 @@ body {
 }
 
 .viewer-sort-direction-button {
+  min-height: 44px;
   border: 1px solid rgba(16, 32, 51, 0.12);
   border-radius: 14px;
   padding: 10px 14px;
@@ -604,6 +625,7 @@ body {
 .viewer-action-button,
 .viewer-secondary-button,
 .viewer-danger-button {
+  min-height: 44px;
   border-radius: 14px;
   padding: 12px 16px;
   font: inherit;

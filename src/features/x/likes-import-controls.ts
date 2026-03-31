@@ -1,8 +1,10 @@
 import { requestSavePostsBatch } from "../runtime/client";
+import {
+  buildLocalizedDefaultAutoTags,
+  loadArchiveLanguage
+} from "../settings/archive-language";
 import { extractPostFromArticle } from "./extract-post-from-article";
 import { findTweetArticles } from "./find-tweet-articles";
-
-export const LIKED_AUTO_TAG = "liked";
 
 const ROOT_ID = "xpa-likes-import-root";
 const OVERLAY_ID = "xpa-likes-import-overlay";
@@ -302,6 +304,8 @@ async function processSaveQueue(
   saveQueue: Array<NonNullable<ReturnType<typeof extractPostFromArticle>>>,
   run: LikesImportRun
 ): Promise<void> {
+  const language = await loadArchiveLanguage();
+
   while (!run.collectingFinished || saveQueue.length > 0) {
     if (saveQueue.length === 0) {
       await wait(100);
@@ -314,7 +318,9 @@ async function processSaveQueue(
       const response = await requestSavePostsBatch(
         batch.map((post) => ({
           ...post,
-          auto_tags: [LIKED_AUTO_TAG]
+          auto_tags: buildLocalizedDefaultAutoTags(language, post, {
+            includeLikedTag: true
+          })
         }))
       );
 
