@@ -23,11 +23,32 @@ export async function listMediaByPostIds(xPostIds: string[]): Promise<MediaRecor
   return sortMediaByPostAndPosition(media);
 }
 
+export async function listMediaByStorageStatus(
+  storageStatus: MediaRecord["storage_status"],
+  limit?: number
+): Promise<MediaRecord[]> {
+  let collection = archiveDb.media.where("storage_status").equals(storageStatus);
+
+  if (typeof limit === "number") {
+    collection = collection.limit(limit);
+  }
+
+  const media = await collection.toArray();
+  return sortMediaByPostAndPosition(media);
+}
+
 export async function updateMediaAfterWrite(
   mediaId: string,
   update: Pick<MediaRecord, "mime_type" | "byte_size" | "storage_status" | "last_error">
 ): Promise<void> {
   await archiveDb.media.update(mediaId, update);
+}
+
+export async function markMediaPending(mediaId: string): Promise<void> {
+  await archiveDb.media.update(mediaId, {
+    storage_status: "pending",
+    last_error: null
+  });
 }
 
 export async function updateMediaPreview(

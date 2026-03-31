@@ -10,6 +10,11 @@ export type SavePostMessage = {
   post: SavePostInput;
 };
 
+export type SavePostsBatchMessage = {
+  type: "posts/save-batch";
+  posts: SavePostInput[];
+};
+
 export type HasPostMessage = {
   type: "posts/has";
   xPostId: string;
@@ -38,6 +43,7 @@ export type RemovePostTagMessage = {
 
 export type RuntimeMessage =
   | SavePostMessage
+  | SavePostsBatchMessage
   | HasPostMessage
   | ListPostsMessage
   | DeletePostMessage
@@ -48,6 +54,13 @@ export type SavePostResponse = {
   type: "posts/save-result";
   status: "saved" | "duplicate";
   post?: PostRecord;
+};
+
+export type SavePostsBatchResponse = {
+  type: "posts/save-batch-result";
+  saved: number;
+  duplicates: number;
+  failed: number;
 };
 
 export type HasPostResponse = {
@@ -78,6 +91,7 @@ export type RuntimeErrorResponse = {
 
 export type RuntimeResponse =
   | SavePostResponse
+  | SavePostsBatchResponse
   | HasPostResponse
   | ListPostsResponse
   | DeletePostResponse

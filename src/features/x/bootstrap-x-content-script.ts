@@ -3,6 +3,12 @@ import { extractPostFromArticle, extractPostIdFromArticle } from "./extract-post
 import { findTweetArticles } from "./find-tweet-articles";
 import { ensureGraphqlVideoCandidateListener } from "./graphql-video-candidate-cache";
 import { injectSaveButton, setButtonState } from "./inject-save-button";
+import {
+  LIKED_AUTO_TAG,
+  ensureLikesImportControls,
+  isLikesTimelinePage,
+  removeLikesImportControls
+} from "./likes-import-controls";
 
 const processedArticles = new WeakSet<HTMLElement>();
 let initialized = false;
@@ -54,6 +60,7 @@ function observeDomChanges(): void {
 }
 
 function scanTweetArticles(): void {
+  syncLikesImportControls();
   const articles = findTweetArticles();
 
   for (const article of articles) {
@@ -72,6 +79,10 @@ async function attachSaveButton(article: HTMLElement): Promise<void> {
 
     if (post === null) {
       throw new Error("Post extraction failed.");
+    }
+
+    if (isLikesTimelinePage()) {
+      post.auto_tags = [LIKED_AUTO_TAG];
     }
 
     const response = await requestSavePost(post);
@@ -95,4 +106,13 @@ async function attachSaveButton(article: HTMLElement): Promise<void> {
     console.error("Failed to check saved state.", error);
     setButtonState(button, "idle");
   }
+}
+
+function syncLikesImportControls(): void {
+  if (isLikesTimelinePage()) {
+    ensureLikesImportControls();
+    return;
+  }
+
+  removeLikesImportControls();
 }
