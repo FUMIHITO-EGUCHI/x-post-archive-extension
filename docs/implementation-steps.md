@@ -99,3 +99,20 @@
 3. Add runtime messages for manual tag add/remove.
 4. Show tags in the viewer and support filter by tag.
 5. Verify duplicate prevention, delete cleanup, `npm run typecheck`, and `npm run build`.
+
+## Likes Import Steps
+
+1. Detect X likes pages from URL and only show the bulk import UI there.
+2. Reuse the existing save path, but allow a `liked` auto tag to be added on first save or duplicate save.
+3. Add a collector that auto-scrolls the likes timeline, extracts visible posts, and deduplicates by `x_post_id`.
+4. Show a fixed overlay with collected, saved, duplicate, failed, and scanned counts.
+5. Let the user stop the run and keep the partial counts visible.
+6. Verify likes-page-only rendering, duplicate tag backfill, `npm run typecheck`, and `npm run build`.
+
+## Media Recovery Steps
+
+1. Resume `pending` media persistence when the background worker wakes up.
+2. Prevent duplicate in-flight media writes for the same `media_id`.
+3. On duplicate post saves, backfill missing media records and retry non-ready media.
+4. Keep viewer behavior based on `pending` / `ready` / `failed`.
+5. Verify pending-media recovery, duplicate-media backfill, `npm run typecheck`, and `npm run build`.
