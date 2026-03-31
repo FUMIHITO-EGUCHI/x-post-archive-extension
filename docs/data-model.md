@@ -240,3 +240,64 @@ media_files: "&file_id, media_id, [media_id+role], storage_status, saved_at"
 - `post_tags` keeps the relation between a saved post and each tag.
 - hashtag auto tags are created from saved snapshot text.
 - manual tags are added later from the viewer and can override an existing auto relation for the same normalized tag.
+
+## Archive Backup Model
+
+archive backup file は viewer settings から export / import する ZIP とする。
+
+```ts
+type ArchiveBackupFile = {
+  format: "x-post-archive-backup";
+  version: 1;
+  exported_at: number;
+  data: {
+    posts: PostRecord[];
+    media: MediaRecord[];
+    tags: TagRecord[];
+    post_tags: PostTagRecord[];
+    files: ArchiveBackupFileEntry[];
+  };
+};
+
+type ArchiveBackupFileEntry = {
+  path: string;
+  mime_type: string | null;
+  byte_size: number;
+};
+```
+
+- `files` は OPFS 内の archive media を含む
+- path は `/media/` 配下のみ許可する
+- logs や viewer settings は backup 対象に含めない
+- restore は current archive を clear した後に backup 内容を書き戻す
+## Archive Backup Model Updated
+
+archive backup file は viewer settings から export / import する ZIP とする。
+
+```ts
+type ArchiveBackupManifest = {
+  format: "x-post-archive-backup";
+  version: 1;
+  exported_at: number;
+  data: {
+    posts: PostRecord[];
+    media: MediaRecord[];
+    tags: TagRecord[];
+    post_tags: PostTagRecord[];
+    files: ArchiveBackupFileEntry[];
+  };
+};
+
+type ArchiveBackupFileEntry = {
+  path: string;
+  mime_type: string | null;
+  byte_size: number;
+};
+```
+
+- ZIP root に `manifest.json` を置く
+- `files` は OPFS 内の archive media を含み、ZIP 内では raw binary entry として格納する
+- backup export は保存先ファイルへ ZIP をストリーミング書き込みする
+- path は `/media/` 配下のみ許可する
+- logs や viewer settings は backup 対象に含めない
+- restore は current archive を clear した後に backup 内容を書き戻す
