@@ -1,22 +1,36 @@
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArchivePostRecord, ArchiveTagRecord, MediaRecord } from "../../../types/archive";
+import type {
+  ArchiveSummaryRecord,
+  ArchiveTagSummaryRecord,
+  PostSortField,
+  SortDirection,
+  ViewerSessionRestoreMode
+} from "../../../types/viewer";
 import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
 import {
   requestAddPostTag,
+  requestArchiveSummary,
   requestDeletePost,
-  requestPosts,
-  requestRemovePostTag
+  requestPostsPage,
+  requestRemovePostTag,
+  requestTagSummaries
 } from "../../runtime/client";
 import { createLogger } from "../../logging/logger";
 import { SettingsArchiveMaintenancePanel } from "./settings-archive-maintenance-panel";
 import { SettingsLogPanel } from "./settings-log-panel";
+import {
+  clearViewerSession,
+  loadViewerSession,
+  loadViewerSessionRestoreMode,
+  persistViewerSession,
+  persistViewerSessionRestoreMode
+} from "../viewer-session-storage";
 
 type ViewerStatus = "idle" | "loading" | "ready";
 type ViewerScreen = "archive" | "settings";
 type FontSizeOption = "small" | "medium" | "large";
-type PostSortField = "posted_at" | "saved_at" | "reply_count" | "repost_count" | "like_count";
-type SortDirection = "desc" | "asc";
 type TagSortOption = "count" | "name";
 type ActiveMedia = {
   items: MediaRecord[];
@@ -35,6 +49,7 @@ type StorageEstimateState = {
 };
 
 const VIEWER_FONT_SIZE_STORAGE_KEY = "viewer.fontSize";
+const DEFAULT_PAGE_SIZE = 50;
 const FONT_SIZE_SCALE: Record<FontSizeOption, number> = {
   small: 0.92,
   medium: 1,
@@ -45,10 +60,25 @@ const logger = createLogger("viewer");
 export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
   const [fontSize, setFontSize] = useState<FontSizeOption>("medium");
+  const [sessionRestoreMode, setSessionRestoreMode] =
+    useState<ViewerSessionRestoreMode>("filters");
   const [posts, setPosts] = useState<ArchivePostRecord[]>([]);
+  const [availableTags, setAvailableTags] = useState<ArchiveTagSummaryRecord[]>([]);
+  const [archiveSummary, setArchiveSummary] = useState<ArchiveSummaryRecord>({
+    postCount: 0,
+    imageCount: 0,
+    videoCount: 0,
+    mediaCount: 0,
+    accountCount: 0,
+    tagCount: 0,
+    mediaBytes: 0
+  });
+  const [archiveTotalCount, setArchiveTotalCount] = useState(0);
+  const [hasMorePosts, setHasMorePosts] = useState(false);
   const [sortField, setSortField] = useState<PostSortField>("saved_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [status, setStatus] = useState<ViewerStatus>("idle");
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadNotice, setLoadNotice] = useState<string | null>(null);
   const [activeMedia, setActiveMedia] = useState<ActiveMedia | null>(null);
@@ -66,51 +96,12 @@ export function ViewerApp() {
     status: "idle"
   });
   const activeVideoUrlRef = useRef<string | null>(null);
+  const shouldPersistSessionRef = useRef(false);
+  const restoreScrollTopRef = useRef<number | null>(null);
+  const [restoreTargetPostId, setRestoreTargetPostId] = useState<string | null>(null);
+  const archiveSectionRef = useRef<HTMLElement | null>(null);
 
   const viewerScale = FONT_SIZE_SCALE[fontSize];
-
-  const filteredPosts = useMemo(
-    () =>
-      activeTagFilter === null
-        ? posts
-        : posts.filter((post) =>
-            post.tags.some((tag) => tag.normalized_name === activeTagFilter)
-          ),
-    [activeTagFilter, posts]
-  );
-
-  const visiblePosts = useMemo(
-    () => sortPosts(filteredPosts, sortField, sortDirection),
-    [filteredPosts, sortDirection, sortField]
-  );
-
-  const availableTags = useMemo(() => {
-    const tagMap = new Map<
-      string,
-      {
-        tag: ArchiveTagRecord;
-        postCount: number;
-      }
-    >();
-
-    for (const post of posts) {
-      for (const tag of post.tags) {
-        const existing = tagMap.get(tag.normalized_name);
-
-        if (existing === undefined) {
-          tagMap.set(tag.normalized_name, {
-            tag,
-            postCount: 1
-          });
-          continue;
-        }
-
-        existing.postCount += 1;
-      }
-    }
-
-    return [...tagMap.values()];
-  }, [posts]);
 
   const selectedTagFilter = useMemo(
     () => availableTags.find(({ tag }) => tag.normalized_name === activeTagFilter) ?? null,
@@ -143,59 +134,68 @@ export function ViewerApp() {
     });
   }, [availableTags, tagSearchQuery, tagSortOption]);
 
-  const archiveSummary = useMemo(() => {
-    let imageCount = 0;
-    let videoCount = 0;
-    let mediaBytes = 0;
-    const usernames = new Set<string>();
-    const tagNames = new Set<string>();
-
-    for (const post of posts) {
-      usernames.add(post.x_username);
-
-      for (const tag of post.tags) {
-        tagNames.add(tag.normalized_name);
-      }
-
-      for (const media of post.media) {
-        if (media.media_type === "image") {
-          imageCount += 1;
-        } else if (media.media_type === "video") {
-          videoCount += 1;
-        }
-
-        mediaBytes += media.byte_size ?? 0;
-      }
-    }
-
-    return {
-      postCount: posts.length,
-      imageCount,
-      videoCount,
-      mediaCount: imageCount + videoCount,
-      accountCount: usernames.size,
-      tagCount: tagNames.size,
-      mediaBytes
-    };
-  }, [posts]);
-
   useEffect(() => {
     let cancelled = false;
 
-    async function loadPosts() {
-      setStatus("loading");
-      setLoadNotice(null);
-
+    async function initializeViewer() {
       try {
-        const response = await requestPosts();
+        const [storedFont, nextSessionRestoreMode, savedSession] = await Promise.all([
+          browser.storage.local.get(VIEWER_FONT_SIZE_STORAGE_KEY),
+          loadViewerSessionRestoreMode(),
+          loadViewerSession()
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        const storedFontValue = storedFont[VIEWER_FONT_SIZE_STORAGE_KEY];
+
+        if (isFontSizeOption(storedFontValue)) {
+          setFontSize(storedFontValue);
+        }
+
+        setSessionRestoreMode(nextSessionRestoreMode);
+
+        let nextSortField: PostSortField = "saved_at";
+        let nextSortDirection: SortDirection = "desc";
+        let nextTagFilter: string | null = null;
+        let initialLimit = DEFAULT_PAGE_SIZE;
+
+        if (nextSessionRestoreMode !== "off" && savedSession !== null) {
+          nextSortField = savedSession.sortField;
+          nextSortDirection = savedSession.sortDirection;
+          nextTagFilter = savedSession.activeTagFilter;
+
+          if (nextSessionRestoreMode === "filters-and-position") {
+            initialLimit = Math.max(DEFAULT_PAGE_SIZE, savedSession.loadedCount);
+            restoreScrollTopRef.current = savedSession.scrollTop;
+            setRestoreTargetPostId(savedSession.anchorPostId);
+          }
+        }
+
+        setSortField(nextSortField);
+        setSortDirection(nextSortDirection);
+        setActiveTagFilter(nextTagFilter);
+
+        await Promise.all([
+          refreshArchiveMetadata(),
+          loadArchivePage({
+            offset: 0,
+            limit: initialLimit,
+            sortField: nextSortField,
+            sortDirection: nextSortDirection,
+            tagFilter: nextTagFilter,
+            append: false
+          })
+        ]);
 
         if (!cancelled) {
-          setPosts(response.posts);
-          setStatus("ready");
+          shouldPersistSessionRef.current = true;
         }
       } catch (error) {
-        logger.error("posts.load.failed", {
-          message: "Failed to load posts.",
+        logger.error("viewer.initialize.failed", {
+          message: "Failed to initialize the viewer.",
           context: {
             error
           }
@@ -209,48 +209,7 @@ export function ViewerApp() {
       }
     }
 
-    void loadPosts();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function refreshArchive(): Promise<void> {
-    setStatus("loading");
-    setLoadNotice(null);
-
-    try {
-      const response = await requestPosts();
-      setPosts(response.posts);
-      setStatus("ready");
-    } catch (error) {
-      logger.error("posts.reload.failed", {
-        message: "Failed to reload posts.",
-        context: {
-          error
-        }
-      });
-
-      setPosts([]);
-      setStatus("ready");
-      setLoadNotice("Posts could not be loaded. Showing an empty list.");
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadViewerSettings() {
-      const stored = await browser.storage.local.get(VIEWER_FONT_SIZE_STORAGE_KEY);
-      const storedValue = stored[VIEWER_FONT_SIZE_STORAGE_KEY];
-
-      if (!cancelled && isFontSizeOption(storedValue)) {
-        setFontSize(storedValue);
-      }
-    }
-
-    void loadViewerSettings();
+    void initializeViewer();
 
     return () => {
       cancelled = true;
@@ -311,7 +270,7 @@ export function ViewerApp() {
     return () => {
       cancelled = true;
     };
-  }, [posts.length, archiveSummary.mediaBytes]);
+  }, [archiveSummary.mediaBytes, archiveSummary.postCount]);
 
   useEffect(() => {
     if (activeVideo === null) {
@@ -424,6 +383,188 @@ export function ViewerApp() {
     };
   }, [isTagFilterModalOpen]);
 
+  useEffect(() => {
+    if (restoreTargetPostId === null && restoreScrollTopRef.current === null) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const targetElement =
+        restoreTargetPostId === null ? null : findPostCardElement(restoreTargetPostId);
+
+      if (targetElement !== null) {
+        targetElement.scrollIntoView({
+          block: "start"
+        });
+      } else if (restoreScrollTopRef.current !== null) {
+        window.scrollTo({
+          top: restoreScrollTopRef.current
+        });
+      }
+
+      restoreScrollTopRef.current = null;
+      setRestoreTargetPostId(null);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [posts, restoreTargetPostId]);
+
+  useEffect(() => {
+    if (!shouldPersistSessionRef.current || screen !== "archive") {
+      return;
+    }
+
+    if (sessionRestoreMode === "off") {
+      void clearViewerSession();
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void persistCurrentViewerSession();
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [activeTagFilter, posts.length, screen, sessionRestoreMode, sortDirection, sortField]);
+
+  useEffect(() => {
+    if (
+      !shouldPersistSessionRef.current ||
+      sessionRestoreMode !== "filters-and-position" ||
+      screen !== "archive"
+    ) {
+      return undefined;
+    }
+
+    let timeoutId: number | null = null;
+
+    function handleScroll() {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+
+      timeoutId = window.setTimeout(() => {
+        void persistCurrentViewerSession();
+      }, 300);
+    }
+
+    window.addEventListener("scroll", handleScroll, {
+      passive: true
+    });
+
+    return () => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, [activeTagFilter, posts.length, screen, sessionRestoreMode, sortDirection, sortField]);
+
+  async function refreshArchiveMetadata(): Promise<void> {
+    try {
+      const [summaryResponse, tagsResponse] = await Promise.all([
+        requestArchiveSummary(),
+        requestTagSummaries()
+      ]);
+
+      setArchiveSummary(summaryResponse.summary);
+      setAvailableTags(tagsResponse.tags);
+    } catch (error) {
+      logger.error("archive.metadata.load.failed", {
+        message: "Failed to load archive metadata.",
+        context: {
+          error
+        }
+      });
+    }
+  }
+
+  async function loadArchivePage(input: {
+    offset: number;
+    limit: number;
+    sortField: PostSortField;
+    sortDirection: SortDirection;
+    tagFilter: string | null;
+    append: boolean;
+  }): Promise<void> {
+    if (input.append) {
+      setIsLoadingMore(true);
+    } else {
+      setStatus("loading");
+    }
+
+    setLoadNotice(null);
+
+    try {
+      const response = await requestPostsPage({
+        offset: input.offset,
+        limit: input.limit,
+        sortField: input.sortField,
+        sortDirection: input.sortDirection,
+        tagFilter: input.tagFilter
+      });
+
+      if (input.append) {
+        setPosts((current) => [...current, ...response.posts]);
+      } else {
+        setPosts(response.posts);
+      }
+
+      setArchiveTotalCount(response.totalCount);
+      setHasMorePosts(response.hasMore);
+      setStatus("ready");
+    } catch (error) {
+      logger.error(input.append ? "posts.load_more.failed" : "posts.load.failed", {
+        message: input.append ? "Failed to load more posts." : "Failed to load posts.",
+        context: {
+          error,
+          offset: input.offset,
+          limit: input.limit,
+          append: input.append
+        }
+      });
+
+      if (!input.append) {
+        setPosts([]);
+        setArchiveTotalCount(0);
+        setHasMorePosts(false);
+      }
+
+      setStatus("ready");
+      setLoadNotice(
+        input.append
+          ? "More posts could not be loaded."
+          : "Posts could not be loaded. Showing an empty list."
+      );
+    } finally {
+      if (input.append) {
+        setIsLoadingMore(false);
+      }
+    }
+  }
+
+  async function reloadCurrentArchive(limit = Math.max(posts.length, DEFAULT_PAGE_SIZE)) {
+    await Promise.all([
+      refreshArchiveMetadata(),
+      loadArchivePage({
+        offset: 0,
+        limit,
+        sortField,
+        sortDirection,
+        tagFilter: activeTagFilter,
+        append: false
+      })
+    ]);
+  }
+
+  async function refreshArchive(): Promise<void> {
+    await reloadCurrentArchive();
+  }
+
   async function handleDelete(xPostId: string) {
     setDeletingId(xPostId);
 
@@ -431,7 +572,7 @@ export function ViewerApp() {
       const response = await requestDeletePost(xPostId);
 
       if (response.deleted) {
-        setPosts((current) => current.filter((post) => post.x_post_id !== xPostId));
+        await reloadCurrentArchive();
       }
     } catch (error) {
       logger.error("post.delete.failed", {
@@ -457,15 +598,16 @@ export function ViewerApp() {
 
     try {
       const response = await requestAddPostTag(xPostId, draft);
+      setTagDrafts((current) => ({
+        ...current,
+        [xPostId]: ""
+      }));
       setPosts((current) =>
         current.map((post) =>
           post.x_post_id === xPostId ? { ...post, tags: response.tags } : post
         )
       );
-      setTagDrafts((current) => ({
-        ...current,
-        [xPostId]: ""
-      }));
+      await reloadCurrentArchive();
     } catch (error) {
       logger.error("post.tags.add.failed", {
         message: "Failed to add tag.",
@@ -482,9 +624,21 @@ export function ViewerApp() {
 
   async function handleRemoveTag(xPostId: string, tag: ArchiveTagRecord) {
     if (tag.source !== "manual") {
-      setActiveTagFilter((current) =>
-        current === tag.normalized_name ? null : tag.normalized_name
-      );
+      const nextTagFilter =
+        activeTagFilter === tag.normalized_name ? null : tag.normalized_name;
+
+      setActiveTagFilter(nextTagFilter);
+      window.scrollTo({
+        top: 0
+      });
+      await loadArchivePage({
+        offset: 0,
+        limit: DEFAULT_PAGE_SIZE,
+        sortField,
+        sortDirection,
+        tagFilter: nextTagFilter,
+        append: false
+      });
       return;
     }
 
@@ -497,6 +651,7 @@ export function ViewerApp() {
           post.x_post_id === xPostId ? { ...post, tags: response.tags } : post
         )
       );
+      await reloadCurrentArchive();
     } catch (error) {
       logger.error("post.tags.remove.failed", {
         message: "Failed to remove tag.",
@@ -508,6 +663,45 @@ export function ViewerApp() {
       });
     } finally {
       setTagActionPostId(null);
+    }
+  }
+
+  async function handleSessionRestoreModeChange(nextValue: ViewerSessionRestoreMode) {
+    setSessionRestoreMode(nextValue);
+
+    try {
+      await persistViewerSessionRestoreMode(nextValue);
+
+      if (nextValue === "off") {
+        await clearViewerSession();
+        return;
+      }
+
+      await persistCurrentViewerSession({
+        anchorPostId: nextValue === "filters-and-position" ? findCurrentAnchorPostId() : null,
+        scrollTop: nextValue === "filters-and-position" ? window.scrollY : 0
+      });
+    } catch (error) {
+      logger.error("viewer.session_restore_mode.persist_failed", {
+        message: "Failed to persist the session restore preference.",
+        context: {
+          nextValue,
+          error
+        }
+      });
+    }
+  }
+
+  async function handleClearSavedSession() {
+    try {
+      await clearViewerSession();
+    } catch (error) {
+      logger.error("viewer.session.clear_failed", {
+        message: "Failed to clear the saved viewer session.",
+        context: {
+          error
+        }
+      });
     }
   }
 
@@ -529,8 +723,99 @@ export function ViewerApp() {
     }
   }
 
-  function handleToggleTagFilter(normalizedName: string) {
-    setActiveTagFilter((current) => (current === normalizedName ? null : normalizedName));
+  async function handleSortFieldChange(nextValue: PostSortField) {
+    setSortField(nextValue);
+    window.scrollTo({
+      top: 0
+    });
+    await loadArchivePage({
+      offset: 0,
+      limit: DEFAULT_PAGE_SIZE,
+      sortField: nextValue,
+      sortDirection,
+      tagFilter: activeTagFilter,
+      append: false
+    });
+  }
+
+  async function handleSortDirectionToggle() {
+    const nextValue = sortDirection === "desc" ? "asc" : "desc";
+    setSortDirection(nextValue);
+    window.scrollTo({
+      top: 0
+    });
+    await loadArchivePage({
+      offset: 0,
+      limit: DEFAULT_PAGE_SIZE,
+      sortField,
+      sortDirection: nextValue,
+      tagFilter: activeTagFilter,
+      append: false
+    });
+  }
+
+  async function handleToggleTagFilter(normalizedName: string) {
+    const nextValue = activeTagFilter === normalizedName ? null : normalizedName;
+
+    setActiveTagFilter(nextValue);
+    setIsTagFilterModalOpen(false);
+    window.scrollTo({
+      top: 0
+    });
+    await loadArchivePage({
+      offset: 0,
+      limit: DEFAULT_PAGE_SIZE,
+      sortField,
+      sortDirection,
+      tagFilter: nextValue,
+      append: false
+    });
+  }
+
+  async function handleLoadMore() {
+    await loadArchivePage({
+      offset: posts.length,
+      limit: DEFAULT_PAGE_SIZE,
+      sortField,
+      sortDirection,
+      tagFilter: activeTagFilter,
+      append: true
+    });
+  }
+
+  async function persistCurrentViewerSession(overrides?: {
+    anchorPostId?: string | null;
+    scrollTop?: number;
+  }) {
+    if (sessionRestoreMode === "off") {
+      return;
+    }
+
+    try {
+      await persistViewerSession({
+        version: 1,
+        sortField,
+        sortDirection,
+        activeTagFilter,
+        loadedCount: posts.length,
+        anchorPostId:
+          sessionRestoreMode === "filters-and-position"
+            ? overrides?.anchorPostId ?? findCurrentAnchorPostId()
+            : null,
+        scrollTop:
+          sessionRestoreMode === "filters-and-position"
+            ? overrides?.scrollTop ?? window.scrollY
+            : 0,
+        savedAt: Date.now()
+      });
+    } catch (error) {
+      logger.error("viewer.session.persist_failed", {
+        message: "Failed to persist the viewer session.",
+        context: {
+          error
+        }
+      });
+    }
   }
 
   return (
@@ -565,11 +850,11 @@ export function ViewerApp() {
             </p>
           </section>
 
-          <section className="viewer-list-panel">
+          <section className="viewer-list-panel" ref={archiveSectionRef}>
             <div className="viewer-list-header">
               <div className="viewer-list-heading">
                 <h2>Archive</h2>
-                <span>{visiblePosts.length} posts</span>
+                <span>{formatArchiveCountLabel(posts.length, archiveTotalCount, hasMorePosts)}</span>
               </div>
               <div className="viewer-sort-controls" aria-label="Sort posts">
                 {availableTags.length > 0 && (
@@ -589,7 +874,7 @@ export function ViewerApp() {
                     className="viewer-sort-select"
                     value={sortField}
                     onChange={(event) => {
-                      setSortField(event.currentTarget.value as PostSortField);
+                      void handleSortFieldChange(event.currentTarget.value as PostSortField);
                     }}
                   >
                     <option value="posted_at">投稿日</option>
@@ -603,7 +888,7 @@ export function ViewerApp() {
                   className="viewer-sort-direction-button"
                   type="button"
                   onClick={() => {
-                    setSortDirection((current) => (current === "desc" ? "asc" : "desc"));
+                    void handleSortDirectionToggle();
                   }}
                 >
                   {sortDirection === "desc" ? "降順" : "昇順"}
@@ -627,7 +912,7 @@ export function ViewerApp() {
                     className="viewer-tag-filter-clear"
                     type="button"
                     onClick={() => {
-                      setActiveTagFilter(null);
+                      void handleToggleTagFilter(selectedTagFilter.tag.normalized_name);
                     }}
                   >
                     Clear
@@ -640,7 +925,7 @@ export function ViewerApp() {
             {loadNotice !== null && (
               <p className="viewer-message viewer-message-error">{loadNotice}</p>
             )}
-            {status === "ready" && visiblePosts.length === 0 && (
+            {status === "ready" && posts.length === 0 && (
               <p className="viewer-message">
                 {selectedTagFilter === null
                   ? "No saved posts."
@@ -648,10 +933,10 @@ export function ViewerApp() {
               </p>
             )}
 
-            {visiblePosts.length > 0 && (
+            {posts.length > 0 && (
               <div className="viewer-list">
-                {visiblePosts.map((post) => (
-                  <article className="post-card" key={post.x_post_id}>
+                {posts.map((post) => (
+                  <article className="post-card" data-post-id={post.x_post_id} key={post.x_post_id}>
                     <div className="post-card-header">
                       <div>
                         <p className="post-username">@{post.x_username}</p>
@@ -752,7 +1037,7 @@ export function ViewerApp() {
                                 className="tag-chip-button"
                                 type="button"
                                 onClick={() => {
-                                  handleToggleTagFilter(tag.normalized_name);
+                                  void handleToggleTagFilter(tag.normalized_name);
                                 }}
                               >
                                 {tag.display_name}
@@ -820,6 +1105,21 @@ export function ViewerApp() {
                 ))}
               </div>
             )}
+
+            {hasMorePosts && (
+              <div className="viewer-list-footer">
+                <button
+                  className="viewer-action-button"
+                  type="button"
+                  onClick={() => {
+                    void handleLoadMore();
+                  }}
+                  disabled={isLoadingMore}
+                >
+                  {isLoadingMore ? "Loading..." : "Load more"}
+                </button>
+              </div>
+            )}
           </section>
         </>
       ) : (
@@ -881,6 +1181,59 @@ export function ViewerApp() {
                       <strong>{formatFontSizePreview(value)}</strong>
                     </button>
                   ))}
+                </div>
+              </section>
+
+              <section className="viewer-settings-card">
+                <div className="viewer-settings-card-header">
+                  <h3>Archive session</h3>
+                  <p>Choose whether the viewer restores filters and your place after the tab closes.</p>
+                </div>
+                <div
+                  className="viewer-font-option-list"
+                  role="radiogroup"
+                  aria-label="Archive session restore"
+                >
+                  {(
+                    [
+                      ["off", "Off", "Always open the archive from a fresh state."],
+                      ["filters", "Filters only", "Restore sort and tag filter choices."],
+                      [
+                        "filters-and-position",
+                        "Filters + position",
+                        "Restore sort, tag filter, loaded items, and scroll position."
+                      ]
+                    ] as const
+                  ).map(([value, label, description]) => (
+                    <button
+                      key={value}
+                      className={
+                        sessionRestoreMode === value
+                          ? "viewer-font-option viewer-font-option-active"
+                          : "viewer-font-option"
+                      }
+                      type="button"
+                      role="radio"
+                      aria-checked={sessionRestoreMode === value}
+                      onClick={() => {
+                        void handleSessionRestoreModeChange(value);
+                      }}
+                    >
+                      <strong>{label}</strong>
+                      <span>{description}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="viewer-settings-action-row">
+                  <button
+                    className="viewer-secondary-button"
+                    type="button"
+                    onClick={() => {
+                      void handleClearSavedSession();
+                    }}
+                  >
+                    Clear saved session
+                  </button>
                 </div>
               </section>
 
@@ -1034,13 +1387,13 @@ export function ViewerApp() {
                   )}
                 </span>
                 <button
-                  className="viewer-tag-filter-clear"
-                  type="button"
-                  onClick={() => {
-                    setActiveTagFilter(null);
-                  }}
-                >
-                  Clear
+                    className="viewer-tag-filter-clear"
+                    type="button"
+                    onClick={() => {
+                      void handleToggleTagFilter(selectedTagFilter.tag.normalized_name);
+                    }}
+                  >
+                    Clear
                 </button>
               </div>
             )}
@@ -1365,30 +1718,65 @@ function normalizeTagSearchQuery(value: string): string {
   return value.trim().toLocaleLowerCase("ja-JP");
 }
 
-function sortPosts(
-  posts: ArchivePostRecord[],
-  sortField: PostSortField,
-  sortDirection: SortDirection
-): ArchivePostRecord[] {
-  const direction = sortDirection === "desc" ? -1 : 1;
-
-  return [...posts].sort((left, right) => {
-    const primaryDifference = compareSortableValue(left[sortField], right[sortField], direction);
-
-    if (primaryDifference !== 0) {
-      return primaryDifference;
-    }
-
-    return compareSortableValue(left.saved_at, right.saved_at, -1);
-  });
-}
-
-function compareSortableValue(left: number, right: number, direction: 1 | -1): number {
-  if (left === right) {
-    return 0;
+function formatArchiveCountLabel(
+  loadedCount: number,
+  totalCount: number,
+  hasMorePosts: boolean
+): string {
+  if (totalCount === 0) {
+    return "0 posts";
   }
 
-  return left > right ? direction : -direction;
+  if (hasMorePosts) {
+    return `${loadedCount} / ${totalCount} posts`;
+  }
+
+  return `${totalCount} posts`;
+}
+
+function findPostCardElement(xPostId: string): HTMLElement | null {
+  const elements = document.querySelectorAll<HTMLElement>("[data-post-id]");
+
+  for (const element of elements) {
+    if (element.dataset.postId === xPostId) {
+      return element;
+    }
+  }
+
+  return null;
+}
+
+function findCurrentAnchorPostId(): string | null {
+  const elements = document.querySelectorAll<HTMLElement>("[data-post-id]");
+  let bestMatch: {
+    xPostId: string;
+    distance: number;
+  } | null = null;
+
+  for (const element of elements) {
+    const xPostId = element.dataset.postId;
+
+    if (xPostId === undefined) {
+      continue;
+    }
+
+    const rect = element.getBoundingClientRect();
+
+    if (rect.bottom <= 0) {
+      continue;
+    }
+
+    const distance = Math.abs(rect.top);
+
+    if (bestMatch === null || distance < bestMatch.distance) {
+      bestMatch = {
+        xPostId,
+        distance
+      };
+    }
+  }
+
+  return bestMatch?.xPostId ?? null;
 }
 
 function moveActiveMedia(activeMedia: ActiveMedia | null, delta: number): ActiveMedia | null {

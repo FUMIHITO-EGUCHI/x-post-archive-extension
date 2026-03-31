@@ -83,6 +83,15 @@ export class ArchiveDatabase extends Dexie {
         "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, assigned_at",
       logs: "&log_id, created_at, level, [level+created_at], scope, event, request_id"
     });
+
+    this.version(7).stores({
+      posts: "&x_post_id, saved_at, posted_at, reply_count, repost_count, like_count",
+      media: "&media_id, x_post_id, [x_post_id+position], storage_status, saved_at",
+      tags: "&tag_id, &normalized_name, display_name, created_at",
+      post_tags:
+        "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, assigned_at",
+      logs: "&log_id, created_at, level, [level+created_at], scope, event, request_id"
+    });
   }
 }
 

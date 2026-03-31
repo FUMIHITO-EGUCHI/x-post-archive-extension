@@ -686,6 +686,12 @@ body {
   gap: 16px;
 }
 
+.viewer-list-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
 .post-card {
   padding: 20px;
   border: 1px solid rgba(16, 32, 51, 0.08);

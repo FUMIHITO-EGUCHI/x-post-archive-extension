@@ -2,7 +2,10 @@ import type { SavePostInput } from "../../types/archive";
 import type {
   AddPostTagMessage,
   DeletePostResponse,
+  GetArchiveSummaryResponse,
   HasPostResponse,
+  ListPostTagSummariesResponse,
+  ListPostsPageResponse,
   ListPostsResponse,
   RemovePostTagMessage,
   RuntimeMessage,
@@ -11,6 +14,7 @@ import type {
   SavePostsBatchResponse,
   UpdatePostTagsResponse
 } from "../../types/runtime";
+import type { ListPostsPageInput } from "../../types/viewer";
 
 const DEFAULT_RUNTIME_TIMEOUT_MS = 30000;
 const SAVE_RUNTIME_TIMEOUT_MS = 180000;
@@ -49,6 +53,45 @@ export async function requestPosts(): Promise<ListPostsResponse> {
 
   if (response.type !== "posts/list-result") {
     throw new Error("Unexpected runtime response for list request.");
+  }
+
+  return response;
+}
+
+export async function requestPostsPage(
+  input: ListPostsPageInput
+): Promise<ListPostsPageResponse> {
+  const response = await sendMessage({
+    type: "posts/list-page",
+    input
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "posts/list-page-result") {
+    throw new Error("Unexpected runtime response for page list request.");
+  }
+
+  return response;
+}
+
+export async function requestTagSummaries(): Promise<ListPostTagSummariesResponse> {
+  const response = await sendMessage({
+    type: "posts/tags/list"
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "posts/tags/list-result") {
+    throw new Error("Unexpected runtime response for tag list request.");
+  }
+
+  return response;
+}
+
+export async function requestArchiveSummary(): Promise<GetArchiveSummaryResponse> {
+  const response = await sendMessage({
+    type: "posts/summary"
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "posts/summary-result") {
+    throw new Error("Unexpected runtime response for archive summary request.");
   }
 
   return response;
