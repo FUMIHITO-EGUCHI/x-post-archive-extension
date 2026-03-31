@@ -48,10 +48,12 @@ import {
   deleteBlobFromOpfs,
   writeBlobToOpfs
 } from "../media-storage/opfs-media-storage";
+import { createLogger } from "../logging/logger";
 
 const PENDING_MEDIA_RESUME_BATCH_SIZE = 24;
 const activeMediaPersistenceIds = new Set<string>();
 let pendingResumePromise: Promise<void> | null = null;
+const logger = createLogger("archive-service");
 
 export async function hasSavedPost(xPostId: string): Promise<boolean> {
   return hasPost(xPostId);
@@ -73,6 +75,14 @@ export async function saveArchivePost(input: SavePostInput): Promise<{
 
   if (existing !== undefined) {
     const duplicateMediaWork = await prepareDuplicateMediaWork(input);
+
+    logger.info("post.save.duplicate_detected", {
+      context: {
+        xPostId: input.x_post_id,
+        newMediaCount: duplicateMediaWork.newRecords.length,
+        retryMediaCount: duplicateMediaWork.retryRecords.length
+      }
+    });
 
     if (autoTags.length > 0) {
       await archiveDb.transaction(
@@ -150,6 +160,14 @@ export async function saveArchivePost(input: SavePostInput): Promise<{
 
   enqueueMediaPersistence(media);
 
+  logger.info("post.save.persisted", {
+    context: {
+      xPostId: post.x_post_id,
+      mediaCount: media.length,
+      autoTagCount: autoTags.length
+    }
+  });
+
   return {
     status: "saved",
     post
@@ -221,7 +239,17 @@ export async function addManualTagToArchivePost(
     }
   );
 
-  return listArchiveTagsForPost(xPostId);
+  const tags = await listArchiveTagsForPost(xPostId);
+
+  logger.info("post.tags.manual_added", {
+    context: {
+      xPostId,
+      tagName,
+      tagCount: tags.length
+    }
+  });
+
+  return tags;
 }
 
 export async function removeManualTagFromArchivePost(
@@ -254,7 +282,17 @@ export async function removeManualTagFromArchivePost(
     }
   );
 
-  return listArchiveTagsForPost(xPostId);
+  const tags = await listArchiveTagsForPost(xPostId);
+
+  logger.info("post.tags.manual_removed", {
+    context: {
+      xPostId,
+      normalizedTagName,
+      tagCount: tags.length
+    }
+  });
+
+  return tags;
 }
 
 export async function persistVideoThumbnailPreview(
@@ -266,6 +304,13 @@ export async function persistVideoThumbnailPreview(
   await writeBlobToOpfs(previewPath, thumbnailBlob);
   await updateMediaPreview(media.media_id, {
     preview_image_opfs_path: previewPath
+  });
+
+  logger.debug("media.preview.persisted", {
+    context: {
+      xPostId: media.x_post_id,
+      mediaId: media.media_id
+    }
   });
 
   return previewPath;
@@ -284,10 +329,13 @@ export async function deleteArchivePost(xPostId: string): Promise<boolean> {
     try {
       await deleteBlobFromOpfs(item.opfs_path);
     } catch (error) {
-      console.warn("Failed to delete OPFS media file.", {
-        mediaId: item.media_id,
-        xPostId,
-        error
+      logger.warn("media.delete.opfs_failed", {
+        message: "Failed to delete OPFS media file.",
+        context: {
+          mediaId: item.media_id,
+          xPostId,
+          error
+        }
       });
     }
 
@@ -295,10 +343,13 @@ export async function deleteArchivePost(xPostId: string): Promise<boolean> {
       try {
         await deleteBlobFromOpfs(item.preview_image_opfs_path);
       } catch (error) {
-        console.warn("Failed to delete OPFS preview media file.", {
-          mediaId: item.media_id,
-          xPostId,
-          error
+        logger.warn("media.preview.delete.opfs_failed", {
+          message: "Failed to delete OPFS preview media file.",
+          context: {
+            mediaId: item.media_id,
+            xPostId,
+            error
+          }
         });
       }
     }
@@ -321,6 +372,12 @@ export async function deleteArchivePost(xPostId: string): Promise<boolean> {
     }
   );
 
+  logger.info("post.delete.persisted", {
+    context: {
+      xPostId
+    }
+  });
+
   return true;
 }
 
@@ -332,6 +389,14 @@ async function persistMedia(record: MediaRecord): Promise<void> {
   activeMediaPersistenceIds.add(record.media_id);
 
   try {
+    logger.info("media.persist.started", {
+      context: {
+        mediaId: record.media_id,
+        xPostId: record.x_post_id,
+        mediaType: record.media_type
+      }
+    });
+
     const response = await fetch(record.source_url, {
       credentials: "omit"
     });
@@ -350,12 +415,31 @@ async function persistMedia(record: MediaRecord): Promise<void> {
       storage_status: "ready",
       last_error: null
     });
+
+    logger.info("media.persist.succeeded", {
+      context: {
+        mediaId: record.media_id,
+        xPostId: record.x_post_id,
+        mediaType: record.media_type,
+        byteSize: blob.size
+      }
+    });
   } catch (error) {
     await updateMediaAfterWrite(record.media_id, {
       mime_type: null,
       byte_size: null,
       storage_status: "failed",
       last_error: error instanceof Error ? error.message : "Media persistence failed."
+    });
+
+    logger.error("media.persist.failed", {
+      message: "Media persistence failed.",
+      context: {
+        mediaId: record.media_id,
+        xPostId: record.x_post_id,
+        mediaType: record.media_type,
+        error
+      }
     });
   } finally {
     activeMediaPersistenceIds.delete(record.media_id);
@@ -367,16 +451,25 @@ function enqueueMediaPersistence(media: MediaRecord[]): void {
     return;
   }
 
+  logger.debug("media.persist.enqueued", {
+    context: {
+      count: media.length
+    }
+  });
+
   void Promise.allSettled(media.map((record) => persistMedia(record))).then((results) => {
     for (const [index, result] of results.entries()) {
       if (result.status === "fulfilled") {
         continue;
       }
 
-      console.error("Queued media persistence failed unexpectedly.", {
-        mediaId: media[index]?.media_id,
-        xPostId: media[index]?.x_post_id,
-        reason: result.reason
+      logger.error("media.persist.queue_failed", {
+        message: "Queued media persistence failed unexpectedly.",
+        context: {
+          mediaId: media[index]?.media_id,
+          xPostId: media[index]?.x_post_id,
+          reason: result.reason
+        }
       });
     }
   });
@@ -391,8 +484,15 @@ export async function resumePendingMediaPersistence(): Promise<void> {
     const pendingMedia = await listMediaByStorageStatus("pending", PENDING_MEDIA_RESUME_BATCH_SIZE);
 
     if (pendingMedia.length === 0) {
+      logger.debug("media.resume.noop");
       return;
     }
+
+    logger.info("media.resume.started", {
+      context: {
+        count: pendingMedia.length
+      }
+    });
 
     enqueueMediaPersistence(pendingMedia);
   })().finally(() => {

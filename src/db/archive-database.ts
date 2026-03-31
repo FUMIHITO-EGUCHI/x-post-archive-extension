@@ -5,6 +5,7 @@ import type {
   PostTagRecord,
   TagRecord
 } from "../types/archive";
+import type { LogRecord } from "../types/logger";
 
 const ARCHIVE_DB_NAME = "x-post-archive-posts-v1";
 
@@ -13,6 +14,7 @@ export class ArchiveDatabase extends Dexie {
   media!: Table<MediaRecord, string>;
   tags!: Table<TagRecord, string>;
   post_tags!: Table<PostTagRecord, string>;
+  logs!: Table<LogRecord, string>;
 
   constructor() {
     super(ARCHIVE_DB_NAME);
@@ -72,6 +74,15 @@ export class ArchiveDatabase extends Dexie {
             post.like_count = normalizeStoredCount(post.like_count);
           });
       });
+
+    this.version(6).stores({
+      posts: "&x_post_id, saved_at, posted_at",
+      media: "&media_id, x_post_id, [x_post_id+position], storage_status, saved_at",
+      tags: "&tag_id, &normalized_name, display_name, created_at",
+      post_tags:
+        "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, assigned_at",
+      logs: "&log_id, created_at, level, [level+created_at], scope, event, request_id"
+    });
   }
 }
 

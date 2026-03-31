@@ -8,6 +8,8 @@ import {
   requestPosts,
   requestRemovePostTag
 } from "../../runtime/client";
+import { createLogger } from "../../logging/logger";
+import { SettingsLogPanel } from "./settings-log-panel";
 
 type ViewerStatus = "idle" | "loading" | "ready";
 type ViewerScreen = "archive" | "settings";
@@ -36,6 +38,7 @@ const FONT_SIZE_SCALE: Record<FontSizeOption, number> = {
   medium: 1,
   large: 1.12
 };
+const logger = createLogger("viewer");
 
 export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
@@ -157,7 +160,12 @@ export function ViewerApp() {
           setStatus("ready");
         }
       } catch (error) {
-        console.error("Failed to load posts.", error);
+        logger.error("posts.load.failed", {
+          message: "Failed to load posts.",
+          context: {
+            error
+          }
+        });
 
         if (!cancelled) {
           setPosts([]);
@@ -224,7 +232,12 @@ export function ViewerApp() {
           });
         }
       } catch (error) {
-        console.warn("Storage estimate is unavailable.", error);
+        logger.warn("storage.estimate.unavailable", {
+          message: "Storage estimate is unavailable.",
+          context: {
+            error
+          }
+        });
 
         if (!cancelled) {
           setStorageEstimate({
@@ -266,9 +279,12 @@ export function ViewerApp() {
           });
         }
       } catch (error) {
-        console.error("Failed to load video from OPFS.", {
-          mediaId: currentVideo.media.media_id,
-          error
+        logger.error("video.load.failed", {
+          message: "Failed to load video from OPFS.",
+          context: {
+            mediaId: currentVideo.media.media_id,
+            error
+          }
         });
 
         if (!cancelled) {
@@ -344,7 +360,13 @@ export function ViewerApp() {
         setPosts((current) => current.filter((post) => post.x_post_id !== xPostId));
       }
     } catch (error) {
-      console.error("Failed to delete post.", error);
+      logger.error("post.delete.failed", {
+        message: "Failed to delete post.",
+        context: {
+          xPostId,
+          error
+        }
+      });
     } finally {
       setDeletingId(null);
     }
@@ -371,7 +393,14 @@ export function ViewerApp() {
         [xPostId]: ""
       }));
     } catch (error) {
-      console.error("Failed to add tag.", error);
+      logger.error("post.tags.add.failed", {
+        message: "Failed to add tag.",
+        context: {
+          xPostId,
+          tagName: draft,
+          error
+        }
+      });
     } finally {
       setTagActionPostId(null);
     }
@@ -395,7 +424,14 @@ export function ViewerApp() {
         )
       );
     } catch (error) {
-      console.error("Failed to remove tag.", error);
+      logger.error("post.tags.remove.failed", {
+        message: "Failed to remove tag.",
+        context: {
+          xPostId,
+          normalizedTagName: tag.normalized_name,
+          error
+        }
+      });
     } finally {
       setTagActionPostId(null);
     }
@@ -409,7 +445,13 @@ export function ViewerApp() {
         [VIEWER_FONT_SIZE_STORAGE_KEY]: nextValue
       });
     } catch (error) {
-      console.error("Failed to persist viewer font size.", error);
+      logger.error("viewer.font_size.persist_failed", {
+        message: "Failed to persist viewer font size.",
+        context: {
+          nextValue,
+          error
+        }
+      });
     }
   }
 
@@ -827,6 +869,8 @@ export function ViewerApp() {
                   </div>
                 </dl>
               </section>
+
+              <SettingsLogPanel />
             </div>
           </section>
         </>
@@ -1237,9 +1281,12 @@ function useObjectUrl(opfsPath: string | null, enabled: boolean): string | null 
 
         URL.revokeObjectURL(createdUrl);
       } catch (error) {
-        console.error("Failed to load media from OPFS.", {
-          opfsPath: targetPath,
-          error
+        logger.error("media.object_url.load_failed", {
+          message: "Failed to load media from OPFS.",
+          context: {
+            opfsPath: targetPath,
+            error
+          }
         });
       }
     }
