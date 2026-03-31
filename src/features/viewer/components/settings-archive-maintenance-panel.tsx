@@ -7,8 +7,10 @@ import {
 } from "../../archive/archive-maintenance-service";
 import { streamArchiveBackupZip } from "../../archive/archive-maintenance-service";
 import { createLogger } from "../../logging/logger";
+import type { ArchiveLanguage } from "../../settings/archive-language";
 
 type ArchiveMaintenancePanelProps = {
+  language: ArchiveLanguage;
   archiveSummary: {
     postCount: number;
     mediaCount: number;
@@ -22,6 +24,7 @@ type FeedbackTone = "neutral" | "success" | "error" | "warning";
 const logger = createLogger("viewer-settings-archive");
 
 export function SettingsArchiveMaintenancePanel({
+  language,
   archiveSummary,
   onArchiveChanged
 }: ArchiveMaintenancePanelProps) {
@@ -41,11 +44,14 @@ export function SettingsArchiveMaintenancePanel({
   const [deleteConfirmStep, setDeleteConfirmStep] = useState<0 | 1 | 2>(0);
 
   const hasArchive = archiveSummary.postCount > 0 || archiveSummary.mediaCount > 0;
+  const isJapanese = language === "ja";
   const isTransferRunning = backupRunning || restoreRunning;
   const deleteSummary = useMemo(
     () =>
-      `${formatCount(archiveSummary.postCount)} posts / ${formatCount(archiveSummary.mediaCount)} media / ${formatCount(archiveSummary.tagCount)} tags`,
-    [archiveSummary.mediaCount, archiveSummary.postCount, archiveSummary.tagCount]
+      isJapanese
+        ? `${formatCount(archiveSummary.postCount, language)} 投稿 / ${formatCount(archiveSummary.mediaCount, language)} メディア / ${formatCount(archiveSummary.tagCount, language)} タグ`
+        : `${formatCount(archiveSummary.postCount, language)} posts / ${formatCount(archiveSummary.mediaCount, language)} media / ${formatCount(archiveSummary.tagCount, language)} tags`,
+    [archiveSummary.mediaCount, archiveSummary.postCount, archiveSummary.tagCount, isJapanese, language]
   );
 
   useEffect(() => {
@@ -79,7 +85,11 @@ export function SettingsArchiveMaintenancePanel({
       });
 
       setBackupTone("success");
-      setBackupStatus(`Backup exported: ${formatBackupSummary(backup.summary)}`);
+      setBackupStatus(
+        isJapanese
+          ? `バックアップを書き出しました: ${formatBackupSummary(backup.summary, language)}`
+          : `Backup exported: ${formatBackupSummary(backup.summary, language)}`
+      );
     } catch (error) {
       logger.error("archive.backup.export.failed", {
         message: "Failed to export archive backup.",
@@ -89,7 +99,9 @@ export function SettingsArchiveMaintenancePanel({
       });
 
       setBackupTone("error");
-      setBackupStatus(getErrorMessage(error, "Backup export failed."));
+      setBackupStatus(
+        getErrorMessage(error, isJapanese ? "バックアップの書き出しに失敗しました。" : "Backup export failed.")
+      );
     } finally {
       setBackupProgress(null);
       setBackupRunning(false);
@@ -99,12 +111,14 @@ export function SettingsArchiveMaintenancePanel({
   async function handleRestore() {
     if (restoreHandle === null) {
       setRestoreTone("warning");
-      setRestoreStatus("Select a backup ZIP file first.");
+      setRestoreStatus(isJapanese ? "先にバックアップ ZIP を選択してください。" : "Select a backup ZIP file first.");
       return;
     }
 
     const confirmed = window.confirm(
-      "Restore will replace the current saved archive with the selected backup. Continue?"
+      isJapanese
+        ? "復元すると、現在の保存済みアーカイブは選択したバックアップで置き換えられます。続行しますか？"
+        : "Restore will replace the current saved archive with the selected backup. Continue?"
     );
 
     if (!confirmed) {
@@ -124,7 +138,11 @@ export function SettingsArchiveMaintenancePanel({
       await onArchiveChanged();
 
       setRestoreTone("success");
-      setRestoreStatus(`Archive restored: ${formatBackupSummary(summary)}`);
+      setRestoreStatus(
+        isJapanese
+          ? `アーカイブを復元しました: ${formatBackupSummary(summary, language)}`
+          : `Archive restored: ${formatBackupSummary(summary, language)}`
+      );
       setRestoreHandle(null);
       setRestoreFileName(null);
     } catch (error) {
@@ -137,7 +155,7 @@ export function SettingsArchiveMaintenancePanel({
       });
 
       setRestoreTone("error");
-      setRestoreStatus(getErrorMessage(error, "Restore failed."));
+      setRestoreStatus(getErrorMessage(error, isJapanese ? "復元に失敗しました。" : "Restore failed."));
     } finally {
       setRestoreProgress(null);
       setRestoreRunning(false);
@@ -166,7 +184,9 @@ export function SettingsArchiveMaintenancePanel({
       });
 
       setRestoreTone("error");
-      setRestoreStatus(getErrorMessage(error, "Backup ZIP selection failed."));
+      setRestoreStatus(
+        getErrorMessage(error, isJapanese ? "バックアップ ZIP の選択に失敗しました。" : "Backup ZIP selection failed.")
+      );
     }
   }
 
@@ -180,7 +200,9 @@ export function SettingsArchiveMaintenancePanel({
       await onArchiveChanged();
       setDeleteConfirmStep(0);
       setDeleteTone("success");
-      setDeleteStatus("Saved archive data was deleted.");
+      setDeleteStatus(
+        isJapanese ? "保存済みアーカイブデータを削除しました。" : "Saved archive data was deleted."
+      );
     } catch (error) {
       logger.error("archive.delete_all.failed", {
         message: "Failed to delete saved archive data.",
@@ -190,7 +212,7 @@ export function SettingsArchiveMaintenancePanel({
       });
 
       setDeleteTone("error");
-      setDeleteStatus(getErrorMessage(error, "Delete failed."));
+      setDeleteStatus(getErrorMessage(error, isJapanese ? "削除に失敗しました。" : "Delete failed."));
     } finally {
       setDeleteRunning(false);
     }
@@ -202,8 +224,9 @@ export function SettingsArchiveMaintenancePanel({
         <div className="viewer-settings-card-header">
           <h3>Backup archive</h3>
           <p>
-            Export saved posts, tags, and archived media files as a single ZIP backup from the
-            settings screen.
+            {isJapanese
+              ? "保存済みの投稿、タグ、アーカイブ済みメディアを settings 画面から 1 つの ZIP に書き出します。"
+              : "Export saved posts, tags, and archived media files as a single ZIP backup from the settings screen."}
           </p>
         </div>
         <div className="viewer-settings-action-row">
@@ -215,11 +238,21 @@ export function SettingsArchiveMaintenancePanel({
             }}
             disabled={backupRunning || !hasArchive}
           >
-            {backupRunning ? "Exporting..." : "Download backup ZIP"}
+            {backupRunning
+              ? isJapanese
+                ? "書き出し中..."
+                : "Exporting..."
+              : isJapanese
+                ? "バックアップ ZIP を保存"
+                : "Download backup ZIP"}
           </button>
         </div>
         {!hasArchive && (
-          <p className="viewer-message">No saved archive data is available to export yet.</p>
+          <p className="viewer-message">
+            {isJapanese
+              ? "まだ書き出せる保存済みアーカイブデータはありません。"
+              : "No saved archive data is available to export yet."}
+          </p>
         )}
         {backupRunning && backupProgress !== null && (
           <ProgressMessage progress={backupProgress} />
@@ -229,10 +262,11 @@ export function SettingsArchiveMaintenancePanel({
 
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
-          <h3>Restore archive</h3>
+          <h3>{isJapanese ? "アーカイブ復元" : "Restore archive"}</h3>
           <p>
-            Restore from a backup ZIP file. The current saved archive will be replaced instead of
-            merged.
+            {isJapanese
+              ? "バックアップ ZIP から復元します。現在の保存済みアーカイブはマージではなく置き換えになります。"
+              : "Restore from a backup ZIP file. The current saved archive will be replaced instead of merged."}
           </p>
         </div>
         <div className="viewer-settings-file-row">
@@ -244,7 +278,7 @@ export function SettingsArchiveMaintenancePanel({
               void handleSelectRestoreFile();
             }}
           >
-            Select backup ZIP
+            {isJapanese ? "バックアップ ZIP を選択" : "Select backup ZIP"}
           </button>
           <button
             className="viewer-action-button"
@@ -254,11 +288,23 @@ export function SettingsArchiveMaintenancePanel({
             }}
             disabled={restoreRunning || restoreHandle === null}
           >
-            {restoreRunning ? "Restoring..." : "Restore from backup ZIP"}
+            {restoreRunning
+              ? isJapanese
+                ? "復元中..."
+                : "Restoring..."
+              : isJapanese
+                ? "バックアップ ZIP から復元"
+                : "Restore from backup ZIP"}
           </button>
         </div>
         <p className="viewer-settings-inline-note">
-          {restoreFileName === null ? "No file selected." : `Selected: ${restoreFileName}`}
+          {restoreFileName === null
+            ? isJapanese
+              ? "ファイル未選択です。"
+              : "No file selected."
+            : isJapanese
+              ? `選択中: ${restoreFileName}`
+              : `Selected: ${restoreFileName}`}
         </p>
         {restoreRunning && restoreProgress !== null && (
           <ProgressMessage progress={restoreProgress} />
@@ -270,12 +316,16 @@ export function SettingsArchiveMaintenancePanel({
 
       <section className="viewer-settings-card viewer-settings-card-danger">
         <div className="viewer-settings-card-header">
-          <h3>Delete saved archive</h3>
+          <h3>{isJapanese ? "保存済みアーカイブ削除" : "Delete saved archive"}</h3>
           <p>
-            Permanently remove saved posts, tags, and archived media files from this extension.
+            {isJapanese
+              ? "この拡張に保存されている投稿、タグ、アーカイブ済みメディアを完全に削除します。"
+              : "Permanently remove saved posts, tags, and archived media files from this extension."}
           </p>
         </div>
-        <p className="viewer-settings-inline-note">Current archive: {deleteSummary}</p>
+        <p className="viewer-settings-inline-note">
+          {isJapanese ? "現在のアーカイブ" : "Current archive"}: {deleteSummary}
+        </p>
         {deleteConfirmStep === 0 && (
           <div className="viewer-settings-action-row">
             <button
@@ -285,12 +335,14 @@ export function SettingsArchiveMaintenancePanel({
               onClick={() => {
                 setDeleteTone("warning");
                 setDeleteStatus(
-                  "Warning 1/2: this deletes saved archive data from the current browser profile."
+                  isJapanese
+                    ? "警告 1/2: 現在のブラウザープロファイルにある保存済みアーカイブデータを削除します。"
+                    : "Warning 1/2: this deletes saved archive data from the current browser profile."
                 );
                 setDeleteConfirmStep(1);
               }}
             >
-              Start full delete
+              {isJapanese ? "削除を開始" : "Start full delete"}
             </button>
           </div>
         )}
@@ -306,12 +358,14 @@ export function SettingsArchiveMaintenancePanel({
               onClick={() => {
                 setDeleteTone("warning");
                 setDeleteStatus(
-                  "Warning 2/2: this action cannot be undone unless you restore from backup."
+                  isJapanese
+                    ? "警告 2/2: バックアップから復元しない限り、この操作は元に戻せません。"
+                    : "Warning 2/2: this action cannot be undone unless you restore from backup."
                 );
                 setDeleteConfirmStep(2);
               }}
             >
-              Continue delete
+              {isJapanese ? "削除を続行" : "Continue delete"}
             </button>
             <button
               className="viewer-secondary-button"
@@ -323,7 +377,7 @@ export function SettingsArchiveMaintenancePanel({
                 setDeleteTone("neutral");
               }}
             >
-              Cancel
+              {isJapanese ? "キャンセル" : "Cancel"}
             </button>
           </div>
         )}
@@ -337,7 +391,13 @@ export function SettingsArchiveMaintenancePanel({
                 void handleDeleteAll();
               }}
             >
-              {deleteRunning ? "Deleting..." : "Delete everything now"}
+              {deleteRunning
+                ? isJapanese
+                  ? "削除中..."
+                  : "Deleting..."
+                : isJapanese
+                  ? "今すぐすべて削除"
+                  : "Delete everything now"}
             </button>
             <button
               className="viewer-secondary-button"
@@ -349,12 +409,16 @@ export function SettingsArchiveMaintenancePanel({
                 setDeleteTone("neutral");
               }}
             >
-              Cancel
+              {isJapanese ? "キャンセル" : "Cancel"}
             </button>
           </div>
         )}
         {!hasArchive && deleteConfirmStep === 0 && (
-          <p className="viewer-message">No saved archive data is currently stored.</p>
+          <p className="viewer-message">
+            {isJapanese
+              ? "現在保存されているアーカイブデータはありません。"
+              : "No saved archive data is currently stored."}
+          </p>
         )}
       </section>
     </>
@@ -377,17 +441,17 @@ function feedbackClassName(tone: FeedbackTone): string {
   return "viewer-message";
 }
 
-function formatBackupSummary(summary: ArchiveBackupSummary): string {
+function formatBackupSummary(summary: ArchiveBackupSummary, language: ArchiveLanguage): string {
   return [
-    `${formatCount(summary.postCount)} posts`,
-    `${formatCount(summary.mediaCount)} media`,
-    `${formatCount(summary.tagCount)} tags`,
-    `${formatCount(summary.fileCount)} files`
+    `${formatCount(summary.postCount, language)} ${language === "ja" ? "投稿" : "posts"}`,
+    `${formatCount(summary.mediaCount, language)} ${language === "ja" ? "メディア" : "media"}`,
+    `${formatCount(summary.tagCount, language)} ${language === "ja" ? "タグ" : "tags"}`,
+    `${formatCount(summary.fileCount, language)} ${language === "ja" ? "ファイル" : "files"}`
   ].join(", ");
 }
 
-function formatCount(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value);
+function formatCount(value: number, language: ArchiveLanguage): string {
+  return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
 }
 
 function ProgressMessage({ progress }: { progress: ArchiveTransferProgress }) {

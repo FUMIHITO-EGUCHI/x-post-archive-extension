@@ -16,6 +16,7 @@ export type LogRecord = {
 
 export type LogListFilter = {
   level?: LogLevel | null;
+  levels?: LogLevel[] | null;
   from?: number | null;
   to?: number | null;
   limit?: number;

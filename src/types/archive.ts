@@ -2,6 +2,7 @@ export type MediaType = "image" | "video";
 
 export type MediaStorageStatus = "pending" | "ready" | "failed";
 export type TagSource = "auto" | "manual";
+export type BuiltInTagKey = "liked" | "image" | "video";
 
 export type VideoDownloadMode = "direct_mp4" | "hls";
 
@@ -41,6 +42,7 @@ export type TagRecord = {
   tag_id: string;
   normalized_name: string;
   display_name: string;
+  system_key: BuiltInTagKey | null;
   created_at: number;
 };
 
@@ -50,6 +52,7 @@ export type PostTagRecord = {
   tag_id: string;
   normalized_name: string;
   display_name: string;
+  system_key: BuiltInTagKey | null;
   source: TagSource;
   assigned_at: number;
 };
@@ -58,6 +61,7 @@ export type ArchiveTagRecord = {
   tag_id: string;
   normalized_name: string;
   display_name: string;
+  system_key: BuiltInTagKey | null;
   source: TagSource;
 };
 

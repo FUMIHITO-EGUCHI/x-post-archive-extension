@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+﻿import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArchivePostRecord, ArchiveTagRecord, MediaRecord } from "../../../types/archive";
 import type {
@@ -20,6 +20,12 @@ import {
 import { createLogger } from "../../logging/logger";
 import { SettingsArchiveMaintenancePanel } from "./settings-archive-maintenance-panel";
 import { SettingsLogPanel } from "./settings-log-panel";
+import {
+  loadArchiveLanguage,
+  localizeKnownAutoTagDisplayName,
+  persistArchiveLanguage,
+  type ArchiveLanguage
+} from "../../settings/archive-language";
 import {
   clearViewerSession,
   loadViewerSession,
@@ -59,6 +65,7 @@ const logger = createLogger("viewer");
 
 export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
+  const [language, setLanguage] = useState<ArchiveLanguage>("ja");
   const [fontSize, setFontSize] = useState<FontSizeOption>("medium");
   const [sessionRestoreMode, setSessionRestoreMode] =
     useState<ViewerSessionRestoreMode>("filters");
@@ -108,6 +115,19 @@ export function ViewerApp() {
     [activeTagFilter, availableTags]
   );
 
+  function getTagDisplayName(tag: ArchiveTagRecord): string {
+    if (tag.source !== "auto") {
+      return tag.display_name;
+    }
+
+    return localizeKnownAutoTagDisplayName(
+      language,
+      tag.system_key ?? null,
+      tag.normalized_name,
+      tag.display_name
+    );
+  }
+
   const visibleTagOptions = useMemo(() => {
     const normalizedQuery = normalizeTagSearchQuery(tagSearchQuery);
     const filtered = availableTags.filter(({ tag }) => {
@@ -115,7 +135,7 @@ export function ViewerApp() {
         return true;
       }
 
-      const displayName = tag.display_name.toLocaleLowerCase("ja-JP");
+      const displayName = getTagDisplayName(tag).toLocaleLowerCase("ja-JP");
       return (
         displayName.includes(normalizedQuery) || tag.normalized_name.includes(normalizedQuery)
       );
@@ -130,17 +150,18 @@ export function ViewerApp() {
         }
       }
 
-      return left.tag.display_name.localeCompare(right.tag.display_name, "ja-JP");
+      return getTagDisplayName(left.tag).localeCompare(getTagDisplayName(right.tag), "ja-JP");
     });
-  }, [availableTags, tagSearchQuery, tagSortOption]);
+  }, [availableTags, language, tagSearchQuery, tagSortOption]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function initializeViewer() {
       try {
-        const [storedFont, nextSessionRestoreMode, savedSession] = await Promise.all([
+        const [storedFont, nextLanguage, nextSessionRestoreMode, savedSession] = await Promise.all([
           browser.storage.local.get(VIEWER_FONT_SIZE_STORAGE_KEY),
+          loadArchiveLanguage(),
           loadViewerSessionRestoreMode(),
           loadViewerSession()
         ]);
@@ -155,6 +176,7 @@ export function ViewerApp() {
           setFontSize(storedFontValue);
         }
 
+        setLanguage(nextLanguage);
         setSessionRestoreMode(nextSessionRestoreMode);
 
         let nextSortField: PostSortField = "saved_at";
@@ -723,6 +745,22 @@ export function ViewerApp() {
     }
   }
 
+  async function handleLanguageChange(nextValue: ArchiveLanguage) {
+    setLanguage(nextValue);
+
+    try {
+      await persistArchiveLanguage(nextValue);
+    } catch (error) {
+      logger.error("viewer.language.persist_failed", {
+        message: "Failed to persist archive language.",
+        context: {
+          nextValue,
+          error
+        }
+      });
+    }
+  }
+
   async function handleSortFieldChange(nextValue: PostSortField) {
     setSortField(nextValue);
     window.scrollTo({
@@ -831,11 +869,10 @@ export function ViewerApp() {
         <>
           <section className="viewer-hero">
             <div className="viewer-eyebrow-row">
-              <p className="viewer-eyebrow">Image Archive</p>
               <button
                 className="viewer-icon-button"
                 type="button"
-                aria-label="Open settings"
+                aria-label={language === "ja" ? "設定を開く" : "Open settings"}
                 onClick={() => {
                   setScreen("settings");
                 }}
@@ -843,20 +880,20 @@ export function ViewerApp() {
                 <GearIcon />
               </button>
             </div>
-            <h1 className="viewer-title">Saved X posts</h1>
-            <p className="viewer-copy">
-              Saved posts, media, and tags are listed here in descending order of saved time, while
-              each card shows the original post time.
-            </p>
           </section>
 
           <section className="viewer-list-panel" ref={archiveSectionRef}>
             <div className="viewer-list-header">
               <div className="viewer-list-heading">
-                <h2>Archive</h2>
-                <span>{formatArchiveCountLabel(posts.length, archiveTotalCount, hasMorePosts)}</span>
+                <h2>{language === "ja" ? "一覧" : "Archive"}</h2>
+                <span>
+                  {formatArchiveCountLabel(posts.length, archiveTotalCount, hasMorePosts, language)}
+                </span>
               </div>
-              <div className="viewer-sort-controls" aria-label="Sort posts">
+              <div
+                className="viewer-sort-controls"
+                aria-label={language === "ja" ? "投稿の並び替え" : "Sort posts"}
+              >
                 {availableTags.length > 0 && (
                   <button
                     className="viewer-secondary-button"
@@ -865,11 +902,11 @@ export function ViewerApp() {
                       setIsTagFilterModalOpen(true);
                     }}
                   >
-                    Tag filter
+                    {language === "ja" ? "タグ絞り込み" : "Tag filter"}
                   </button>
                 )}
                 <label className="viewer-sort-label">
-                  <span>Sort</span>
+                  <span>{language === "ja" ? "並び順" : "Sort"}</span>
                   <select
                     className="viewer-sort-select"
                     value={sortField}
@@ -877,11 +914,11 @@ export function ViewerApp() {
                       void handleSortFieldChange(event.currentTarget.value as PostSortField);
                     }}
                   >
-                    <option value="posted_at">投稿日</option>
-                    <option value="saved_at">登録日</option>
-                    <option value="reply_count">リプライ数</option>
-                    <option value="repost_count">リポスト数</option>
-                    <option value="like_count">いいね数</option>
+                    <option value="posted_at">{language === "ja" ? "投稿日時" : "Posted at"}</option>
+                    <option value="saved_at">{language === "ja" ? "保存日時" : "Saved at"}</option>
+                    <option value="reply_count">{language === "ja" ? "返信数" : "Replies"}</option>
+                    <option value="repost_count">{language === "ja" ? "リポスト数" : "Reposts"}</option>
+                    <option value="like_count">{language === "ja" ? "いいね数" : "Likes"}</option>
                   </select>
                 </label>
                 <button
@@ -891,7 +928,13 @@ export function ViewerApp() {
                     void handleSortDirectionToggle();
                   }}
                 >
-                  {sortDirection === "desc" ? "降順" : "昇順"}
+                  {sortDirection === "desc"
+                    ? language === "ja"
+                      ? "降順"
+                      : "Desc"
+                    : language === "ja"
+                      ? "昇順"
+                      : "Asc"}
                 </button>
               </div>
             </div>
@@ -899,11 +942,12 @@ export function ViewerApp() {
             {selectedTagFilter !== null && (
               <div className="viewer-active-tag-filter">
                 <div className="viewer-active-tag-copy">
-                  <strong>Filtered by tag</strong>
+                  <strong>{language === "ja" ? "タグで絞り込み中" : "Filtered by tag"}</strong>
                   <span>
                     {formatTagFilterLabel(
-                      selectedTagFilter.tag.display_name,
-                      selectedTagFilter.postCount
+                      getTagDisplayName(selectedTagFilter.tag),
+                      selectedTagFilter.postCount,
+                      language
                     )}
                   </span>
                 </div>
@@ -915,21 +959,29 @@ export function ViewerApp() {
                       void handleToggleTagFilter(selectedTagFilter.tag.normalized_name);
                     }}
                   >
-                    Clear
+                    {language === "ja" ? "解除" : "Clear"}
                   </button>
                 </div>
               </div>
             )}
 
-            {status === "loading" && <p className="viewer-message">Loading saved posts...</p>}
+            {status === "loading" && (
+              <p className="viewer-message">
+                {language === "ja" ? "保存済み投稿を読み込み中..." : "Loading saved posts..."}
+              </p>
+            )}
             {loadNotice !== null && (
               <p className="viewer-message viewer-message-error">{loadNotice}</p>
             )}
             {status === "ready" && posts.length === 0 && (
               <p className="viewer-message">
                 {selectedTagFilter === null
-                  ? "No saved posts."
-                  : `No saved posts match ${selectedTagFilter.tag.display_name}.`}
+                  ? language === "ja"
+                    ? "保存済み投稿はありません。"
+                    : "No saved posts."
+                  : language === "ja"
+                    ? `${getTagDisplayName(selectedTagFilter.tag)} に一致する保存済み投稿はありません。`
+                    : `No saved posts match ${getTagDisplayName(selectedTagFilter.tag)}.`}
               </p>
             )}
 
@@ -945,12 +997,16 @@ export function ViewerApp() {
                         </p>
                         <div className="post-date-list">
                           <p className="post-date">
-                            <span className="post-date-label">投稿日</span>
-                            <span>{formatPostedAt(post.posted_at)}</span>
+                            <span className="post-date-label">
+                              {language === "ja" ? "投稿日時" : "Posted"}
+                            </span>
+                            <span>{formatPostedAt(post.posted_at, language)}</span>
                           </p>
                           <p className="post-date">
-                            <span className="post-date-label">登録日</span>
-                            <span>{formatSavedAt(post.saved_at)}</span>
+                            <span className="post-date-label">
+                              {language === "ja" ? "保存日時" : "Saved"}
+                            </span>
+                            <span>{formatSavedAt(post.saved_at, language)}</span>
                           </p>
                         </div>
                       </div>
@@ -962,7 +1018,13 @@ export function ViewerApp() {
                         }}
                         disabled={deletingId === post.x_post_id}
                       >
-                        {deletingId === post.x_post_id ? "Deleting..." : "Delete"}
+                        {deletingId === post.x_post_id
+                          ? language === "ja"
+                            ? "削除中..."
+                            : "Deleting..."
+                          : language === "ja"
+                            ? "削除"
+                            : "Delete"}
                       </button>
                     </div>
 
@@ -1009,18 +1071,21 @@ export function ViewerApp() {
                       </div>
                     )}
 
-                    <dl className="post-metrics" aria-label="Post engagement">
+                    <dl
+                      className="post-metrics"
+                      aria-label={language === "ja" ? "投稿の反応数" : "Post engagement"}
+                    >
                       <div className="post-metric">
-                        <dt>Replies</dt>
-                        <dd>{formatCount(post.reply_count)}</dd>
+                        <dt>{language === "ja" ? "返信" : "Replies"}</dt>
+                        <dd>{formatCount(post.reply_count, language)}</dd>
                       </div>
                       <div className="post-metric">
-                        <dt>Reposts</dt>
-                        <dd>{formatCount(post.repost_count)}</dd>
+                        <dt>{language === "ja" ? "リポスト" : "Reposts"}</dt>
+                        <dd>{formatCount(post.repost_count, language)}</dd>
                       </div>
                       <div className="post-metric">
-                        <dt>Likes</dt>
-                        <dd>{formatCount(post.like_count)}</dd>
+                        <dt>{language === "ja" ? "いいね" : "Likes"}</dt>
+                        <dd>{formatCount(post.like_count, language)}</dd>
                       </div>
                     </dl>
 
@@ -1043,13 +1108,17 @@ export function ViewerApp() {
                                   void handleToggleTagFilter(tag.normalized_name);
                                 }}
                               >
-                                {tag.display_name}
+                                {getTagDisplayName(tag)}
                               </button>
                               {tag.source === "manual" && (
                                 <button
                                   className="tag-chip-remove"
                                   type="button"
-                                  aria-label={`Remove tag ${tag.display_name}`}
+                                  aria-label={
+                                    language === "ja"
+                                      ? `タグ ${getTagDisplayName(tag)} を削除`
+                                      : `Remove tag ${getTagDisplayName(tag)}`
+                                  }
                                   onClick={() => {
                                     void handleRemoveTag(post.x_post_id, tag);
                                   }}
@@ -1068,7 +1137,7 @@ export function ViewerApp() {
                           className="tag-input"
                           type="text"
                           value={tagDrafts[post.x_post_id] ?? ""}
-                          placeholder="Add manual tag"
+                          placeholder={language === "ja" ? "手動タグを追加" : "Add manual tag"}
                           onChange={(event) => {
                             const value = event.currentTarget.value;
                             setTagDrafts((current) => ({
@@ -1091,7 +1160,13 @@ export function ViewerApp() {
                           }}
                           disabled={tagActionPostId === post.x_post_id}
                         >
-                          {tagActionPostId === post.x_post_id ? "Saving..." : "Add tag"}
+                          {tagActionPostId === post.x_post_id
+                            ? language === "ja"
+                              ? "保存中..."
+                              : "Saving..."
+                            : language === "ja"
+                              ? "タグ追加"
+                              : "Add tag"}
                         </button>
                       </div>
                     </div>
@@ -1119,7 +1194,13 @@ export function ViewerApp() {
                   }}
                   disabled={isLoadingMore}
                 >
-                  {isLoadingMore ? "Loading..." : "Load more"}
+                  {isLoadingMore
+                    ? language === "ja"
+                      ? "読み込み中..."
+                      : "Loading..."
+                    : language === "ja"
+                      ? "さらに読み込む"
+                      : "Load more"}
                 </button>
               </div>
             )}
@@ -1132,7 +1213,7 @@ export function ViewerApp() {
               <button
                 className="viewer-icon-button"
                 type="button"
-                aria-label="Back to archive"
+                aria-label={language === "ja" ? "一覧へ戻る" : "Back to archive"}
                 onClick={() => {
                   setScreen("archive");
                 }}
@@ -1140,30 +1221,68 @@ export function ViewerApp() {
                 <ArrowLeftIcon />
               </button>
             </div>
-            <p className="viewer-eyebrow">Settings</p>
-            <h1 className="viewer-title">Viewer options</h1>
-            <p className="viewer-copy">
-              Manage viewer preferences, backup and restore the archive, and remove saved data from
-              here.
-            </p>
           </section>
 
           <section className="viewer-list-panel viewer-settings-panel">
             <div className="viewer-list-header">
-              <h2>Options</h2>
+              <h2>{language === "ja" ? "設定" : "Options"}</h2>
             </div>
             <div className="viewer-settings-grid">
               <section className="viewer-settings-card">
                 <div className="viewer-settings-card-header">
-                  <h3>Font size</h3>
-                  <p>Adjust text size in the archive viewer.</p>
+                  <h3>{language === "ja" ? "表示言語" : "Language"}</h3>
+                  <p>
+                    {language === "ja"
+                      ? "設定画面と一覧画面の文言、保存時のデフォルトタグの言語を切り替えます。"
+                      : "Switch the settings and archive copy, plus the default tags assigned when posts are saved."}
+                  </p>
                 </div>
-                <div className="viewer-font-option-list" role="radiogroup" aria-label="Font size">
+                <div className="viewer-font-option-list" role="radiogroup" aria-label="Language">
                   {(
                     [
-                      ["small", "Small"],
-                      ["medium", "Medium"],
-                      ["large", "Large"]
+                      ["ja", "日本語"],
+                      ["en", "English"]
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      className={
+                        language === value
+                          ? "viewer-font-option viewer-font-option-active"
+                          : "viewer-font-option"
+                      }
+                      type="button"
+                      role="radio"
+                      aria-checked={language === value}
+                      onClick={() => {
+                        void handleLanguageChange(value);
+                      }}
+                    >
+                      <strong>{label}</strong>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="viewer-settings-card">
+                <div className="viewer-settings-card-header">
+                  <h3>{language === "ja" ? "文字サイズ" : "Font size"}</h3>
+                  <p>
+                    {language === "ja"
+                      ? "アーカイブ viewer の文字サイズを調整します。"
+                      : "Adjust text size in the archive viewer."}
+                  </p>
+                </div>
+                <div
+                  className="viewer-font-option-list"
+                  role="radiogroup"
+                  aria-label={language === "ja" ? "文字サイズ" : "Font size"}
+                >
+                  {(
+                    [
+                      ["small", language === "ja" ? "小" : "Small"],
+                      ["medium", language === "ja" ? "中" : "Medium"],
+                      ["large", language === "ja" ? "大" : "Large"]
                     ] as const
                   ).map(([value, label]) => (
                     <button
@@ -1189,22 +1308,40 @@ export function ViewerApp() {
 
               <section className="viewer-settings-card">
                 <div className="viewer-settings-card-header">
-                  <h3>Archive session</h3>
-                  <p>Choose whether the viewer restores filters and your place after the tab closes.</p>
+                  <h3>{language === "ja" ? "アーカイブの復元状態" : "Archive session"}</h3>
+                  <p>
+                    {language === "ja"
+                      ? "タブを閉じたあとにフィルタや表示位置を復元するかを選びます。"
+                      : "Choose whether the viewer restores filters and your place after the tab closes."}
+                  </p>
                 </div>
                 <div
                   className="viewer-font-option-list"
                   role="radiogroup"
-                  aria-label="Archive session restore"
+                  aria-label={language === "ja" ? "アーカイブの復元状態" : "Archive session restore"}
                 >
                   {(
                     [
-                      ["off", "Off", "Always open the archive from a fresh state."],
-                      ["filters", "Filters only", "Restore sort and tag filter choices."],
+                      [
+                        "off",
+                        language === "ja" ? "オフ" : "Off",
+                        language === "ja"
+                          ? "毎回まっさらな状態で一覧を開きます。"
+                          : "Always open the archive from a fresh state."
+                      ],
+                      [
+                        "filters",
+                        language === "ja" ? "フィルタのみ" : "Filters only",
+                        language === "ja"
+                          ? "並び順とタグフィルタを復元します。"
+                          : "Restore sort and tag filter choices."
+                      ],
                       [
                         "filters-and-position",
-                        "Filters + position",
-                        "Restore sort, tag filter, loaded items, and scroll position."
+                        language === "ja" ? "フィルタ + 位置" : "Filters + position",
+                        language === "ja"
+                          ? "並び順、タグフィルタ、読み込み済み件数、スクロール位置を復元します。"
+                          : "Restore sort, tag filter, loaded items, and scroll position."
                       ]
                     ] as const
                   ).map(([value, label, description]) => (
@@ -1231,40 +1368,46 @@ export function ViewerApp() {
                   <button
                     className="viewer-secondary-button"
                     type="button"
-                    onClick={() => {
+                  onClick={() => {
                       void handleClearSavedSession();
                     }}
                   >
-                    Clear saved session
+                    {language === "ja" ? "保存済みセッションを消去" : "Clear saved session"}
                   </button>
                 </div>
               </section>
 
               <section className="viewer-settings-card">
                 <div className="viewer-settings-card-header">
-                  <h3>Storage usage</h3>
-                  <p>Estimated browser-managed storage for this extension.</p>
+                  <h3>{language === "ja" ? "ストレージ使用量" : "Storage usage"}</h3>
+                  <p>
+                    {language === "ja"
+                      ? "この拡張で使っているブラウザ管理ストレージの推定値です。"
+                      : "Estimated browser-managed storage for this extension."}
+                  </p>
                 </div>
                 {storageEstimate.status === "unsupported" ? (
                   <p className="viewer-message">
-                    Storage estimate is not available in this environment.
+                    {language === "ja"
+                      ? "この環境ではストレージ推定値を取得できません。"
+                      : "Storage estimate is not available in this environment."}
                   </p>
                 ) : (
                   <dl className="viewer-settings-metric-list">
                     <div className="viewer-settings-metric">
-                      <dt>Used</dt>
+                      <dt>{language === "ja" ? "使用中" : "Used"}</dt>
                       <dd>{formatBytes(storageEstimate.usage)}</dd>
                     </div>
                     <div className="viewer-settings-metric">
-                      <dt>Available</dt>
+                      <dt>{language === "ja" ? "空き" : "Available"}</dt>
                       <dd>{formatBytes(storageEstimate.available)}</dd>
                     </div>
                     <div className="viewer-settings-metric">
-                      <dt>Estimated quota</dt>
+                      <dt>{language === "ja" ? "推定上限" : "Estimated quota"}</dt>
                       <dd>{formatBytes(storageEstimate.quota)}</dd>
                     </div>
                     <div className="viewer-settings-metric">
-                      <dt>Saved media total</dt>
+                      <dt>{language === "ja" ? "保存済みメディア合計" : "Saved media total"}</dt>
                       <dd>{formatBytes(archiveSummary.mediaBytes)}</dd>
                     </div>
                   </dl>
@@ -1273,38 +1416,43 @@ export function ViewerApp() {
 
               <section className="viewer-settings-card">
                 <div className="viewer-settings-card-header">
-                  <h3>Archive summary</h3>
-                  <p>Current counts for saved content in this archive.</p>
+                  <h3>{language === "ja" ? "アーカイブ概要" : "Archive summary"}</h3>
+                  <p>
+                    {language === "ja"
+                      ? "現在このアーカイブに保存されている内容の件数です。"
+                      : "Current counts for saved content in this archive."}
+                  </p>
                 </div>
                 <dl className="viewer-settings-metric-list">
                   <div className="viewer-settings-metric">
-                    <dt>Posts</dt>
-                    <dd>{formatCount(archiveSummary.postCount)}</dd>
+                    <dt>{language === "ja" ? "投稿" : "Posts"}</dt>
+                    <dd>{formatCount(archiveSummary.postCount, language)}</dd>
                   </div>
                   <div className="viewer-settings-metric">
-                    <dt>Media</dt>
-                    <dd>{formatCount(archiveSummary.mediaCount)}</dd>
+                    <dt>{language === "ja" ? "メディア" : "Media"}</dt>
+                    <dd>{formatCount(archiveSummary.mediaCount, language)}</dd>
                   </div>
                   <div className="viewer-settings-metric">
-                    <dt>Images</dt>
-                    <dd>{formatCount(archiveSummary.imageCount)}</dd>
+                    <dt>{language === "ja" ? "画像" : "Images"}</dt>
+                    <dd>{formatCount(archiveSummary.imageCount, language)}</dd>
                   </div>
                   <div className="viewer-settings-metric">
-                    <dt>Videos</dt>
-                    <dd>{formatCount(archiveSummary.videoCount)}</dd>
+                    <dt>{language === "ja" ? "動画" : "Videos"}</dt>
+                    <dd>{formatCount(archiveSummary.videoCount, language)}</dd>
                   </div>
                   <div className="viewer-settings-metric">
-                    <dt>Accounts</dt>
-                    <dd>{formatCount(archiveSummary.accountCount)}</dd>
+                    <dt>{language === "ja" ? "アカウント" : "Accounts"}</dt>
+                    <dd>{formatCount(archiveSummary.accountCount, language)}</dd>
                   </div>
                   <div className="viewer-settings-metric">
-                    <dt>Tags</dt>
-                    <dd>{formatCount(archiveSummary.tagCount)}</dd>
+                    <dt>{language === "ja" ? "タグ" : "Tags"}</dt>
+                    <dd>{formatCount(archiveSummary.tagCount, language)}</dd>
                   </div>
                 </dl>
               </section>
 
               <SettingsArchiveMaintenancePanel
+                language={language}
                 archiveSummary={{
                   postCount: archiveSummary.postCount,
                   mediaCount: archiveSummary.mediaCount,
@@ -1313,7 +1461,7 @@ export function ViewerApp() {
                 onArchiveChanged={refreshArchive}
               />
 
-              <SettingsLogPanel />
+              <SettingsLogPanel language={language} />
             </div>
           </section>
         </>
@@ -1331,15 +1479,19 @@ export function ViewerApp() {
             className="viewer-modal viewer-tag-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="Tag filter"
+            aria-label={language === "ja" ? "タグ絞り込み" : "Tag filter"}
             onClick={(event) => {
               event.stopPropagation();
             }}
           >
             <div className="viewer-modal-header">
               <div className="viewer-modal-copy">
-                <h2>Filter by tag</h2>
-                <p>Search tags in real time and choose one tag to narrow the archive list.</p>
+                <h2>{language === "ja" ? "タグで絞り込む" : "Filter by tag"}</h2>
+                <p>
+                  {language === "ja"
+                    ? "タグをリアルタイム検索し、1つ選んで一覧を絞り込みます。"
+                    : "Search tags in real time and choose one tag to narrow the archive list."}
+                </p>
               </div>
               <button
                 className="viewer-secondary-button"
@@ -1348,25 +1500,25 @@ export function ViewerApp() {
                   setIsTagFilterModalOpen(false);
                 }}
               >
-                Close
+                {language === "ja" ? "閉じる" : "Close"}
               </button>
             </div>
 
             <div className="viewer-tag-modal-controls">
               <label className="viewer-sort-label">
-                <span>Search</span>
+                <span>{language === "ja" ? "検索" : "Search"}</span>
                 <input
                   className="tag-input"
                   type="search"
                   value={tagSearchQuery}
-                  placeholder="Search tags"
+                  placeholder={language === "ja" ? "タグを検索" : "Search tags"}
                   onChange={(event) => {
                     setTagSearchQuery(event.currentTarget.value);
                   }}
                 />
               </label>
               <label className="viewer-sort-label">
-                <span>Order</span>
+                <span>{language === "ja" ? "並び順" : "Order"}</span>
                 <select
                   className="viewer-sort-select"
                   value={tagSortOption}
@@ -1374,8 +1526,8 @@ export function ViewerApp() {
                     setTagSortOption(event.currentTarget.value as TagSortOption);
                   }}
                 >
-                  <option value="count">Most used</option>
-                  <option value="name">A to Z</option>
+                  <option value="count">{language === "ja" ? "使用数順" : "Most used"}</option>
+                  <option value="name">{language === "ja" ? "名前順" : "A to Z"}</option>
                 </select>
               </label>
             </div>
@@ -1383,10 +1535,11 @@ export function ViewerApp() {
             {selectedTagFilter !== null && (
               <div className="viewer-tag-modal-summary">
                 <span>
-                  Active:{" "}
+                  {language === "ja" ? "適用中" : "Active"}:{" "}
                   {formatTagFilterLabel(
-                    selectedTagFilter.tag.display_name,
-                    selectedTagFilter.postCount
+                    getTagDisplayName(selectedTagFilter.tag),
+                    selectedTagFilter.postCount,
+                    language
                   )}
                 </span>
                 <button
@@ -1396,13 +1549,17 @@ export function ViewerApp() {
                       void handleToggleTagFilter(selectedTagFilter.tag.normalized_name);
                     }}
                   >
-                    Clear
+                    {language === "ja" ? "解除" : "Clear"}
                 </button>
               </div>
             )}
 
             {visibleTagOptions.length === 0 ? (
-              <p className="viewer-message">No tags match the current search.</p>
+              <p className="viewer-message">
+                {language === "ja"
+                  ? "現在の検索条件に一致するタグはありません。"
+                  : "No tags match the current search."}
+              </p>
             ) : (
               <div className="viewer-tag-option-list">
                 {visibleTagOptions.map(({ tag, postCount }) => (
@@ -1419,8 +1576,10 @@ export function ViewerApp() {
                       setIsTagFilterModalOpen(false);
                     }}
                   >
-                    <strong>{tag.display_name}</strong>
-                    <span>{formatCount(postCount)} posts</span>
+                    <strong>{getTagDisplayName(tag)}</strong>
+                    <span>
+                      {formatCount(postCount, language)} {language === "ja" ? "件" : "posts"}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1578,8 +1737,8 @@ function formatBytes(value: number | null): string {
   return `${currentValue.toFixed(digits)} ${units[unitIndex]}`;
 }
 
-function formatCount(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value);
+function formatCount(value: number, language: ArchiveLanguage = "en"): string {
+  return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
 }
 
 function GearIcon() {
@@ -1699,22 +1858,28 @@ function MediaCard({
   );
 }
 
-function formatPostedAt(postedAt: number): string {
-  return new Intl.DateTimeFormat("ja-JP", {
+function formatPostedAt(postedAt: number, language: ArchiveLanguage): string {
+  return new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "en-US", {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(postedAt);
 }
 
-function formatSavedAt(savedAt: number): string {
-  return new Intl.DateTimeFormat("ja-JP", {
+function formatSavedAt(savedAt: number, language: ArchiveLanguage): string {
+  return new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "en-US", {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(savedAt);
 }
 
-function formatTagFilterLabel(tagName: string, postCount: number): string {
-  return `${tagName}(${postCount})`;
+function formatTagFilterLabel(
+  tagName: string,
+  postCount: number,
+  language: ArchiveLanguage
+): string {
+  return language === "ja"
+    ? `${tagName} (${formatCount(postCount, language)}件)`
+    : `${tagName} (${formatCount(postCount, language)})`;
 }
 
 function normalizeTagSearchQuery(value: string): string {
@@ -1724,17 +1889,22 @@ function normalizeTagSearchQuery(value: string): string {
 function formatArchiveCountLabel(
   loadedCount: number,
   totalCount: number,
-  hasMorePosts: boolean
+  hasMorePosts: boolean,
+  language: ArchiveLanguage
 ): string {
   if (totalCount === 0) {
-    return "0 posts";
+    return language === "ja" ? "0件" : "0 posts";
   }
 
   if (hasMorePosts) {
-    return `${loadedCount} / ${totalCount} posts`;
+    return language === "ja"
+      ? `${formatCount(loadedCount, language)} / ${formatCount(totalCount, language)}件`
+      : `${formatCount(loadedCount, language)} / ${formatCount(totalCount, language)} posts`;
   }
 
-  return `${totalCount} posts`;
+  return language === "ja"
+    ? `${formatCount(totalCount, language)}件`
+    : `${formatCount(totalCount, language)} posts`;
 }
 
 function findPostCardElement(xPostId: string): HTMLElement | null {
