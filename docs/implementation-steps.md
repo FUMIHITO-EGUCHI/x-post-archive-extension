@@ -98,7 +98,10 @@
 2. Generate auto tags from hashtags when a post snapshot is saved.
 3. Add runtime messages for manual tag add/remove.
 4. Show tags in the viewer and support filter by tag.
-5. Verify duplicate prevention, delete cleanup, `npm run typecheck`, and `npm run build`.
+5. Replace the always-visible tag panel with a tag filter modal triggered from the archive header.
+6. Add realtime tag search inside the modal and sorting by usage count or tag name.
+7. Keep the active archive filter to a single selected tag and show the active filter compactly above the list.
+8. Verify duplicate prevention, delete cleanup, `npm run typecheck`, and `npm run build`.
 
 ## Likes Import Steps
 
