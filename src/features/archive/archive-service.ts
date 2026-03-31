@@ -136,6 +136,7 @@ export async function saveArchivePost(input: SavePostInput): Promise<{
   const savedAt = Date.now();
   const post: PostRecord = {
     x_post_id: input.x_post_id,
+    display_name: input.display_name.trim(),
     x_username: input.x_username.trim(),
     post_text: input.post_text.trim(),
     post_url: input.post_url.trim(),
@@ -950,6 +951,7 @@ function createPostTagInput(
 
 function validateSavePostInput(input: SavePostInput): void {
   requireNonEmptyString(input.x_post_id, "x_post_id");
+  requireNonEmptyString(input.display_name, "display_name");
   requireNonEmptyString(input.x_username, "x_username");
   requireNonEmptyString(input.post_url, "post_url");
   requireFiniteTimestamp(input.posted_at, "posted_at");

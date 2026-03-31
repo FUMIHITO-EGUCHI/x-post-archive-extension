@@ -401,6 +401,7 @@ function parsePostRecord(value: unknown): PostRecord {
 
   return {
     x_post_id: requireString(value.x_post_id, "post.x_post_id"),
+    display_name: requireString(value.display_name, "post.display_name"),
     x_username: requireString(value.x_username, "post.x_username"),
     post_text: requireString(value.post_text, "post.post_text"),
     post_url: requireString(value.post_url, "post.post_url"),

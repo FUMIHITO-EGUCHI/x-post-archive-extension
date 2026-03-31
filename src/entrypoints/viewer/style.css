@@ -710,9 +710,19 @@ body {
 }
 
 .post-username {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
   margin: 0;
   font-size: calc(18px * var(--viewer-font-scale));
   font-weight: 700;
+}
+
+.post-handle {
+  font-size: calc(14px * var(--viewer-font-scale));
+  font-weight: 600;
+  color: #5e7389;
 }
 
 .post-date {
