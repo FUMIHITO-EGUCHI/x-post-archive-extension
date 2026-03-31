@@ -91,6 +91,7 @@ export type SavePostInput = {
   like_count: number;
   media: SaveImageInput[];
   video_candidates?: SaveVideoCandidateInput[];
+  auto_tags?: string[];
 };
 
 export type ArchivePostRecord = PostRecord & {
