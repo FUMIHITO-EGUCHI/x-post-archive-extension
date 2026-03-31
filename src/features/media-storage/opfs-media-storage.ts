@@ -55,6 +55,22 @@ export async function deleteBlobFromOpfs(opfsPath: string): Promise<void> {
   await deleteDirectoryIfEmpty(parentSegments);
 }
 
+export async function clearMediaRootFromOpfs(): Promise<void> {
+  const rootDirectory = await navigator.storage.getDirectory();
+
+  try {
+    await rootDirectory.removeEntry(MEDIA_ROOT_SEGMENTS[0], {
+      recursive: true
+    });
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function getFileHandle(
   opfsPath: string,
   create: boolean
