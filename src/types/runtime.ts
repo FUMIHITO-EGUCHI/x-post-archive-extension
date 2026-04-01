@@ -4,6 +4,7 @@ import type {
   PostRecord,
   SavePostInput
 } from "./archive";
+import type { LogLevel } from "./logger";
 import type {
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
@@ -13,11 +14,13 @@ import type {
 export type SavePostMessage = {
   type: "posts/save";
   post: SavePostInput;
+  traceId?: string;
 };
 
 export type SavePostsBatchMessage = {
   type: "posts/save-batch";
   posts: SavePostInput[];
+  traceId?: string;
 };
 
 export type HasPostMessage = {
@@ -59,6 +62,19 @@ export type RemovePostTagMessage = {
   normalizedTagName: string;
 };
 
+export type ClearLogsMessage = {
+  type: "logs/clear";
+};
+
+export type DebugLogMessage = {
+  type: "debug/log";
+  level: LogLevel;
+  event: string;
+  message?: string;
+  context?: Record<string, unknown>;
+  traceId?: string;
+};
+
 export type RuntimeMessage =
   | SavePostMessage
   | SavePostsBatchMessage
@@ -69,7 +85,9 @@ export type RuntimeMessage =
   | GetArchiveSummaryMessage
   | DeletePostMessage
   | AddPostTagMessage
-  | RemovePostTagMessage;
+  | RemovePostTagMessage
+  | ClearLogsMessage
+  | DebugLogMessage;
 
 export type SavePostResponse = {
   type: "posts/save-result";
@@ -123,6 +141,11 @@ export type UpdatePostTagsResponse = {
   tags: ArchiveTagRecord[];
 };
 
+export type ClearLogsResponse = {
+  type: "logs/clear-result";
+  deleted: boolean;
+};
+
 export type RuntimeErrorResponse = {
   type: "runtime/error";
   message: string;
@@ -138,4 +161,5 @@ export type RuntimeResponse =
   | GetArchiveSummaryResponse
   | DeletePostResponse
   | UpdatePostTagsResponse
+  | ClearLogsResponse
   | RuntimeErrorResponse;
