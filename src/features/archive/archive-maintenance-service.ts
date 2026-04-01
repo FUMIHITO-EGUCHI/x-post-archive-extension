@@ -295,6 +295,27 @@ export async function clearArchiveData(): Promise<void> {
   );
 }
 
+export async function resetExtensionState(): Promise<void> {
+  await clearMediaRootFromOpfs();
+  await archiveDb.logs.clear();
+
+  await archiveDb.transaction(
+    "rw",
+    archiveDb.posts,
+    archiveDb.media,
+    archiveDb.tags,
+    archiveDb.post_tags,
+    async () => {
+      await archiveDb.post_tags.clear();
+      await archiveDb.tags.clear();
+      await archiveDb.media.clear();
+      await archiveDb.posts.clear();
+    }
+  );
+
+  await browser.storage.local.clear();
+}
+
 export function summarizeBackup(backup: ArchiveBackupManifest): ArchiveBackupSummary {
   return {
     postCount: backup.data.posts.length,

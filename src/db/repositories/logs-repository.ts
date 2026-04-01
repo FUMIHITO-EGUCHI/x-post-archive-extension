@@ -50,6 +50,10 @@ export async function pruneLogRecords(maxCount: number): Promise<void> {
   await archiveDb.logs.bulkDelete(removableKeys as string[]);
 }
 
+export async function clearLogRecords(): Promise<void> {
+  await archiveDb.logs.clear();
+}
+
 function normalizeLowerBound(value: number | null | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }

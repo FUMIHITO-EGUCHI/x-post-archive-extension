@@ -10,9 +10,12 @@ import {
   resumePendingMediaPersistence,
   saveArchivePost
 } from "../archive/archive-service";
+import { clearLogRecords } from "../../db/repositories/logs-repository";
 import type {
+  ClearLogsResponse,
   DeletePostMessage,
   DeletePostResponse,
+  DebugLogMessage,
   GetArchiveSummaryResponse,
   HasPostResponse,
   ListPostTagSummariesResponse,
@@ -50,7 +53,10 @@ export async function handleRuntimeMessage(
 
   switch (message.type) {
     case "posts/save": {
-      const result = await saveArchivePost(message.post);
+      const result = await saveArchivePost(
+        message.post,
+        message.traceId === undefined ? undefined : { traceId: message.traceId }
+      );
       logger.info(
         result.status === "saved" ? "post.save.succeeded" : "post.save.duplicate",
         {
@@ -59,7 +65,8 @@ export async function handleRuntimeMessage(
             type: message.type,
             xPostId: message.post.x_post_id,
             mediaCount: message.post.media.length,
-            videoCandidateCount: message.post.video_candidates?.length ?? 0
+            videoCandidateCount: message.post.video_candidates?.length ?? 0,
+            traceId: message.traceId ?? null
           }
         }
       );
@@ -84,7 +91,10 @@ export async function handleRuntimeMessage(
 
       for (const post of message.posts) {
         try {
-          const result = await saveArchivePost(post);
+          const result = await saveArchivePost(
+            post,
+            message.traceId === undefined ? undefined : { traceId: message.traceId }
+          );
 
           if (result.status === "saved") {
             saved += 1;
@@ -103,7 +113,8 @@ export async function handleRuntimeMessage(
           saved,
           duplicates,
           failed,
-          requestedCount: message.posts.length
+          requestedCount: message.posts.length,
+          traceId: message.traceId ?? null
         }
       });
 
@@ -262,6 +273,20 @@ export async function handleRuntimeMessage(
       };
       return response;
     }
+
+    case "logs/clear": {
+      await clearLogRecords();
+      const response: ClearLogsResponse = {
+        type: "logs/clear-result",
+        deleted: true
+      };
+      return response;
+    }
+
+    case "debug/log": {
+      writeDebugLog(message, requestId);
+      return undefined;
+    }
   }
 }
 
@@ -281,8 +306,42 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/summary" ||
     candidate.type === "posts/delete" ||
     candidate.type === "posts/tags/add" ||
-    candidate.type === "posts/tags/remove"
+    candidate.type === "posts/tags/remove" ||
+    candidate.type === "logs/clear" ||
+    candidate.type === "debug/log"
   );
+}
+
+function writeDebugLog(message: DebugLogMessage, requestId: string): void {
+  const logOptions = {
+    requestId,
+    ...(message.message === undefined ? {} : { message: message.message }),
+    context: {
+      ...(message.context ?? {}),
+      traceId: message.traceId ?? null
+    }
+  };
+
+  switch (message.level) {
+    case "debug":
+      logger.debug(message.event, logOptions);
+      return;
+    case "info":
+      logger.info(message.event, logOptions);
+      return;
+    case "warn":
+      logger.warn(message.event, logOptions);
+      return;
+    case "error":
+      logger.error(message.event, logOptions);
+      return;
+    default:
+      assertNever(message.level);
+  }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled log level: ${String(value)}`);
 }
 
 export function createRuntimeErrorResponse(error: unknown): RuntimeErrorResponse {
