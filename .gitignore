@@ -6,4 +6,5 @@ coverage/
 *.log
 samples/
 scripts/results/
+.claude/
 
