@@ -47,6 +47,50 @@ export function extractPostIdFromArticle(article: HTMLElement): string | null {
   return permalink?.xPostId ?? null;
 }
 
+export function inspectArticleMediaSignals(article: HTMLElement): {
+  imageHintCount: number;
+  videoHintCount: number;
+} {
+  const imageUrls = new Set<string>();
+  const videoPosterUrls = new Set<string>();
+  const photoAnchors = article.querySelectorAll<HTMLAnchorElement>('a[href*="/photo/"]');
+  const tweetPhotoContainers = article.querySelectorAll<HTMLElement>('[data-testid="tweetPhoto"]');
+  const playButtons = article.querySelectorAll('[data-testid="playButton"]');
+
+  for (const image of article.querySelectorAll<HTMLImageElement>("img[src]")) {
+    const normalizedImageUrl = normalizeImageUrl(image.currentSrc || image.src);
+
+    if (normalizedImageUrl !== null) {
+      imageUrls.add(normalizedImageUrl);
+      continue;
+    }
+
+    const normalizedVideoPosterUrl = normalizeVideoPosterUrl(image.currentSrc || image.src);
+
+    if (normalizedVideoPosterUrl !== null) {
+      videoPosterUrls.add(normalizedVideoPosterUrl);
+    }
+  }
+
+  for (const video of article.querySelectorAll<HTMLVideoElement>("video")) {
+    const normalizedPosterUrl = normalizeVideoPosterUrl(video.poster);
+
+    if (normalizedPosterUrl !== null) {
+      videoPosterUrls.add(normalizedPosterUrl);
+    }
+  }
+
+  const imageTweetPhotoCount = Math.max(
+    0,
+    tweetPhotoContainers.length - videoPosterUrls.size - playButtons.length
+  );
+
+  return {
+    imageHintCount: Math.max(imageUrls.size, photoAnchors.length, imageTweetPhotoCount),
+    videoHintCount: Math.max(videoPosterUrls.size, playButtons.length)
+  };
+}
+
 function extractPostText(article: HTMLElement): string {
   const tweetText = article.querySelector<HTMLElement>('[data-testid="tweetText"]');
 
@@ -90,7 +134,11 @@ function extractDisplayName(article: HTMLElement, fallbackUsername: string): str
   const candidates = userNameContainer.querySelectorAll<HTMLElement>("span");
 
   for (const candidate of candidates) {
-    const text = normalizeText(candidate.textContent);
+    // Use innerText / DOM walk so Twemoji <img alt="😀"> in display names are preserved.
+    const rawText =
+      (candidate.innerText !== "" ? candidate.innerText : null) ??
+      extractTextWithEmoji(candidate);
+    const text = normalizeText(rawText);
 
     if (
       text === null ||
@@ -108,8 +156,48 @@ function extractDisplayName(article: HTMLElement, fallbackUsername: string): str
   return fallbackUsername;
 }
 
+/**
+ * Extract text from a post element, preserving emoji from Twemoji <img alt="..."> elements.
+ *
+ * X renders emoji as <img alt="😀" ...> (Twemoji). `element.textContent` skips <img> entirely,
+ * so emoji disappear. `element.innerText` includes <img alt> on most browsers, but can return ""
+ * for off-screen/hidden elements. This function walks the DOM explicitly to handle both cases.
+ */
+function extractTextWithEmoji(element: Node): string {
+  if (element.nodeType === Node.TEXT_NODE) {
+    return element.textContent ?? "";
+  }
+
+  if (element.nodeType !== Node.ELEMENT_NODE) {
+    return "";
+  }
+
+  const el = element as HTMLElement;
+  const tag = el.tagName.toUpperCase();
+
+  // Twemoji and other inline images: use alt text as the character
+  if (tag === "IMG") {
+    return (el as HTMLImageElement).alt ?? "";
+  }
+
+  // Block-level elements introduce a newline boundary
+  const isBlock = /^(DIV|P|BR|LI|TR|BLOCKQUOTE)$/.test(tag);
+  let result = "";
+
+  for (const child of el.childNodes) {
+    result += extractTextWithEmoji(child);
+  }
+
+  return isBlock ? "\n" + result : result;
+}
+
 function normalizePostText(element: HTMLElement): string | null {
-  const rawText = element.innerText || element.textContent || "";
+  // Prefer innerText (layout-aware, includes <img alt>) when available and non-empty.
+  // Fall back to our own DOM walk that handles Twemoji <img alt> explicitly.
+  const rawText =
+    (element.innerText !== "" ? element.innerText : null) ??
+    extractTextWithEmoji(element);
+
   const normalized = rawText
     .replace(/\r\n?/g, "\n")
     .replace(/[^\S\n]+/g, " ")
@@ -119,18 +207,11 @@ function normalizePostText(element: HTMLElement): string | null {
 }
 
 function extractPostImages(article: HTMLElement): SaveImageInput[] {
-  const photoAnchors = article.querySelectorAll<HTMLAnchorElement>('a[href*="/photo/"]');
   const images: SaveImageInput[] = [];
   const seenUrls = new Set<string>();
 
-  for (const anchor of photoAnchors) {
-    const img = anchor.querySelector<HTMLImageElement>("img[src]");
-
-    if (img === null) {
-      continue;
-    }
-
-    const normalizedUrl = normalizeImageUrl(img.currentSrc || img.src);
+  for (const candidate of collectMediaImageCandidates(article)) {
+    const normalizedUrl = normalizeImageUrl(candidate.img.currentSrc || candidate.img.src);
 
     if (normalizedUrl === null || seenUrls.has(normalizedUrl)) {
       continue;
@@ -139,10 +220,13 @@ function extractPostImages(article: HTMLElement): SaveImageInput[] {
     seenUrls.add(normalizedUrl);
     images.push({
       source_url: normalizedUrl,
-      position: extractPhotoPosition(anchor, images.length),
-      alt_text: normalizeAltText(img.alt),
-      width: normalizeDimension(img.naturalWidth || img.width),
-      height: normalizeDimension(img.naturalHeight || img.height)
+      position:
+        candidate.anchor === null
+          ? images.length
+          : extractPhotoPosition(candidate.anchor, images.length),
+      alt_text: normalizeAltText(candidate.img.alt),
+      width: normalizeDimension(candidate.img.naturalWidth || candidate.img.width),
+      height: normalizeDimension(candidate.img.naturalHeight || candidate.img.height)
     });
   }
 
@@ -152,6 +236,46 @@ function extractPostImages(article: HTMLElement): SaveImageInput[] {
       ...image,
       position: index
     }));
+}
+
+function collectMediaImageCandidates(article: HTMLElement): Array<{
+  img: HTMLImageElement;
+  anchor: HTMLAnchorElement | null;
+}> {
+  const candidates: Array<{
+    img: HTMLImageElement;
+    anchor: HTMLAnchorElement | null;
+  }> = [];
+  const seenElements = new Set<HTMLImageElement>();
+  const photoAnchors = article.querySelectorAll<HTMLAnchorElement>('a[href*="/photo/"]');
+
+  for (const anchor of photoAnchors) {
+    const img = anchor.querySelector<HTMLImageElement>("img[src]");
+
+    if (img === null || seenElements.has(img)) {
+      continue;
+    }
+
+    seenElements.add(img);
+    candidates.push({
+      img,
+      anchor
+    });
+  }
+
+  for (const img of article.querySelectorAll<HTMLImageElement>('img[src*="pbs.twimg.com/media/"]')) {
+    if (seenElements.has(img)) {
+      continue;
+    }
+
+    seenElements.add(img);
+    candidates.push({
+      img,
+      anchor: img.closest<HTMLAnchorElement>('a[href*="/photo/"]')
+    });
+  }
+
+  return candidates;
 }
 
 function normalizeText(value: string | null | undefined): string | null {
@@ -204,6 +328,28 @@ function normalizeImageUrl(src: string): string | null {
       url.searchParams.set("name", "orig");
     }
 
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeVideoPosterUrl(src: string): string | null {
+  try {
+    const url = new URL(src, window.location.origin);
+
+    if (
+      url.hostname !== "pbs.twimg.com" ||
+      ![
+        "/ext_tw_video_thumb/",
+        "/amplify_video_thumb/",
+        "/tweet_video_thumb/"
+      ].some((pathSegment) => url.pathname.includes(pathSegment))
+    ) {
+      return null;
+    }
+
+    url.protocol = "https:";
     return url.toString();
   } catch {
     return null;

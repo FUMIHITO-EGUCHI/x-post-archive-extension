@@ -1,10 +1,22 @@
-import { requestSavePostsBatch } from "../runtime/client";
 import {
+  requestClearLogs,
+  requestDebugLog,
+  requestSavePostsBatch
+} from "../runtime/client";
+import { loadDebugInspectPostIds } from "../debug/debug-settings";
+import {
+  detectDefaultArchiveLanguage,
   buildLocalizedDefaultAutoTags,
-  loadArchiveLanguage
+  loadArchiveLanguage,
+  type ArchiveLanguage
 } from "../settings/archive-language";
-import { extractPostFromArticle } from "./extract-post-from-article";
+import {
+  extractPostFromArticle,
+  extractPostIdFromArticle,
+  inspectArticleMediaSignals
+} from "./extract-post-from-article";
 import { findTweetArticles } from "./find-tweet-articles";
+import type { SavePostInput } from "../../types/archive";
 
 const ROOT_ID = "xpa-likes-import-root";
 const OVERLAY_ID = "xpa-likes-import-overlay";
@@ -16,10 +28,15 @@ const MAX_SCROLL_STEPS = 400;
 const MIN_SCROLL_WAIT_MS = 180;
 const MAX_SCROLL_WAIT_MS = 900;
 const SAVE_BATCH_SIZE = 12;
+const MEDIA_WAIT_PASS_LIMIT = 4;
+const MAX_WAITING_POSTS_BEFORE_SCROLL_PAUSE = 6;
+const WAITING_PAUSE_MS = 700;
 
 let rootElement: HTMLDivElement | null = null;
 let currentRun: LikesImportRun | null = null;
 let overlayExpanded = false;
+let overlayLanguage: ArchiveLanguage = detectDefaultArchiveLanguage();
+let lastOverlayStats: OverlayStats = createDefaultOverlayStats();
 
 type OverlayStatus =
   | "idle"
@@ -37,13 +54,24 @@ type OverlayStats = {
   duplicates: number;
   failed: number;
   scanned: number;
+  waiting: number;
   message: string;
 };
 
 type LikesImportRun = {
   stopRequested: boolean;
   collectingFinished: boolean;
+  traceId: string;
+  inspectPostIds: Set<string>;
+  inspectSignatures: Map<string, string>;
   stats: OverlayStats;
+};
+
+type PendingMediaWaitState = {
+  xPostId: string;
+  firstSeenAt: number;
+  waitPasses: number;
+  mediaHintCount: number;
 };
 
 export function isLikesTimelinePage(currentUrl = window.location.href): boolean {
@@ -60,28 +88,22 @@ export function ensureLikesImportControls(): void {
     return;
   }
 
+  void refreshOverlayLanguage();
+
   if (rootElement === null) {
     rootElement = createRootElement();
     document.body.appendChild(rootElement);
   }
 
   rootElement.hidden = false;
-  updateOverlay({
-    status: currentRun?.stats.status ?? "idle",
-    collected: currentRun?.stats.collected ?? 0,
-    saved: currentRun?.stats.saved ?? 0,
-    duplicates: currentRun?.stats.duplicates ?? 0,
-    failed: currentRun?.stats.failed ?? 0,
-    scanned: currentRun?.stats.scanned ?? 0,
-    message: currentRun?.stats.message ?? "Ready to import from Likes."
-  });
+  updateOverlay(currentRun?.stats ?? lastOverlayStats);
 }
 
 export function removeLikesImportControls(): void {
   if (currentRun !== null) {
     currentRun.stopRequested = true;
     currentRun.stats.status = "stopped";
-    currentRun.stats.message = "Stopped because you left the Likes page. Saving queued posts.";
+    currentRun.stats.message = getOverlayMessage("leftPageSaving");
   }
 
   overlayExpanded = false;
@@ -104,16 +126,16 @@ function createRootElement(): HTMLDivElement {
   const toggleButton = document.createElement("button");
   toggleButton.id = TOGGLE_BUTTON_ID;
   toggleButton.type = "button";
-  toggleButton.textContent = "Import Likes";
-  toggleButton.style.border = "1px solid #0f1419";
-  toggleButton.style.background = "#0f1419";
-  toggleButton.style.color = "#ffffff";
+  toggleButton.textContent = getToggleButtonText(false, false);
+  toggleButton.style.border = "1px solid #d0d7de";
+  toggleButton.style.background = "#ffffff";
+  toggleButton.style.color = "#0f1419";
   toggleButton.style.borderRadius = "999px";
   toggleButton.style.padding = "12px 16px";
   toggleButton.style.fontSize = "14px";
   toggleButton.style.fontWeight = "700";
   toggleButton.style.cursor = "pointer";
-  toggleButton.style.boxShadow = "0 10px 30px rgba(15, 20, 25, 0.24)";
+  toggleButton.style.boxShadow = "0 12px 28px rgba(15, 23, 42, 0.12)";
   toggleButton.addEventListener("click", () => {
     if (currentRun !== null) {
       overlayExpanded = true;
@@ -122,15 +144,7 @@ function createRootElement(): HTMLDivElement {
     }
 
     updateOverlay(
-      currentRun?.stats ?? {
-        status: "idle",
-        collected: 0,
-        saved: 0,
-        duplicates: 0,
-        failed: 0,
-        scanned: 0,
-        message: "Ready to import from Likes."
-      }
+      currentRun?.stats ?? lastOverlayStats
     );
   });
 
@@ -139,34 +153,35 @@ function createRootElement(): HTMLDivElement {
   overlay.hidden = true;
   overlay.style.width = "320px";
   overlay.style.maxWidth = "calc(100vw - 32px)";
-  overlay.style.background = "rgba(15, 20, 25, 0.94)";
-  overlay.style.color = "#f7f9f9";
-  overlay.style.border = "1px solid rgba(255, 255, 255, 0.12)";
+  overlay.style.background = "rgba(255, 255, 255, 0.96)";
+  overlay.style.color = "#0f172a";
+  overlay.style.border = "1px solid rgba(15, 23, 42, 0.1)";
   overlay.style.borderRadius = "20px";
   overlay.style.padding = "16px";
-  overlay.style.boxShadow = "0 18px 42px rgba(15, 20, 25, 0.35)";
+  overlay.style.boxShadow = "0 20px 48px rgba(15, 23, 42, 0.14)";
   overlay.style.backdropFilter = "blur(12px)";
   overlay.innerHTML = [
-    '<div data-xpa-overlay-status style="font-size:13px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#8ecdf8;">Idle</div>',
-    '<div data-xpa-overlay-message style="margin-top:8px;font-size:14px;line-height:1.5;">Ready to import from Likes.</div>',
+    `<div data-xpa-overlay-status style="font-size:13px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#2563eb;">${getLocalizedStatusLabel("idle")}</div>`,
+    `<div data-xpa-overlay-message style="margin-top:8px;font-size:14px;line-height:1.5;">${getOverlayMessage("ready")}</div>`,
     '<dl style="margin:14px 0 0;display:grid;grid-template-columns:1fr auto;gap:8px 12px;font-size:13px;">',
-    '<dt style="color:#9fb0c0;">Collected</dt><dd data-xpa-overlay-collected style="margin:0;font-weight:700;">0</dd>',
-    '<dt style="color:#9fb0c0;">Saved</dt><dd data-xpa-overlay-saved style="margin:0;font-weight:700;">0</dd>',
-    '<dt style="color:#9fb0c0;">Duplicates</dt><dd data-xpa-overlay-duplicates style="margin:0;font-weight:700;">0</dd>',
-    '<dt style="color:#9fb0c0;">Failed</dt><dd data-xpa-overlay-failed style="margin:0;font-weight:700;">0</dd>',
-    '<dt style="color:#9fb0c0;">Scanned</dt><dd data-xpa-overlay-scanned style="margin:0;font-weight:700;">0</dd>',
+    `<dt data-xpa-overlay-label-collected style="color:#475569;">${getMetricLabel("collected")}</dt><dd data-xpa-overlay-collected style="margin:0;font-weight:700;">0</dd>`,
+    `<dt data-xpa-overlay-label-saved style="color:#475569;">${getMetricLabel("saved")}</dt><dd data-xpa-overlay-saved style="margin:0;font-weight:700;">0</dd>`,
+    `<dt data-xpa-overlay-label-duplicates style="color:#475569;">${getMetricLabel("duplicates")}</dt><dd data-xpa-overlay-duplicates style="margin:0;font-weight:700;">0</dd>`,
+    `<dt data-xpa-overlay-label-failed style="color:#475569;">${getMetricLabel("failed")}</dt><dd data-xpa-overlay-failed style="margin:0;font-weight:700;">0</dd>`,
+    `<dt data-xpa-overlay-label-scanned style="color:#475569;">${getMetricLabel("scanned")}</dt><dd data-xpa-overlay-scanned style="margin:0;font-weight:700;">0</dd>`,
+    `<dt data-xpa-overlay-label-waiting style="color:#475569;">${getMetricLabel("waiting")}</dt><dd data-xpa-overlay-waiting style="margin:0;font-weight:700;">0</dd>`,
     "</dl>"
   ].join("");
 
   const actionButton = document.createElement("button");
   actionButton.id = ACTION_BUTTON_ID;
   actionButton.type = "button";
-  actionButton.textContent = "Start";
+  actionButton.textContent = getActionButtonText(false);
   actionButton.style.marginTop = "14px";
   actionButton.style.width = "100%";
-  actionButton.style.border = "1px solid rgba(255, 255, 255, 0.2)";
-  actionButton.style.background = "rgba(255, 255, 255, 0.08)";
-  actionButton.style.color = "#f7f9f9";
+  actionButton.style.border = "1px solid #cbd5e1";
+  actionButton.style.background = "#f8fafc";
+  actionButton.style.color = "#0f172a";
   actionButton.style.borderRadius = "999px";
   actionButton.style.padding = "10px 14px";
   actionButton.style.fontSize = "13px";
@@ -181,7 +196,7 @@ function createRootElement(): HTMLDivElement {
 
     currentRun.stopRequested = true;
     currentRun.stats.status = "stopping";
-    currentRun.stats.message = "Stopping collection. Collected posts will still be saved.";
+    currentRun.stats.message = getOverlayMessage("stopping");
     updateOverlay(currentRun.stats);
   });
   overlay.appendChild(actionButton);
@@ -193,15 +208,13 @@ function createRootElement(): HTMLDivElement {
 }
 
 async function startLikesImport(): Promise<void> {
+  overlayLanguage = await loadArchiveLanguage();
+
   if (!isLikesTimelinePage()) {
     updateOverlay({
+      ...createDefaultOverlayStats(),
       status: "failed",
-      collected: 0,
-      saved: 0,
-      duplicates: 0,
-      failed: 0,
-      scanned: 0,
-      message: "Open an X Likes page before starting import."
+      message: getOverlayMessage("openLikesPage")
     });
     return;
   }
@@ -209,22 +222,38 @@ async function startLikesImport(): Promise<void> {
   const run: LikesImportRun = {
     stopRequested: false,
     collectingFinished: false,
+    traceId: crypto.randomUUID(),
+    inspectPostIds: new Set(await loadDebugInspectPostIds()),
+    inspectSignatures: new Map(),
     stats: {
+      ...createDefaultOverlayStats(),
       status: "collecting",
-      collected: 0,
-      saved: 0,
-      duplicates: 0,
-      failed: 0,
-      scanned: 0,
-      message: "Collecting visible posts."
+      message: getOverlayMessage("collectingVisiblePosts")
     }
   };
   currentRun = run;
+  lastOverlayStats = { ...run.stats };
   overlayExpanded = true;
   updateOverlay(run.stats);
+  if (run.inspectPostIds.size > 0) {
+    void requestClearLogs().catch(() => {
+      // Ignore debug log clear failures.
+    });
+    void requestDebugLog({
+      level: "info",
+      event: "likes.import.trace_started",
+      traceId: run.traceId,
+      context: {
+        inspectPostIds: [...run.inspectPostIds]
+      }
+    }).catch(() => {
+      // Ignore debug log failures.
+    });
+  }
 
-  const collectedPosts = new Map<string, NonNullable<ReturnType<typeof extractPostFromArticle>>>();
-  const saveQueue: Array<NonNullable<ReturnType<typeof extractPostFromArticle>>> = [];
+  const collectedPosts = new Map<string, SavePostInput>();
+  const saveQueue = new Map<string, SavePostInput>();
+  const pendingMediaWaits = new Map<string, PendingMediaWaitState>();
   let noProgressPasses = 0;
 
   const saveWorker = processSaveQueue(saveQueue, run);
@@ -237,36 +266,52 @@ async function startLikesImport(): Promise<void> {
 
       if (!isLikesTimelinePage()) {
         run.stopRequested = true;
-        run.stats.message = "Stopped because you left the Likes page. Saving queued posts.";
+        run.stats.message = getOverlayMessage("leftPageSaving");
         break;
       }
 
       const beforeCount = collectedPosts.size;
-      collectVisiblePosts(collectedPosts, saveQueue, run.stats);
+      collectVisiblePosts(collectedPosts, saveQueue, pendingMediaWaits, run.stats, run);
       const addedBeforeScroll = collectedPosts.size - beforeCount;
       const previousScrollHeight = getDocumentScrollHeight();
 
-      scrollLikesTimeline();
+      if (pendingMediaWaits.size >= MAX_WAITING_POSTS_BEFORE_SCROLL_PAUSE) {
+        run.stats.waiting = pendingMediaWaits.size;
+        run.stats.status = "collecting";
+        run.stats.message = getOverlayMessage("pausingForWaitingPosts", pendingMediaWaits.size);
+        updateOverlay(run.stats);
+        await wait(WAITING_PAUSE_MS);
+        collectVisiblePosts(collectedPosts, saveQueue, pendingMediaWaits, run.stats, run);
+      } else {
+        scrollLikesTimeline();
+      }
+
       await wait(getScrollWaitMs(addedBeforeScroll, noProgressPasses));
 
       const beforePostWaitCount = collectedPosts.size;
-      collectVisiblePosts(collectedPosts, saveQueue, run.stats);
+      collectVisiblePosts(collectedPosts, saveQueue, pendingMediaWaits, run.stats, run);
       const addedAfterScroll = collectedPosts.size - beforePostWaitCount;
       const addedCount = addedBeforeScroll + addedAfterScroll;
       const nextScrollHeight = getDocumentScrollHeight();
       const scrollHeightIncreased = nextScrollHeight > previousScrollHeight;
 
       run.stats.collected = collectedPosts.size;
+      run.stats.waiting = pendingMediaWaits.size;
       run.stats.status = "collecting";
       run.stats.message =
         addedCount > 0
-          ? `Collected ${addedCount} new posts on this pass.`
+          ? getOverlayMessage("collectedOnPass", addedCount)
+          : pendingMediaWaits.size > 0
+            ? getOverlayMessage("waitingForMediaHints", pendingMediaWaits.size)
           : scrollHeightIncreased
-            ? "Waiting for newly loaded posts to render."
-            : "No new posts found on this pass.";
+            ? getOverlayMessage("waitingForRender")
+            : getOverlayMessage("noNewPosts");
       updateOverlay(run.stats);
 
-      noProgressPasses = addedCount === 0 && !scrollHeightIncreased ? noProgressPasses + 1 : 0;
+      noProgressPasses =
+        addedCount === 0 && !scrollHeightIncreased && pendingMediaWaits.size === 0
+          ? noProgressPasses + 1
+          : 0;
 
       if (noProgressPasses >= MAX_IDLE_PASSES) {
         break;
@@ -274,45 +319,58 @@ async function startLikesImport(): Promise<void> {
     }
 
     run.stats.status = run.stopRequested ? "stopping" : "saving";
+    run.stats.waiting = pendingMediaWaits.size;
     run.stats.message = run.stopRequested
-      ? "Collection stopped. Saving queued posts."
-      : "Finishing queued saves.";
+      ? getOverlayMessage("collectionStoppedSaving")
+      : getOverlayMessage("finishingQueuedSaves");
     updateOverlay(run.stats);
 
+    queuePendingMediaWaits(collectedPosts, saveQueue, pendingMediaWaits);
     run.collectingFinished = true;
     await saveWorker;
 
     if (run.stopRequested) {
       run.stats.status = "stopped";
-      run.stats.message = "Collection stopped. Queued posts were saved.";
+      run.stats.waiting = pendingMediaWaits.size;
+      run.stats.message = getOverlayMessage("collectionStoppedSaved");
     } else {
       run.stats.status = "completed";
-      run.stats.message = "Import completed.";
+      run.stats.waiting = pendingMediaWaits.size;
+      run.stats.message = getOverlayMessage("completed");
     }
   } catch (error) {
     console.error("Likes import failed.", error);
     run.stats.status = "failed";
-    run.stats.message = error instanceof Error ? error.message : "Likes import failed.";
+    run.stats.waiting = pendingMediaWaits.size;
+    run.stats.message =
+      error instanceof Error && error.message.trim() !== ""
+        ? error.message
+        : getOverlayMessage("failed");
   } finally {
     overlayExpanded = true;
     updateOverlay(run.stats);
+    lastOverlayStats = { ...run.stats };
     currentRun = null;
   }
 }
 
 async function processSaveQueue(
-  saveQueue: Array<NonNullable<ReturnType<typeof extractPostFromArticle>>>,
+  saveQueue: Map<string, SavePostInput>,
   run: LikesImportRun
 ): Promise<void> {
-  const language = await loadArchiveLanguage();
+  const language = overlayLanguage;
 
-  while (!run.collectingFinished || saveQueue.length > 0) {
-    if (saveQueue.length === 0) {
+  while (!run.collectingFinished || saveQueue.size > 0) {
+    if (saveQueue.size === 0) {
       await wait(100);
       continue;
     }
 
-    const batch = saveQueue.splice(0, SAVE_BATCH_SIZE);
+    const batch = [...saveQueue.values()].slice(0, SAVE_BATCH_SIZE);
+
+    for (const post of batch) {
+      saveQueue.delete(post.x_post_id);
+    }
 
     try {
       const response = await requestSavePostsBatch(
@@ -321,12 +379,15 @@ async function processSaveQueue(
           auto_tags: buildLocalizedDefaultAutoTags(language, post, {
             includeLikedTag: true
           })
-        }))
+        })),
+        {
+          traceId: run.traceId
+        }
       );
 
-      run.stats.saved += response.saved;
-      run.stats.duplicates += response.duplicates;
-      run.stats.failed += response.failed;
+    run.stats.saved += response.saved;
+    run.stats.duplicates += response.duplicates;
+    run.stats.failed += response.failed;
     } catch (error) {
       console.error("Bulk like import batch save failed.", {
         postIds: batch.map((post) => post.x_post_id),
@@ -335,29 +396,212 @@ async function processSaveQueue(
       run.stats.failed += batch.length;
     }
 
-    run.stats.message = `Processed ${run.stats.saved + run.stats.duplicates + run.stats.failed} / ${run.stats.collected} posts.`;
+    run.stats.message = getOverlayMessage(
+      "processedProgress",
+      run.stats.saved + run.stats.duplicates + run.stats.failed,
+      run.stats.collected
+    );
+    run.stats.waiting = saveQueue.size;
     updateOverlay(run.stats);
   }
 }
 
 function collectVisiblePosts(
-  collectedPosts: Map<string, NonNullable<ReturnType<typeof extractPostFromArticle>>>,
-  saveQueue: Array<NonNullable<ReturnType<typeof extractPostFromArticle>>>,
-  stats: OverlayStats
+  collectedPosts: Map<string, SavePostInput>,
+  saveQueue: Map<string, SavePostInput>,
+  pendingMediaWaits: Map<string, PendingMediaWaitState>,
+  stats: OverlayStats,
+  run?: LikesImportRun
 ): void {
   const articles = findTweetArticles();
   stats.scanned += articles.length;
 
   for (const article of articles) {
+    const xPostId = extractPostIdFromArticle(article);
     const post = extractPostFromArticle(article);
+    const mediaSignals = inspectArticleMediaSignals(article);
 
-    if (post === null || collectedPosts.has(post.x_post_id)) {
+    if (post === null) {
+      emitInspectTrace(run, xPostId, {
+        outcome: "post_null",
+        imageHintCount: mediaSignals.imageHintCount,
+        videoHintCount: mediaSignals.videoHintCount
+      });
       continue;
     }
 
+    const savableMediaCount = post.media.length + countSavableVideoCandidates(post);
+    const mediaHintCount = mediaSignals.imageHintCount + mediaSignals.videoHintCount;
+    const shouldWaitForMedia = mediaHintCount > savableMediaCount;
+    const waitState = pendingMediaWaits.get(post.x_post_id);
+
+    emitInspectTrace(run, post.x_post_id, {
+      outcome: "extracted",
+      imageHintCount: mediaSignals.imageHintCount,
+      videoHintCount: mediaSignals.videoHintCount,
+      mediaCount: post.media.length,
+      videoCandidateCount: post.video_candidates?.length ?? 0,
+      savableMediaCount,
+      shouldWaitForMedia,
+      existingWaitPasses: waitState?.waitPasses ?? 0
+    });
+
+    const existing = collectedPosts.get(post.x_post_id);
+
+    if (existing !== undefined && !isPostSnapshotRicher(post, existing)) {
+      pendingMediaWaits.delete(post.x_post_id);
+      emitInspectTrace(run, post.x_post_id, {
+        outcome: "skipped_not_richer",
+        mediaCount: post.media.length,
+        videoCandidateCount: post.video_candidates?.length ?? 0,
+        existingMediaCount: existing.media.length,
+        existingVideoCandidateCount: existing.video_candidates?.length ?? 0
+      });
+      continue;
+    }
+
+    if (shouldWaitForMedia) {
+      const nextWaitState: PendingMediaWaitState = {
+        xPostId: post.x_post_id,
+        firstSeenAt: waitState?.firstSeenAt ?? Date.now(),
+        waitPasses: (waitState?.waitPasses ?? 0) + 1,
+        mediaHintCount
+      };
+
+      pendingMediaWaits.set(post.x_post_id, nextWaitState);
+      emitInspectTrace(run, post.x_post_id, {
+        outcome: "waiting_for_media",
+        mediaHintCount,
+        waitPasses: nextWaitState.waitPasses,
+        savableMediaCount
+      });
+
+      if (nextWaitState.waitPasses < MEDIA_WAIT_PASS_LIMIT) {
+        collectedPosts.set(post.x_post_id, post);
+        continue;
+      }
+
+      pendingMediaWaits.delete(post.x_post_id);
+    } else {
+      pendingMediaWaits.delete(post.x_post_id);
+    }
+
     collectedPosts.set(post.x_post_id, post);
-    saveQueue.push(post);
+    saveQueue.set(post.x_post_id, post);
+    emitInspectTrace(run, post.x_post_id, {
+      outcome: "queued",
+      mediaCount: post.media.length,
+      videoCandidateCount: post.video_candidates?.length ?? 0,
+      queueSize: saveQueue.size
+    });
   }
+
+  stats.waiting = pendingMediaWaits.size;
+}
+
+function queuePendingMediaWaits(
+  collectedPosts: Map<string, SavePostInput>,
+  saveQueue: Map<string, SavePostInput>,
+  pendingMediaWaits: Map<string, PendingMediaWaitState>
+): void {
+  for (const xPostId of pendingMediaWaits.keys()) {
+    const post = collectedPosts.get(xPostId);
+
+    if (post === undefined) {
+      continue;
+    }
+
+    saveQueue.set(xPostId, post);
+  }
+}
+
+function emitInspectTrace(
+  run: LikesImportRun | undefined,
+  xPostId: string | null,
+  detail: Record<string, unknown>
+): void {
+  if (run === undefined || xPostId === null || !run.inspectPostIds.has(xPostId)) {
+    return;
+  }
+
+  const signature = JSON.stringify(detail);
+  const previousSignature = run.inspectSignatures.get(xPostId);
+
+  if (previousSignature === signature) {
+    return;
+  }
+
+  run.inspectSignatures.set(xPostId, signature);
+  void requestDebugLog({
+    level: "info",
+    event: "likes.import.inspect",
+    traceId: run.traceId,
+    context: {
+      xPostId,
+      ...detail
+    }
+  }).catch(() => {
+    // Ignore debug log failures during import.
+  });
+}
+
+function isPostSnapshotRicher(candidate: SavePostInput, current: SavePostInput): boolean {
+  const candidateScore = scorePostSnapshot(candidate);
+  const currentScore = scorePostSnapshot(current);
+
+  if (candidateScore !== currentScore) {
+    return candidateScore > currentScore;
+  }
+
+  if (candidate.post_text.length !== current.post_text.length) {
+    return candidate.post_text.length > current.post_text.length;
+  }
+
+  return false;
+}
+
+function scorePostSnapshot(post: SavePostInput): number {
+  const imageScore = post.media.reduce((score, media) => {
+    let nextScore = score + 10;
+
+    if (media.alt_text !== null) {
+      nextScore += 1;
+    }
+
+    if (media.width !== null) {
+      nextScore += 1;
+    }
+
+    if (media.height !== null) {
+      nextScore += 1;
+    }
+
+    return nextScore;
+  }, 0);
+  const videoScore = (post.video_candidates ?? []).reduce((score, candidate) => {
+    let nextScore = score + 12;
+
+    if (candidate.poster_url !== null || candidate.thumbnail_url !== null) {
+      nextScore += 1;
+    }
+
+    if (candidate.width !== null) {
+      nextScore += 1;
+    }
+
+    if (candidate.height !== null) {
+      nextScore += 1;
+    }
+
+    return nextScore;
+  }, 0);
+
+  return imageScore + videoScore;
+}
+
+function countSavableVideoCandidates(post: SavePostInput): number {
+  return (post.video_candidates ?? []).filter((candidate) => candidate.download_mode === "direct_mp4")
+    .length;
 }
 
 function scrollLikesTimeline(): void {
@@ -392,6 +636,8 @@ function getScrollWaitMs(addedCount: number, noProgressPasses: number): number {
 function updateOverlay(stats: OverlayStats): void {
   const root = rootElement;
 
+  lastOverlayStats = { ...stats };
+
   if (root === null) {
     return;
   }
@@ -410,19 +656,260 @@ function updateOverlay(stats: OverlayStats): void {
 
   overlay.hidden = !shouldShowOverlay;
   toggleButton.disabled = false;
-  toggleButton.textContent = shouldShowOverlay && !isRunning ? "Hide Import" : "Import Likes";
+  toggleButton.textContent = getToggleButtonText(shouldShowOverlay, isRunning);
   toggleButton.style.opacity = "1";
   actionButton.disabled = stats.status === "stopping";
-  actionButton.textContent = isRunning ? "Stop" : "Start";
+  actionButton.textContent = getActionButtonText(isRunning);
   actionButton.style.opacity = stats.status === "stopping" ? "0.6" : "1";
 
-  setOverlayText(root, "status", stats.status);
+  setOverlayText(root, "status", getLocalizedStatusLabel(stats.status));
   setOverlayText(root, "message", stats.message);
   setOverlayText(root, "collected", String(stats.collected));
   setOverlayText(root, "saved", String(stats.saved));
   setOverlayText(root, "duplicates", String(stats.duplicates));
   setOverlayText(root, "failed", String(stats.failed));
   setOverlayText(root, "scanned", String(stats.scanned));
+  setOverlayText(root, "waiting", String(stats.waiting));
+  setOverlayText(root, "label-collected", getMetricLabel("collected"));
+  setOverlayText(root, "label-saved", getMetricLabel("saved"));
+  setOverlayText(root, "label-duplicates", getMetricLabel("duplicates"));
+  setOverlayText(root, "label-failed", getMetricLabel("failed"));
+  setOverlayText(root, "label-scanned", getMetricLabel("scanned"));
+  setOverlayText(root, "label-waiting", getMetricLabel("waiting"));
+}
+
+async function refreshOverlayLanguage(): Promise<void> {
+  overlayLanguage = await loadArchiveLanguage();
+
+  if (rootElement !== null) {
+    if (currentRun === null && lastOverlayStats.status === "idle") {
+      lastOverlayStats = createDefaultOverlayStats();
+    } else if (currentRun === null) {
+      lastOverlayStats = {
+        ...lastOverlayStats,
+        message: localizeOverlayMessage(lastOverlayStats)
+      };
+    }
+
+    updateOverlay(currentRun?.stats ?? lastOverlayStats);
+  }
+}
+
+function createDefaultOverlayStats(): OverlayStats {
+  return {
+    status: "idle",
+    collected: 0,
+    saved: 0,
+    duplicates: 0,
+    failed: 0,
+    scanned: 0,
+    waiting: 0,
+    message: getOverlayMessage("ready")
+  };
+}
+
+function localizeOverlayMessage(stats: OverlayStats): string {
+  switch (stats.status) {
+    case "idle":
+      return getOverlayMessage("ready");
+    case "collecting":
+      return stats.waiting > 0
+        ? getOverlayMessage("waitingForMediaHints", stats.waiting)
+        : getOverlayMessage("collectingVisiblePosts");
+    case "saving":
+      return getOverlayMessage("finishingQueuedSaves");
+    case "stopping":
+      return getOverlayMessage("collectionStoppedSaving");
+    case "stopped":
+      return getOverlayMessage("collectionStoppedSaved");
+    case "completed":
+      return getOverlayMessage("completed");
+    case "failed":
+      return stats.message.trim() === "" ? getOverlayMessage("failed") : stats.message;
+  }
+}
+
+function getToggleButtonText(isExpanded: boolean, isRunning: boolean): string {
+  if (overlayLanguage === "ja") {
+    return isExpanded && !isRunning ? "取り込みを隠す" : "いいねを取り込む";
+  }
+
+  return isExpanded && !isRunning ? "Hide Import" : "Import Likes";
+}
+
+function getActionButtonText(isRunning: boolean): string {
+  if (overlayLanguage === "ja") {
+    return isRunning ? "停止" : "開始";
+  }
+
+  return isRunning ? "Stop" : "Start";
+}
+
+function getLocalizedStatusLabel(status: OverlayStatus): string {
+  if (overlayLanguage === "ja") {
+    switch (status) {
+      case "idle":
+        return "待機中";
+      case "collecting":
+        return "収集中";
+      case "saving":
+        return "保存中";
+      case "stopping":
+        return "停止中";
+      case "stopped":
+        return "停止済み";
+      case "completed":
+        return "完了";
+      case "failed":
+        return "失敗";
+    }
+  }
+
+  switch (status) {
+    case "idle":
+      return "Idle";
+    case "collecting":
+      return "Collecting";
+    case "saving":
+      return "Saving";
+    case "stopping":
+      return "Stopping";
+    case "stopped":
+      return "Stopped";
+    case "completed":
+      return "Completed";
+    case "failed":
+      return "Failed";
+  }
+}
+
+function getMetricLabel(
+  metric: "collected" | "saved" | "duplicates" | "failed" | "scanned" | "waiting"
+): string {
+  if (overlayLanguage === "ja") {
+    switch (metric) {
+      case "collected":
+        return "収集";
+      case "saved":
+        return "保存";
+      case "duplicates":
+        return "重複";
+      case "failed":
+        return "失敗";
+      case "scanned":
+        return "走査";
+      case "waiting":
+        return "待機";
+    }
+  }
+
+  switch (metric) {
+    case "collected":
+      return "Collected";
+    case "saved":
+      return "Saved";
+    case "duplicates":
+      return "Duplicates";
+    case "failed":
+      return "Failed";
+    case "scanned":
+      return "Scanned";
+    case "waiting":
+      return "Waiting";
+  }
+}
+
+function getOverlayMessage(
+  key:
+    | "ready"
+    | "leftPageSaving"
+    | "stopping"
+    | "openLikesPage"
+    | "collectingVisiblePosts"
+    | "collectedOnPass"
+    | "waitingForMediaHints"
+    | "pausingForWaitingPosts"
+    | "waitingForRender"
+    | "noNewPosts"
+    | "collectionStoppedSaving"
+    | "finishingQueuedSaves"
+    | "collectionStoppedSaved"
+    | "completed"
+    | "failed"
+    | "processedProgress",
+  ...values: number[]
+): string {
+  if (overlayLanguage === "ja") {
+    switch (key) {
+      case "ready":
+        return "いいね欄からの取り込みを開始できます。";
+      case "leftPageSaving":
+        return "いいね欄を離れたため停止しました。キュー済みの投稿を保存しています。";
+      case "stopping":
+        return "収集を停止しています。集めた投稿は引き続き保存します。";
+      case "openLikesPage":
+        return "取り込みを始める前に X のいいね欄を開いてください。";
+      case "collectingVisiblePosts":
+        return "表示中の投稿を収集中です。";
+      case "collectedOnPass":
+        return `この周回で ${values[0] ?? 0} 件の新しい投稿を見つけました。`;
+      case "waitingForMediaHints":
+        return `${values[0] ?? 0} 件の投稿でメディア描画を待っています。`;
+      case "pausingForWaitingPosts":
+        return `待機中の投稿が ${values[0] ?? 0} 件あるため、スクロールを止めて描画を待っています。`;
+      case "waitingForRender":
+        return "新しく読み込まれた投稿の描画を待っています。";
+      case "noNewPosts":
+        return "この周回では新しい投稿は見つかりませんでした。";
+      case "collectionStoppedSaving":
+        return "収集を止めました。キュー済みの投稿を保存しています。";
+      case "finishingQueuedSaves":
+        return "残っている保存処理を完了しています。";
+      case "collectionStoppedSaved":
+        return "収集を停止しました。キュー済みの投稿は保存しました。";
+      case "completed":
+        return "取り込みが完了しました。";
+      case "failed":
+        return "いいね欄の取り込みに失敗しました。";
+      case "processedProgress":
+        return `${values[0] ?? 0} / ${values[1] ?? 0} 件を処理しました。`;
+    }
+  }
+
+  switch (key) {
+    case "ready":
+      return "Ready to import from Likes.";
+    case "leftPageSaving":
+      return "Stopped because you left the Likes page. Saving queued posts.";
+    case "stopping":
+      return "Stopping collection. Collected posts will still be saved.";
+    case "openLikesPage":
+      return "Open an X Likes page before starting import.";
+    case "collectingVisiblePosts":
+      return "Collecting visible posts.";
+    case "collectedOnPass":
+      return `Collected ${values[0] ?? 0} new posts on this pass.`;
+    case "waitingForMediaHints":
+      return `Waiting for media to render on ${values[0] ?? 0} posts.`;
+    case "pausingForWaitingPosts":
+      return `Paused scrolling because ${values[0] ?? 0} posts are still waiting for media.`;
+    case "waitingForRender":
+      return "Waiting for newly loaded posts to render.";
+    case "noNewPosts":
+      return "No new posts found on this pass.";
+    case "collectionStoppedSaving":
+      return "Collection stopped. Saving queued posts.";
+    case "finishingQueuedSaves":
+      return "Finishing queued saves.";
+    case "collectionStoppedSaved":
+      return "Collection stopped. Queued posts were saved.";
+    case "completed":
+      return "Import completed.";
+    case "failed":
+      return "Likes import failed.";
+    case "processedProgress":
+      return `Processed ${values[0] ?? 0} / ${values[1] ?? 0} posts.`;
+  }
 }
 
 function setOverlayText(root: HTMLElement, key: string, text: string): void {

@@ -3,7 +3,8 @@ import type { ArchiveBackupSummary } from "../../../types/archive-backup";
 import {
   type ArchiveTransferProgress,
   clearArchiveData,
-  importArchiveBackupZip
+  importArchiveBackupZip,
+  resetExtensionState
 } from "../../archive/archive-maintenance-service";
 import { streamArchiveBackupZip } from "../../archive/archive-maintenance-service";
 import { createLogger } from "../../logging/logger";
@@ -196,23 +197,30 @@ export function SettingsArchiveMaintenancePanel({
     setDeleteTone("neutral");
 
     try {
-      await clearArchiveData();
+      await resetExtensionState();
       await onArchiveChanged();
       setDeleteConfirmStep(0);
       setDeleteTone("success");
       setDeleteStatus(
-        isJapanese ? "保存済みアーカイブデータを削除しました。" : "Saved archive data was deleted."
+        isJapanese
+          ? "拡張機能を初期化しました。ページを再読み込みして既定状態に戻します。"
+          : "The extension was reset. Reloading the page to return to the default state."
       );
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 400);
     } catch (error) {
-      logger.error("archive.delete_all.failed", {
-        message: "Failed to delete saved archive data.",
+      logger.error("archive.reset.failed", {
+        message: "Failed to reset extension state.",
         context: {
           error
         }
       });
 
       setDeleteTone("error");
-      setDeleteStatus(getErrorMessage(error, isJapanese ? "削除に失敗しました。" : "Delete failed."));
+      setDeleteStatus(
+        getErrorMessage(error, isJapanese ? "初期化に失敗しました。" : "Reset failed.")
+      );
     } finally {
       setDeleteRunning(false);
     }
@@ -326,18 +334,23 @@ export function SettingsArchiveMaintenancePanel({
         <p className="viewer-settings-inline-note">
           {isJapanese ? "現在のアーカイブ" : "Current archive"}: {deleteSummary}
         </p>
+        <p className="viewer-settings-inline-note">
+          {isJapanese
+            ? "この操作ではアーカイブ本体に加えて、ログと閲覧設定も初期化します。"
+            : "This action also resets logs and viewer settings."}
+        </p>
         {deleteConfirmStep === 0 && (
           <div className="viewer-settings-action-row">
             <button
               className="viewer-danger-button"
               type="button"
-              disabled={deleteRunning || !hasArchive}
+              disabled={deleteRunning}
               onClick={() => {
                 setDeleteTone("warning");
                 setDeleteStatus(
                   isJapanese
                     ? "警告 1/2: 現在のブラウザープロファイルにある保存済みアーカイブデータを削除します。"
-                    : "Warning 1/2: this deletes saved archive data from the current browser profile."
+                    : "Warning 1/2: this resets archive data, logs, and settings in the current browser profile."
                 );
                 setDeleteConfirmStep(1);
               }}
@@ -394,10 +407,10 @@ export function SettingsArchiveMaintenancePanel({
               {deleteRunning
                 ? isJapanese
                   ? "削除中..."
-                  : "Deleting..."
+                  : "Resetting..."
                 : isJapanese
                   ? "今すぐすべて削除"
-                  : "Delete everything now"}
+                  : "Reset extension now"}
             </button>
             <button
               className="viewer-secondary-button"
@@ -417,7 +430,7 @@ export function SettingsArchiveMaintenancePanel({
           <p className="viewer-message">
             {isJapanese
               ? "現在保存されているアーカイブデータはありません。"
-              : "No saved archive data is currently stored."}
+              : "You can still reset logs and settings even when no archive data is stored."}
           </p>
         )}
       </section>
