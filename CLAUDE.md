@@ -134,9 +134,11 @@ DB アクセスは `src/db/repositories/` のリポジトリ層に集約し、UI
 
 - `master` への直接コミットは避ける。feature branch で作業する（例: `feature/viewer-search`）
 - コミット前に `npm run typecheck` と `npm run build` が通ることを確認する
-- `git push` は手動で行う（自動実行しない）
+- `git push` はユーザーから明示的な指示がある場合にのみ行う
+- Git 作業のコミット件名や提案では `docs(likes-import): ...` や `feat(likes-import): ...` のように、種別の直後に補助ラベルを付ける
 - ドキュメント変更と実装変更はコミットを分ける
 - version bump は `master` マージ後に行い、対応するリリースノートを `docs/release-notes/` に作成する
+- `git push` を行う場合は、対応する release tag の作成とリリースノート更新まで同じ作業で完了させる
 
 ## 大きな変更前の作業順
 
