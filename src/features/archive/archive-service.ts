@@ -73,6 +73,24 @@ export async function hasSavedPost(xPostId: string): Promise<boolean> {
 export async function saveArchivePost(input: SavePostInput): Promise<{
   status: "saved" | "duplicate";
   post?: PostRecord;
+}>;
+export async function saveArchivePost(
+  input: SavePostInput,
+  options?: {
+    traceId?: string;
+  }
+): Promise<{
+  status: "saved" | "duplicate";
+  post?: PostRecord;
+}>;
+export async function saveArchivePost(
+  input: SavePostInput,
+  options: {
+    traceId?: string;
+  } = {}
+): Promise<{
+  status: "saved" | "duplicate";
+  post?: PostRecord;
 }> {
   validateSavePostInput(input);
 
@@ -91,7 +109,8 @@ export async function saveArchivePost(input: SavePostInput): Promise<{
       context: {
         xPostId: input.x_post_id,
         newMediaCount: duplicateMediaWork.newRecords.length,
-        retryMediaCount: duplicateMediaWork.retryRecords.length
+        retryMediaCount: duplicateMediaWork.retryRecords.length,
+        traceId: options.traceId ?? null
       }
     });
 
@@ -126,7 +145,7 @@ export async function saveArchivePost(input: SavePostInput): Promise<{
     }
 
     if (duplicateMediaWork.persistRecords.length > 0) {
-      enqueueMediaPersistence(duplicateMediaWork.persistRecords);
+      enqueueMediaPersistence(duplicateMediaWork.persistRecords, options.traceId);
     }
 
     return {
@@ -170,13 +189,14 @@ export async function saveArchivePost(input: SavePostInput): Promise<{
     }
   );
 
-  enqueueMediaPersistence(media);
+  enqueueMediaPersistence(media, options.traceId);
 
   logger.info("post.save.persisted", {
     context: {
       xPostId: post.x_post_id,
       mediaCount: media.length,
-      autoTagCount: autoTags.length
+      autoTagCount: autoTags.length,
+      traceId: options.traceId ?? null
     }
   });
 
@@ -477,7 +497,7 @@ export async function deleteArchivePost(xPostId: string): Promise<boolean> {
   return true;
 }
 
-async function persistMedia(record: MediaRecord): Promise<void> {
+async function persistMedia(record: MediaRecord, traceId?: string): Promise<void> {
   if (activeMediaPersistenceIds.has(record.media_id)) {
     return;
   }
@@ -489,7 +509,8 @@ async function persistMedia(record: MediaRecord): Promise<void> {
       context: {
         mediaId: record.media_id,
         xPostId: record.x_post_id,
-        mediaType: record.media_type
+        mediaType: record.media_type,
+        traceId: traceId ?? null
       }
     });
 
@@ -517,7 +538,8 @@ async function persistMedia(record: MediaRecord): Promise<void> {
         mediaId: record.media_id,
         xPostId: record.x_post_id,
         mediaType: record.media_type,
-        byteSize: blob.size
+        byteSize: blob.size,
+        traceId: traceId ?? null
       }
     });
   } catch (error) {
@@ -534,7 +556,8 @@ async function persistMedia(record: MediaRecord): Promise<void> {
         mediaId: record.media_id,
         xPostId: record.x_post_id,
         mediaType: record.media_type,
-        error
+        error,
+        traceId: traceId ?? null
       }
     });
   } finally {
@@ -542,18 +565,19 @@ async function persistMedia(record: MediaRecord): Promise<void> {
   }
 }
 
-function enqueueMediaPersistence(media: MediaRecord[]): void {
+function enqueueMediaPersistence(media: MediaRecord[], traceId?: string): void {
   if (media.length === 0) {
     return;
   }
 
   logger.debug("media.persist.enqueued", {
     context: {
-      count: media.length
+      count: media.length,
+      traceId: traceId ?? null
     }
   });
 
-  void Promise.allSettled(media.map((record) => persistMedia(record))).then((results) => {
+  void Promise.allSettled(media.map((record) => persistMedia(record, traceId))).then((results) => {
     for (const [index, result] of results.entries()) {
       if (result.status === "fulfilled") {
         continue;
@@ -564,7 +588,8 @@ function enqueueMediaPersistence(media: MediaRecord[]): void {
         context: {
           mediaId: media[index]?.media_id,
           xPostId: media[index]?.x_post_id,
-          reason: result.reason
+          reason: result.reason,
+          traceId: traceId ?? null
         }
       });
     }

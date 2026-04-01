@@ -1,7 +1,9 @@
 import type { SavePostInput } from "../../types/archive";
 import type {
   AddPostTagMessage,
+  ClearLogsResponse,
   DeletePostResponse,
+  DebugLogMessage,
   GetArchiveSummaryResponse,
   HasPostResponse,
   ListPostTagSummariesResponse,
@@ -20,10 +22,16 @@ const DEFAULT_RUNTIME_TIMEOUT_MS = 30000;
 const SAVE_RUNTIME_TIMEOUT_MS = 180000;
 const SAVE_BATCH_RUNTIME_TIMEOUT_MS = 300000;
 
-export async function requestSavePost(post: SavePostInput): Promise<SavePostResponse> {
+export async function requestSavePost(
+  post: SavePostInput,
+  options: {
+    traceId?: string;
+  } = {}
+): Promise<SavePostResponse> {
   const response = await sendMessage({
     type: "posts/save",
-    post
+    post,
+    ...(options.traceId === undefined ? {} : { traceId: options.traceId })
   }, SAVE_RUNTIME_TIMEOUT_MS);
 
   if (response.type !== "posts/save-result") {
@@ -169,11 +177,15 @@ function createTimeoutPromise(timeoutMs: number): Promise<RuntimeResponse> {
 }
 
 export async function requestSavePostsBatch(
-  posts: SavePostInput[]
+  posts: SavePostInput[],
+  options: {
+    traceId?: string;
+  } = {}
 ): Promise<SavePostsBatchResponse> {
   const response = await sendMessage({
     type: "posts/save-batch",
-    posts
+    posts,
+    ...(options.traceId === undefined ? {} : { traceId: options.traceId })
   }, SAVE_BATCH_RUNTIME_TIMEOUT_MS);
 
   if (response.type !== "posts/save-batch-result") {
@@ -181,4 +193,25 @@ export async function requestSavePostsBatch(
   }
 
   return response;
+}
+
+export async function requestClearLogs(): Promise<ClearLogsResponse> {
+  const response = await sendMessage({
+    type: "logs/clear"
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "logs/clear-result") {
+    throw new Error("Unexpected runtime response for clear logs request.");
+  }
+
+  return response;
+}
+
+export async function requestDebugLog(
+  input: Omit<DebugLogMessage, "type">
+): Promise<void> {
+  await sendMessage({
+    type: "debug/log",
+    ...input
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
 }
