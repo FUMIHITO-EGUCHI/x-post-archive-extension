@@ -225,6 +225,49 @@ X 風デザインを模倣する必要はない。
 まず「何を作るか」「何を今は作らないか」を明確にした上で進めること。
 大量実装よりも、後戻りしにくい骨格作りを優先すること。
 
+## AI Collaboration Rules
+- Claude と Codex を併用する場合、役割分担を明確にしてから作業を進めること
+- Claude の主担当:
+  - 計画立案
+  - 要件や実装方針の整理
+  - Chrome / X 上の調査
+  - ブラウザ上のデバッグ
+  - DOM / selector / network / event の切り分け
+- Codex の主担当:
+  - 実装
+  - リファクタ
+  - テスト
+  - 各種レビュー
+  - ドキュメント作成
+  - Git 関連作業
+- Chrome / X 側の広い探索は Codex の主担当にしないこと。Codex が扱う場合も、対象は絞られた確認作業に留めること
+- 実装・レビュー・Git 作業は、可能な限り Codex に寄せること
+- Claude から Codex へ渡す調査結果は、生ログや観測列をそのまま貼らず、圧縮した結論・根拠・未解決点だけにすること
+- handoff 前に、少なくとも以下が揃っている状態を目指すこと
+  - Goal
+  - In scope
+  - Out of scope
+  - Constraints
+  - Compressed findings
+  - Files to read first
+  - Acceptance criteria
+  - Open questions
+- Codex は作業後に、少なくとも以下を handoff に残すこと
+  - Changed files
+  - Verification
+  - Remaining issues
+  - Suggested next action
+
+## AI Handoff Files
+- `ai-handoff/` は Claude と Codex の短期的な受け渡しに使う。長期的に残すべき要件・設計・仕様判断は `docs/` に残すこと
+- `ai-handoff/current-task.md` は常に 1 件のアクティブタスクだけを指すダッシュボードとして使うこと
+- `ai-handoff/tasks/` には 1 タスク 1 ファイルで task packet を置くこと
+- `ai-handoff/findings/` には圧縮済みの調査結果だけを置くこと。生ログ置き場にしないこと
+- `ai-handoff/templates/` には再利用するテンプレートを置くこと
+- `ai-handoff/archive/` には完了済み task packet や findings を必要に応じて移すこと
+- Claude は handoff 開始前に task packet を作成または更新し、`current-task.md` から参照できる状態にすること
+- Codex は作業完了時に task packet の結果欄と `current-task.md` を更新し、次の着手者が迷わない状態にすること
+
 ## Git Rules
 - このプロジェクトは Git 管理を前提とする
 - 作業開始前に現在の Git 状態を確認すること
@@ -264,8 +307,17 @@ X 風デザインを模倣する必要はない。
 - feature branch 上の version bump commit や merge 前の commit に release tag を付けないこと
 - version bump を行ったときは、対応する release tag を付けること
 - version bump を行ったときは、対応する日本語のリリースノートを `docs/release-notes/` に作成または更新すること
-- `git push` を実行する場合は、対応する release tag の作成と `docs/release-notes/` の作成または更新までを同じ作業に含めること
+- `git push` を実行する場合は、対応する release tag の作成、`docs/release-notes/` の作成または更新、GitHub Release の作成までを同じ作業に含めること
 - リリースノートは GitHub Release にそのまま転用できる粒度で、ユーザー向けの変更点を簡潔にまとめること
+- ユーザーが「Git操作でアップデートまで」と指示した場合は、必要に応じて次の順で進めること
+  - 変更内容にドキュメントなどが含まれる場合は `master` へコミット
+  - ブランチの作成
+  - 変更内容のブランチへの移行
+  - 変更内容に応じたコミット
+  - `master` へのマージ
+  - リリースノートの内容作成
+  - タグ付け
+- ユーザーが `git push` を許可した場合は、タグ付き push と GitHub Release 用リリースノート作成まで同じ作業に含めること
 
 ## Tooling Rules
 - 新規セットアップ時は package manager を早い段階で固定し、以後は混在させないこと
