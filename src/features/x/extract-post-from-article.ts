@@ -192,11 +192,9 @@ function extractTextWithEmoji(element: Node): string {
 }
 
 function normalizePostText(element: HTMLElement): string | null {
-  // Prefer innerText (layout-aware, includes <img alt>) when available and non-empty.
-  // Fall back to our own DOM walk that handles Twemoji <img alt> explicitly.
-  const rawText =
-    (element.innerText !== "" ? element.innerText : null) ??
-    extractTextWithEmoji(element);
+  // Chrome on X can drop Twemoji <img alt> from innerText even when the text is visible.
+  // Walk the DOM so inline emoji in post bodies are preserved deterministically.
+  const rawText = extractTextWithEmoji(element);
 
   const normalized = rawText
     .replace(/\r\n?/g, "\n")
