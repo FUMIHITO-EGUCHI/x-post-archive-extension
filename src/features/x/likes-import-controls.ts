@@ -1,7 +1,7 @@
 import {
   requestClearLogs,
   requestDebugLog,
-  requestSavePostsBatch
+  requestSavePost
 } from "../runtime/client";
 import { loadDebugInspectPostIds } from "../debug/debug-settings";
 import {
@@ -11,6 +11,7 @@ import {
   type ArchiveLanguage
 } from "../settings/archive-language";
 import {
+  type ExtractedPostBundle,
   extractPostFromArticle,
   extractPostIdFromArticle,
   inspectArticleMediaSignals
@@ -72,6 +73,11 @@ type PendingMediaWaitState = {
   firstSeenAt: number;
   waitPasses: number;
   mediaHintCount: number;
+};
+
+type QueuedPostBundle = ExtractedPostBundle & {
+  post: SavePostInput;
+  quotedPost: SavePostInput | null;
 };
 
 export function isLikesTimelinePage(currentUrl = window.location.href): boolean {
@@ -251,8 +257,8 @@ async function startLikesImport(): Promise<void> {
     });
   }
 
-  const collectedPosts = new Map<string, SavePostInput>();
-  const saveQueue = new Map<string, SavePostInput>();
+  const collectedPosts = new Map<string, QueuedPostBundle>();
+  const saveQueue = new Map<string, QueuedPostBundle>();
   const pendingMediaWaits = new Map<string, PendingMediaWaitState>();
   let noProgressPasses = 0;
 
@@ -355,7 +361,7 @@ async function startLikesImport(): Promise<void> {
 }
 
 async function processSaveQueue(
-  saveQueue: Map<string, SavePostInput>,
+  saveQueue: Map<string, QueuedPostBundle>,
   run: LikesImportRun
 ): Promise<void> {
   const language = overlayLanguage;
@@ -368,29 +374,25 @@ async function processSaveQueue(
 
     const batch = [...saveQueue.values()].slice(0, SAVE_BATCH_SIZE);
 
-    for (const post of batch) {
-      saveQueue.delete(post.x_post_id);
+    for (const item of batch) {
+      saveQueue.delete(item.post.x_post_id);
     }
 
     try {
-      const response = await requestSavePostsBatch(
-        batch.map((post) => ({
-          ...post,
-          auto_tags: buildLocalizedDefaultAutoTags(language, post, {
-            includeLikedTag: true
-          })
-        })),
-        {
-          traceId: run.traceId
-        }
-      );
+      for (const item of batch) {
+        const response = await saveQueuedPostBundle(item, language, run.traceId);
 
-    run.stats.saved += response.saved;
-    run.stats.duplicates += response.duplicates;
-    run.stats.failed += response.failed;
+        if (response.status === "saved") {
+          run.stats.saved += 1;
+        } else if (response.status === "duplicate") {
+          run.stats.duplicates += 1;
+        } else {
+          run.stats.failed += 1;
+        }
+      }
     } catch (error) {
       console.error("Bulk like import batch save failed.", {
-        postIds: batch.map((post) => post.x_post_id),
+        postIds: batch.map((item) => item.post.x_post_id),
         error
       });
       run.stats.failed += batch.length;
@@ -407,8 +409,8 @@ async function processSaveQueue(
 }
 
 function collectVisiblePosts(
-  collectedPosts: Map<string, SavePostInput>,
-  saveQueue: Map<string, SavePostInput>,
+  collectedPosts: Map<string, QueuedPostBundle>,
+  saveQueue: Map<string, QueuedPostBundle>,
   pendingMediaWaits: Map<string, PendingMediaWaitState>,
   stats: OverlayStats,
   run?: LikesImportRun
@@ -418,10 +420,10 @@ function collectVisiblePosts(
 
   for (const article of articles) {
     const xPostId = extractPostIdFromArticle(article);
-    const post = extractPostFromArticle(article);
+    const extracted = extractPostFromArticle(article);
     const mediaSignals = inspectArticleMediaSignals(article);
 
-    if (post === null) {
+    if (extracted === null) {
       emitInspectTrace(run, xPostId, {
         outcome: "post_null",
         imageHintCount: mediaSignals.imageHintCount,
@@ -430,6 +432,8 @@ function collectVisiblePosts(
       continue;
     }
 
+    const bundle = prepareQueuedPostBundle(extracted);
+    const post = bundle.post;
     const savableMediaCount = post.media.length + countSavableVideoCandidates(post);
     const mediaHintCount = mediaSignals.imageHintCount + mediaSignals.videoHintCount;
     const shouldWaitForMedia = mediaHintCount > savableMediaCount;
@@ -448,14 +452,14 @@ function collectVisiblePosts(
 
     const existing = collectedPosts.get(post.x_post_id);
 
-    if (existing !== undefined && !isPostSnapshotRicher(post, existing)) {
+    if (existing !== undefined && !isQueuedPostSnapshotRicher(bundle, existing)) {
       pendingMediaWaits.delete(post.x_post_id);
       emitInspectTrace(run, post.x_post_id, {
         outcome: "skipped_not_richer",
         mediaCount: post.media.length,
         videoCandidateCount: post.video_candidates?.length ?? 0,
-        existingMediaCount: existing.media.length,
-        existingVideoCandidateCount: existing.video_candidates?.length ?? 0
+        existingMediaCount: existing.post.media.length,
+        existingVideoCandidateCount: existing.post.video_candidates?.length ?? 0
       });
       continue;
     }
@@ -477,7 +481,7 @@ function collectVisiblePosts(
       });
 
       if (nextWaitState.waitPasses < MEDIA_WAIT_PASS_LIMIT) {
-        collectedPosts.set(post.x_post_id, post);
+        collectedPosts.set(post.x_post_id, bundle);
         continue;
       }
 
@@ -486,8 +490,8 @@ function collectVisiblePosts(
       pendingMediaWaits.delete(post.x_post_id);
     }
 
-    collectedPosts.set(post.x_post_id, post);
-    saveQueue.set(post.x_post_id, post);
+    collectedPosts.set(post.x_post_id, bundle);
+    saveQueue.set(post.x_post_id, bundle);
     emitInspectTrace(run, post.x_post_id, {
       outcome: "queued",
       mediaCount: post.media.length,
@@ -500,8 +504,8 @@ function collectVisiblePosts(
 }
 
 function queuePendingMediaWaits(
-  collectedPosts: Map<string, SavePostInput>,
-  saveQueue: Map<string, SavePostInput>,
+  collectedPosts: Map<string, QueuedPostBundle>,
+  saveQueue: Map<string, QueuedPostBundle>,
   pendingMediaWaits: Map<string, PendingMediaWaitState>
 ): void {
   for (const xPostId of pendingMediaWaits.keys()) {
@@ -545,19 +549,29 @@ function emitInspectTrace(
   });
 }
 
-function isPostSnapshotRicher(candidate: SavePostInput, current: SavePostInput): boolean {
-  const candidateScore = scorePostSnapshot(candidate);
-  const currentScore = scorePostSnapshot(current);
+function isQueuedPostSnapshotRicher(
+  candidate: QueuedPostBundle,
+  current: QueuedPostBundle
+): boolean {
+  const candidateScore = scoreQueuedPostBundle(candidate);
+  const currentScore = scoreQueuedPostBundle(current);
 
   if (candidateScore !== currentScore) {
     return candidateScore > currentScore;
   }
 
-  if (candidate.post_text.length !== current.post_text.length) {
-    return candidate.post_text.length > current.post_text.length;
+  if (candidate.post.post_text.length !== current.post.post_text.length) {
+    return candidate.post.post_text.length > current.post.post_text.length;
   }
 
   return false;
+}
+
+function scoreQueuedPostBundle(bundle: QueuedPostBundle): number {
+  return (
+    scorePostSnapshot(bundle.post) +
+    (bundle.quotedPost === null ? 0 : scorePostSnapshot(bundle.quotedPost) + 25)
+  );
 }
 
 function scorePostSnapshot(post: SavePostInput): number {
@@ -602,6 +616,80 @@ function scorePostSnapshot(post: SavePostInput): number {
 function countSavableVideoCandidates(post: SavePostInput): number {
   return (post.video_candidates ?? []).filter((candidate) => candidate.download_mode === "direct_mp4")
     .length;
+}
+
+function prepareQueuedPostBundle(extracted: ExtractedPostBundle): QueuedPostBundle {
+  return {
+    post: {
+      ...extracted.post,
+      quoted_post_id: extracted.quotedPost?.x_post_id ?? null
+    },
+    quotedPost: extracted.quotedPost
+  };
+}
+
+async function saveQueuedPostBundle(
+  item: QueuedPostBundle,
+  language: ArchiveLanguage,
+  traceId: string
+): Promise<{
+  status: "saved" | "duplicate" | "failed";
+}> {
+  const post: SavePostInput = {
+    ...item.post,
+    auto_tags: buildLocalizedDefaultAutoTags(language, item.post, {
+      includeLikedTag: true
+    })
+  };
+
+  if (item.quotedPost === null) {
+    try {
+      const response = await requestSavePost(post, {
+        traceId
+      });
+
+      return {
+        status: response.status
+      };
+    } catch {
+      return {
+        status: "failed"
+      };
+    }
+  }
+
+  let quotedPostId: string | null = null;
+
+  try {
+    const quotedResponse = await requestSavePost(item.quotedPost, {
+      traceId
+    });
+
+    if (quotedResponse.status === "saved" || quotedResponse.status === "duplicate") {
+      quotedPostId = item.quotedPost.x_post_id;
+    }
+  } catch (error) {
+    console.warn("Quoted post save failed during likes import. Saving the main post without linkage.", {
+      quotedPostId: item.quotedPost.x_post_id,
+      error
+    });
+  }
+
+  post.quoted_post_id = quotedPostId;
+
+  try {
+    const response = await requestSavePost(post, {
+      traceId
+    });
+
+    return {
+      status: response.status
+    };
+  } catch {
+    return {
+      status: "failed"
+    };
+  }
 }
 
 function scrollLikesTimeline(): void {

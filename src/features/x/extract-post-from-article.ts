@@ -4,18 +4,25 @@ import type {
 } from "../../types/archive";
 import { getCachedGraphqlVideoCandidates } from "./graphql-video-candidate-cache";
 
-const POST_PATH_PATTERN = /^\/([^/]+)\/status\/(\d+)$/;
+const POST_PATH_PATTERN = /^\/([^/]+)\/status\/(\d+)/;
 const PHOTO_PATH_PATTERN = /\/photo\/(\d+)$/;
+const QUOTED_POST_CONTAINER_SELECTOR = 'div[role="link"][tabindex="0"]';
 
-export function extractPostFromArticle(article: HTMLElement): SavePostInput | null {
-  const permalink = findPermalink(article);
+export type ExtractedPostBundle = {
+  post: SavePostInput;
+  quotedPost: SavePostInput | null;
+};
+
+export function extractPostFromArticle(article: HTMLElement): ExtractedPostBundle | null {
+  const quotedPostContainer = findQuotedPostContainer(article);
+  const permalink = findPermalink(article, quotedPostContainer);
 
   if (permalink === null) {
     return null;
   }
 
-  const media = extractPostImages(article);
-  const text = extractPostText(article);
+  const media = extractPostImages(article, quotedPostContainer);
+  const text = extractPostText(article, quotedPostContainer);
   const videoCandidates = getCachedGraphqlVideoCandidates(permalink.xPostId);
   const engagement = extractEngagementCounts(article);
 
@@ -25,7 +32,7 @@ export function extractPostFromArticle(article: HTMLElement): SavePostInput | nu
 
   const post: SavePostInput = {
     x_post_id: permalink.xPostId,
-    display_name: extractDisplayName(article, permalink.xUsername),
+    display_name: extractDisplayName(article, permalink.xUsername, quotedPostContainer),
     x_username: permalink.xUsername,
     post_text: text,
     post_url: permalink.postUrl,
@@ -40,10 +47,15 @@ export function extractPostFromArticle(article: HTMLElement): SavePostInput | nu
     post.video_candidates = videoCandidates;
   }
 
-  return post;
+  return {
+    post,
+    quotedPost:
+      quotedPostContainer === null ? null : extractQuotedPostFromContainer(quotedPostContainer)
+  };
 }
+
 export function extractPostIdFromArticle(article: HTMLElement): string | null {
-  const permalink = findPermalink(article);
+  const permalink = findPermalink(article, findQuotedPostContainer(article));
   return permalink?.xPostId ?? null;
 }
 
@@ -51,6 +63,7 @@ export function inspectArticleMediaSignals(article: HTMLElement): {
   imageHintCount: number;
   videoHintCount: number;
 } {
+  const quotedPostContainer = findQuotedPostContainer(article);
   const imageUrls = new Set<string>();
   const videoPosterUrls = new Set<string>();
   const photoAnchors = article.querySelectorAll<HTMLAnchorElement>('a[href*="/photo/"]');
@@ -58,6 +71,10 @@ export function inspectArticleMediaSignals(article: HTMLElement): {
   const playButtons = article.querySelectorAll('[data-testid="playButton"]');
 
   for (const image of article.querySelectorAll<HTMLImageElement>("img[src]")) {
+    if (isNodeInsideContainer(image, quotedPostContainer)) {
+      continue;
+    }
+
     const normalizedImageUrl = normalizeImageUrl(image.currentSrc || image.src);
 
     if (normalizedImageUrl !== null) {
@@ -73,6 +90,10 @@ export function inspectArticleMediaSignals(article: HTMLElement): {
   }
 
   for (const video of article.querySelectorAll<HTMLVideoElement>("video")) {
+    if (isNodeInsideContainer(video, quotedPostContainer)) {
+      continue;
+    }
+
     const normalizedPosterUrl = normalizeVideoPosterUrl(video.poster);
 
     if (normalizedPosterUrl !== null) {
@@ -82,19 +103,32 @@ export function inspectArticleMediaSignals(article: HTMLElement): {
 
   const imageTweetPhotoCount = Math.max(
     0,
-    tweetPhotoContainers.length - videoPosterUrls.size - playButtons.length
+    countElementsOutsideContainer(tweetPhotoContainers, quotedPostContainer) -
+      videoPosterUrls.size -
+      countElementsOutsideContainer(playButtons, quotedPostContainer)
   );
 
   return {
-    imageHintCount: Math.max(imageUrls.size, photoAnchors.length, imageTweetPhotoCount),
-    videoHintCount: Math.max(videoPosterUrls.size, playButtons.length)
+    imageHintCount: Math.max(
+      imageUrls.size,
+      countElementsOutsideContainer(photoAnchors, quotedPostContainer),
+      imageTweetPhotoCount
+    ),
+    videoHintCount: Math.max(
+      videoPosterUrls.size,
+      countElementsOutsideContainer(playButtons, quotedPostContainer)
+    )
   };
 }
 
-function extractPostText(article: HTMLElement): string {
-  const tweetText = article.querySelector<HTMLElement>('[data-testid="tweetText"]');
+function extractPostText(article: HTMLElement, exclude?: Element | null): string {
+  const tweetTextCandidates = article.querySelectorAll<HTMLElement>('[data-testid="tweetText"]');
 
-  if (tweetText !== null) {
+  for (const tweetText of tweetTextCandidates) {
+    if (isNodeInsideContainer(tweetText, exclude)) {
+      continue;
+    }
+
     const exactText = normalizePostText(tweetText);
 
     if (exactText !== null) {
@@ -106,7 +140,10 @@ function extractPostText(article: HTMLElement): string {
   let bestCandidate: string | null = null;
 
   for (const candidate of langCandidates) {
-    if (candidate.closest('[role="button"], a, nav, header, footer') !== null) {
+    if (
+      isNodeInsideContainer(candidate, exclude) ||
+      candidate.closest('[role="button"], a, nav, header, footer') !== null
+    ) {
       continue;
     }
 
@@ -124,9 +161,32 @@ function extractPostText(article: HTMLElement): string {
   return bestCandidate ?? "";
 }
 
-function extractDisplayName(article: HTMLElement, fallbackUsername: string): string {
-  const userNameContainer = article.querySelector<HTMLElement>('[data-testid="User-Name"]');
+function extractDisplayName(
+  article: HTMLElement,
+  fallbackUsername: string,
+  exclude?: Element | null
+): string {
+  const userNameContainers = article.querySelectorAll<HTMLElement>('[data-testid="User-Name"]');
 
+  for (const userNameContainer of userNameContainers) {
+    if (isNodeInsideContainer(userNameContainer, exclude)) {
+      continue;
+    }
+
+    const displayName = extractDisplayNameFromContainer(userNameContainer, fallbackUsername);
+
+    if (displayName !== fallbackUsername) {
+      return displayName;
+    }
+  }
+
+  return fallbackUsername;
+}
+
+function extractDisplayNameFromContainer(
+  userNameContainer: HTMLElement,
+  fallbackUsername: string
+): string {
   if (userNameContainer === null) {
     return fallbackUsername;
   }
@@ -204,11 +264,11 @@ function normalizePostText(element: HTMLElement): string | null {
   return normalized === "" ? null : normalized;
 }
 
-function extractPostImages(article: HTMLElement): SaveImageInput[] {
+function extractPostImages(article: HTMLElement, exclude?: Element | null): SaveImageInput[] {
   const images: SaveImageInput[] = [];
   const seenUrls = new Set<string>();
 
-  for (const candidate of collectMediaImageCandidates(article)) {
+  for (const candidate of collectMediaImageCandidates(article, exclude)) {
     const normalizedUrl = normalizeImageUrl(candidate.img.currentSrc || candidate.img.src);
 
     if (normalizedUrl === null || seenUrls.has(normalizedUrl)) {
@@ -236,7 +296,10 @@ function extractPostImages(article: HTMLElement): SaveImageInput[] {
     }));
 }
 
-function collectMediaImageCandidates(article: HTMLElement): Array<{
+function collectMediaImageCandidates(
+  article: HTMLElement,
+  exclude: Element | null = null
+): Array<{
   img: HTMLImageElement;
   anchor: HTMLAnchorElement | null;
 }> {
@@ -248,9 +311,13 @@ function collectMediaImageCandidates(article: HTMLElement): Array<{
   const photoAnchors = article.querySelectorAll<HTMLAnchorElement>('a[href*="/photo/"]');
 
   for (const anchor of photoAnchors) {
+    if (isNodeInsideContainer(anchor, exclude)) {
+      continue;
+    }
+
     const img = anchor.querySelector<HTMLImageElement>("img[src]");
 
-    if (img === null || seenElements.has(img)) {
+    if (img === null || seenElements.has(img) || isNodeInsideContainer(img, exclude)) {
       continue;
     }
 
@@ -262,7 +329,7 @@ function collectMediaImageCandidates(article: HTMLElement): Array<{
   }
 
   for (const img of article.querySelectorAll<HTMLImageElement>('img[src*="pbs.twimg.com/media/"]')) {
-    if (seenElements.has(img)) {
+    if (seenElements.has(img) || isNodeInsideContainer(img, exclude)) {
       continue;
     }
 
@@ -354,7 +421,7 @@ function normalizeVideoPosterUrl(src: string): string | null {
   }
 }
 
-function findPermalink(article: HTMLElement): {
+function findPermalink(article: ParentNode, exclude: Element | null = null): {
   xPostId: string;
   xUsername: string;
   postUrl: string;
@@ -362,7 +429,83 @@ function findPermalink(article: HTMLElement): {
   const anchors = article.querySelectorAll<HTMLAnchorElement>('a[href*="/status/"]');
 
   for (const anchor of anchors) {
+    if (isNodeInsideContainer(anchor, exclude)) {
+      continue;
+    }
+
     const parsed = parsePermalink(anchor.href);
+
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function findQuotedPostContainer(article: HTMLElement): HTMLElement | null {
+  return article.querySelector<HTMLElement>(QUOTED_POST_CONTAINER_SELECTOR);
+}
+
+function extractQuotedPostFromContainer(container: HTMLElement): SavePostInput | null {
+  const permalink = findQuotedPermalink(container);
+
+  if (permalink === null) {
+    return null;
+  }
+
+  const text = extractPostText(container);
+  const media = extractPostImages(container);
+  const engagement = extractEngagementCounts(container);
+
+  if (text === "" && media.length === 0) {
+    return null;
+  }
+
+  return {
+    x_post_id: permalink.xPostId,
+    display_name: extractDisplayName(container, permalink.xUsername),
+    x_username: permalink.xUsername,
+    post_text: text,
+    post_url: permalink.postUrl,
+    posted_at: extractPostedAt(container),
+    reply_count: engagement.reply_count,
+    repost_count: engagement.repost_count,
+    like_count: engagement.like_count,
+    media
+  };
+}
+
+function findQuotedPermalink(container: HTMLElement): {
+  xPostId: string;
+  xUsername: string;
+  postUrl: string;
+} | null {
+  const directPermalink = findPermalink(container);
+
+  if (directPermalink !== null) {
+    return directPermalink;
+  }
+
+  const capturedUrls: string[] = [];
+  const originalPushState = history.pushState.bind(history);
+
+  history.pushState = ((_: unknown, __: string, url?: string | URL | null) => {
+    if (typeof url === "string") {
+      capturedUrls.push(url);
+    } else if (url instanceof URL) {
+      capturedUrls.push(url.toString());
+    }
+  }) as History["pushState"];
+
+  try {
+    container.click();
+  } finally {
+    history.pushState = originalPushState;
+  }
+
+  for (const url of capturedUrls) {
+    const parsed = parsePermalink(url);
 
     if (parsed !== null) {
       return parsed;
@@ -508,9 +651,28 @@ function parsePermalink(href: string): {
     return {
       xUsername,
       xPostId,
-      postUrl: `${url.origin}${url.pathname}`
+      postUrl: `${url.origin}/${xUsername}/status/${xPostId}`
     };
   } catch {
     return null;
   }
+}
+
+function isNodeInsideContainer(node: Node | null, container: Element | null | undefined): boolean {
+  return node !== null && container !== null && container !== undefined && container.contains(node);
+}
+
+function countElementsOutsideContainer<T extends Element>(
+  elements: ArrayLike<T>,
+  container: Element | null
+): number {
+  let count = 0;
+
+  for (const element of Array.from(elements)) {
+    if (!isNodeInsideContainer(element, container)) {
+      count += 1;
+    }
+  }
+
+  return count;
 }

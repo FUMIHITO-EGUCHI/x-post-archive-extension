@@ -78,17 +78,34 @@ function scanTweetArticles(): void {
 
 async function attachSaveButton(article: HTMLElement): Promise<void> {
   const button = injectSaveButton(article, async () => {
-    const post = extractPostFromArticle(article);
+    const extracted = extractPostFromArticle(article);
 
-    if (post === null) {
+    if (extracted === null) {
       throw new Error("Post extraction failed.");
     }
 
     const language = await loadArchiveLanguage();
+    const { post, quotedPost } = extracted;
+
     post.auto_tags = buildLocalizedDefaultAutoTags(language, post, {
       includeLikedTag: isLikesTimelinePage()
     });
 
+    let quotedPostId: string | null = null;
+
+    if (quotedPost !== null) {
+      try {
+        const quotedResponse = await requestSavePost(quotedPost);
+
+        if (quotedResponse.status === "saved" || quotedResponse.status === "duplicate") {
+          quotedPostId = quotedPost.x_post_id;
+        }
+      } catch (error) {
+        console.warn("Quoted post save failed. Saving the main post without linkage.", error);
+      }
+    }
+
+    post.quoted_post_id = quotedPostId;
     const response = await requestSavePost(post);
 
     if (response.status !== "saved" && response.status !== "duplicate") {

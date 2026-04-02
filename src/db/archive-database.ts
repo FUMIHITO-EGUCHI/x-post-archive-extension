@@ -144,6 +144,15 @@ export class ArchiveDatabase extends Dexie {
                 : null);
           });
       });
+
+    this.version(10).stores({
+      posts: "&x_post_id, saved_at, posted_at, reply_count, repost_count, like_count, display_name",
+      media: "&media_id, x_post_id, [x_post_id+position], storage_status, saved_at",
+      tags: "&tag_id, &normalized_name, system_key, display_name, created_at",
+      post_tags:
+        "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, system_key, assigned_at",
+      logs: "&log_id, created_at, level, [level+created_at], scope, event, request_id"
+    });
   }
 }
 

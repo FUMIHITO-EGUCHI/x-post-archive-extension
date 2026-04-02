@@ -541,12 +541,16 @@ function requireNullableString(value: unknown, field: string): string | null {
 function requireNullableBuiltInTagKey(
   value: unknown,
   field: string
-): "liked" | "image" | "video" | null {
+): "liked" | "image" | "video" | "quoted" | null {
   if (value === undefined || value === null) {
     return null;
   }
 
-  return requireUnion(value, ["liked", "image", "video"], field) as "liked" | "image" | "video";
+  return requireUnion(value, ["liked", "image", "video", "quoted"], field) as
+    | "liked"
+    | "image"
+    | "video"
+    | "quoted";
 }
 
 function requireFiniteNumberValue(value: unknown, field: string): number {

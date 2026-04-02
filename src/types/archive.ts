@@ -2,7 +2,7 @@ export type MediaType = "image" | "video";
 
 export type MediaStorageStatus = "pending" | "ready" | "failed";
 export type TagSource = "auto" | "manual";
-export type BuiltInTagKey = "liked" | "image" | "video";
+export type BuiltInTagKey = "liked" | "image" | "video" | "quoted";
 
 export type VideoDownloadMode = "direct_mp4" | "hls";
 
@@ -16,6 +16,7 @@ export type PostRecord = {
   reply_count: number;
   repost_count: number;
   like_count: number;
+  quoted_post_id?: string | null;
   saved_at: number;
 };
 
@@ -95,6 +96,7 @@ export type SavePostInput = {
   reply_count: number;
   repost_count: number;
   like_count: number;
+  quoted_post_id?: string | null;
   media: SaveImageInput[];
   video_candidates?: SaveVideoCandidateInput[];
   auto_tags?: string[];
@@ -103,4 +105,5 @@ export type SavePostInput = {
 export type ArchivePostRecord = PostRecord & {
   media: MediaRecord[];
   tags: ArchiveTagRecord[];
+  quoted_post?: ArchivePostRecord;
 };
