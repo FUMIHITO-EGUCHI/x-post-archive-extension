@@ -9,12 +9,14 @@ const DEFAULT_AUTO_TAG_LABELS: Record<ArchiveLanguage, Record<DefaultAutoTagKey,
   ja: {
     liked: "いいね",
     image: "画像",
-    video: "動画"
+    video: "動画",
+    quoted: "引用"
   },
   en: {
     liked: "liked",
     image: "image",
-    video: "video"
+    video: "video",
+    quoted: "quoted"
   }
 };
 

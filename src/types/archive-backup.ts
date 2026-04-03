@@ -4,6 +4,7 @@ export type ArchiveBackupFileEntry = {
   path: string;
   mime_type: string | null;
   byte_size: number;
+  archive_path?: string;
 };
 
 export type ArchiveBackupManifest = {
