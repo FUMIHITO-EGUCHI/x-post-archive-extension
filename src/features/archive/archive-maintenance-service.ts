@@ -17,6 +17,7 @@ import type {
 } from "../../types/archive-backup";
 import {
   clearMediaRootFromOpfs,
+  deleteBlobFromOpfs,
   readBlobFromOpfs,
   writeBlobToOpfs
 } from "../media-storage/opfs-media-storage";
@@ -25,6 +26,7 @@ const ARCHIVE_BACKUP_FORMAT = "x-post-archive-backup";
 const ARCHIVE_BACKUP_VERSION = 1;
 const MEDIA_ROOT_PREFIX = "/media/";
 const BACKUP_MANIFEST_FILE_NAME = "manifest.json";
+const RESTORE_STAGING_ROOT = `${MEDIA_ROOT_PREFIX}restore-imports/`;
 
 export type ArchiveTransferProgress = {
   phase: string;
@@ -166,6 +168,9 @@ export async function importArchiveBackupZip(
         throw normalizeArchiveTransferError(error, "restore");
       });
     const backup = parseArchiveBackupManifest(JSON.parse(manifestText) as unknown);
+    const stagedBackup = createStagedBackupManifest(backup, crypto.randomUUID());
+    const existingMedia = await archiveDb.media.toArray();
+    const existingFilePaths = collectBackupFilePaths(existingMedia);
 
     onProgress?.({
       phase: "Validating backup",
@@ -177,90 +182,95 @@ export async function importArchiveBackupZip(
     validateRequiredBackupFiles(backup.data.media, fileEntries);
 
     onProgress?.({
-      phase: "Clearing current archive",
-      completed: 0,
-      total: 1,
-      detail: "Removing current saved archive data."
-    });
-
-    await clearArchiveData();
-
-    onProgress?.({
       phase: "Restoring files",
       completed: 0,
-      total: Math.max(backup.data.files.length, 1),
+      total: Math.max(stagedBackup.data.files.length, 1),
       detail:
-        backup.data.files.length === 0 ? "No archived media files to restore." : "Writing archived media files."
+        stagedBackup.data.files.length === 0
+          ? "No archived media files to restore."
+          : "Writing archived media files."
     });
 
-    for (const [index, fileEntry] of backup.data.files.entries()) {
-      const zipEntry = fileEntries.get(toZipEntryPath(fileEntry.path));
+    try {
+      for (const [index, fileEntry] of stagedBackup.data.files.entries()) {
+        const zipEntry = fileEntries.get(fileEntry.archive_path ?? toZipEntryPath(fileEntry.path));
 
-      if (zipEntry === undefined) {
-        throw new Error(`Backup ZIP is missing ${toZipEntryPath(fileEntry.path)}.`);
-      }
+        if (zipEntry === undefined) {
+          throw new Error(`Backup ZIP is missing ${fileEntry.archive_path ?? toZipEntryPath(fileEntry.path)}.`);
+        }
 
-      const blob = await zipEntry
-        .getData(new BlobWriter(fileEntry.mime_type ?? "application/octet-stream"), {
-          useWebWorkers: false
-        })
-        .catch((error: unknown) => {
-          throw normalizeArchiveTransferError(error, "restore");
+        const blob = await zipEntry
+          .getData(new BlobWriter(fileEntry.mime_type ?? "application/octet-stream"), {
+            useWebWorkers: false
+          })
+          .catch((error: unknown) => {
+            throw normalizeArchiveTransferError(error, "restore");
+          });
+        await writeBlobToOpfs(fileEntry.path, blob);
+
+        onProgress?.({
+          phase: "Restoring files",
+          completed: index + 1,
+          total: stagedBackup.data.files.length,
+          detail: fileEntry.path
         });
-      await writeBlobToOpfs(fileEntry.path, blob);
+      }
 
       onProgress?.({
-        phase: "Restoring files",
-        completed: index + 1,
-        total: backup.data.files.length,
-        detail: fileEntry.path
+        phase: "Restoring database",
+        completed: 0,
+        total: 4,
+        detail: "Writing archive records."
       });
+
+      await archiveDb.transaction(
+        "rw",
+        archiveDb.posts,
+        archiveDb.media,
+        archiveDb.tags,
+        archiveDb.post_tags,
+        async () => {
+          await archiveDb.post_tags.clear();
+          await archiveDb.tags.clear();
+          await archiveDb.media.clear();
+          await archiveDb.posts.clear();
+
+          await archiveDb.posts.bulkPut(stagedBackup.data.posts);
+          onProgress?.({
+            phase: "Restoring database",
+            completed: 1,
+            total: 4,
+            detail: "Posts restored."
+          });
+          await archiveDb.media.bulkPut(stagedBackup.data.media);
+          onProgress?.({
+            phase: "Restoring database",
+            completed: 2,
+            total: 4,
+            detail: "Media restored."
+          });
+          await archiveDb.tags.bulkPut(stagedBackup.data.tags);
+          onProgress?.({
+            phase: "Restoring database",
+            completed: 3,
+            total: 4,
+            detail: "Tags restored."
+          });
+          await archiveDb.post_tags.bulkPut(stagedBackup.data.post_tags);
+          onProgress?.({
+            phase: "Restoring database",
+            completed: 4,
+            total: 4,
+            detail: "Post tag relations restored."
+          });
+        }
+      );
+    } catch (error) {
+      await cleanupRestoredFiles(stagedBackup.data.files.map((entry) => entry.path));
+      throw error;
     }
 
-    onProgress?.({
-      phase: "Restoring database",
-      completed: 0,
-      total: 4,
-      detail: "Writing archive records."
-    });
-
-    await archiveDb.transaction(
-      "rw",
-      archiveDb.posts,
-      archiveDb.media,
-      archiveDb.tags,
-      archiveDb.post_tags,
-      async () => {
-        await archiveDb.posts.bulkPut(backup.data.posts);
-        onProgress?.({
-          phase: "Restoring database",
-          completed: 1,
-          total: 4,
-          detail: "Posts restored."
-        });
-        await archiveDb.media.bulkPut(backup.data.media);
-        onProgress?.({
-          phase: "Restoring database",
-          completed: 2,
-          total: 4,
-          detail: "Media restored."
-        });
-        await archiveDb.tags.bulkPut(backup.data.tags);
-        onProgress?.({
-          phase: "Restoring database",
-          completed: 3,
-          total: 4,
-          detail: "Tags restored."
-        });
-        await archiveDb.post_tags.bulkPut(backup.data.post_tags);
-        onProgress?.({
-          phase: "Restoring database",
-          completed: 4,
-          total: 4,
-          detail: "Post tag relations restored."
-        });
-      }
-    );
+    await cleanupRestoredFiles(existingFilePaths);
 
     onProgress?.({
       phase: "Restore complete",
@@ -269,7 +279,7 @@ export async function importArchiveBackupZip(
       detail: "Archive restore finished."
     });
 
-    return summarizeBackup(backup);
+    return summarizeBackup(stagedBackup);
   } catch (error) {
     throw normalizeArchiveTransferError(error, "restore");
   } finally {
@@ -420,6 +430,8 @@ function parsePostRecord(value: unknown): PostRecord {
     throw new Error("Post record is invalid.");
   }
 
+  const quotedPostId = requireNullableOptionalString(value.quoted_post_id, "post.quoted_post_id");
+
   return {
     x_post_id: requireString(value.x_post_id, "post.x_post_id"),
     display_name: requireString(value.display_name, "post.display_name"),
@@ -430,6 +442,7 @@ function parsePostRecord(value: unknown): PostRecord {
     reply_count: requireFiniteNumberValue(value.reply_count, "post.reply_count"),
     repost_count: requireFiniteNumberValue(value.repost_count, "post.repost_count"),
     like_count: requireFiniteNumberValue(value.like_count, "post.like_count"),
+    ...(quotedPostId === undefined ? {} : { quoted_post_id: quotedPostId }),
     saved_at: requireFiniteNumberValue(value.saved_at, "post.saved_at")
   };
 }
@@ -541,12 +554,28 @@ function requireNullableString(value: unknown, field: string): string | null {
 function requireNullableBuiltInTagKey(
   value: unknown,
   field: string
-): "liked" | "image" | "video" | null {
+): "liked" | "image" | "video" | "quoted" | null {
   if (value === undefined || value === null) {
     return null;
   }
 
-  return requireUnion(value, ["liked", "image", "video"], field) as "liked" | "image" | "video";
+  return requireUnion(value, ["liked", "image", "video", "quoted"], field) as
+    | "liked"
+    | "image"
+    | "video"
+    | "quoted";
+}
+
+function requireNullableOptionalString(value: unknown, field: string): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  return requireString(value, field);
 }
 
 function requireFiniteNumberValue(value: unknown, field: string): number {
@@ -597,6 +626,59 @@ function requireNullableBackupPath(value: unknown, field: string): string | null
 
 function toZipEntryPath(opfsPath: string): string {
   return opfsPath.startsWith("/") ? opfsPath.slice(1) : opfsPath;
+}
+
+function createStagedBackupManifest(
+  backup: ArchiveBackupManifest,
+  restoreId: string
+): ArchiveBackupManifest {
+  const pathMap = new Map<string, string>();
+  const files = backup.data.files.map((fileEntry) => {
+    const stagedPath = createRestoreStagingPath(fileEntry.path, restoreId);
+    pathMap.set(fileEntry.path, stagedPath);
+
+    return {
+      ...fileEntry,
+      path: stagedPath,
+      archive_path: toZipEntryPath(fileEntry.path)
+    };
+  });
+
+  return {
+    ...backup,
+    data: {
+      posts: backup.data.posts,
+      media: backup.data.media.map((media) => ({
+        ...media,
+        opfs_path: pathMap.get(media.opfs_path) ?? media.opfs_path,
+        preview_image_opfs_path:
+          media.preview_image_opfs_path === null
+            ? null
+            : pathMap.get(media.preview_image_opfs_path) ?? media.preview_image_opfs_path
+      })),
+      tags: backup.data.tags,
+      post_tags: backup.data.post_tags,
+      files
+    }
+  };
+}
+
+function createRestoreStagingPath(opfsPath: string, restoreId: string): string {
+  if (!opfsPath.startsWith(MEDIA_ROOT_PREFIX)) {
+    throw new Error(`Restore path must be under ${MEDIA_ROOT_PREFIX}.`);
+  }
+
+  return `${RESTORE_STAGING_ROOT}${restoreId}/${opfsPath.slice(MEDIA_ROOT_PREFIX.length)}`;
+}
+
+async function cleanupRestoredFiles(paths: string[]): Promise<void> {
+  for (const path of paths) {
+    try {
+      await deleteBlobFromOpfs(path);
+    } catch {
+      // Best-effort cleanup only. Leaving stale files is safer than risking archive loss.
+    }
+  }
 }
 
 function createBackupFilename(timestamp: number): string {
