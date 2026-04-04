@@ -2,7 +2,8 @@ import type {
   ArchivePostRecord,
   ArchiveTagRecord,
   PostRecord,
-  SavePostInput
+  SavePostInput,
+  TagRecord
 } from "./archive";
 import type { LogLevel } from "./logger";
 import type {
@@ -62,6 +63,18 @@ export type RemovePostTagMessage = {
   normalizedTagName: string;
 };
 
+export type RenameTagMessage = {
+  type: "tag.rename";
+  tagId: string;
+  newDisplayName: string;
+};
+
+export type MergeTagsMessage = {
+  type: "tag.merge";
+  sourceTagId: string;
+  targetTagId: string;
+};
+
 export type ClearLogsMessage = {
   type: "logs/clear";
 };
@@ -86,6 +99,8 @@ export type RuntimeMessage =
   | DeletePostMessage
   | AddPostTagMessage
   | RemovePostTagMessage
+  | RenameTagMessage
+  | MergeTagsMessage
   | ClearLogsMessage
   | DebugLogMessage;
 
@@ -141,6 +156,25 @@ export type UpdatePostTagsResponse = {
   tags: ArchiveTagRecord[];
 };
 
+export type RenameTagResponse =
+  | {
+      type: "tag.rename";
+      ok: true;
+      tag: TagRecord;
+    }
+  | {
+      type: "tag.rename";
+      ok: false;
+      error: "collision";
+      conflictingTagId: string;
+    };
+
+export type MergeTagsResponse = {
+  type: "tag.merge";
+  mergedPostCount: number;
+  removedDuplicateCount: number;
+};
+
 export type ClearLogsResponse = {
   type: "logs/clear-result";
   deleted: boolean;
@@ -161,5 +195,7 @@ export type RuntimeResponse =
   | GetArchiveSummaryResponse
   | DeletePostResponse
   | UpdatePostTagsResponse
+  | RenameTagResponse
+  | MergeTagsResponse
   | ClearLogsResponse
   | RuntimeErrorResponse;

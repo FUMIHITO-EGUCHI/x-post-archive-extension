@@ -1,3 +1,4 @@
+import type { ContentScriptContext } from "#imports";
 import { requestHasPost, requestSavePost } from "../runtime/client";
 import {
   buildLocalizedDefaultAutoTags,
@@ -16,47 +17,79 @@ import {
 const processedArticles = new WeakSet<HTMLElement>();
 let initialized = false;
 let scheduled = false;
+let bodyObserver: MutationObserver | null = null;
+let pendingDomReadyListener: (() => void) | null = null;
+let isContentScriptActive = true;
 
-export function bootstrapXContentScript(): void {
+export function bootstrapXContentScript(ctx: ContentScriptContext): void {
+  isContentScriptActive = true;
+  ctx.onInvalidated(() => {
+    isContentScriptActive = false;
+    initialized = false;
+    scheduled = false;
+    bodyObserver?.disconnect();
+    bodyObserver = null;
+    pendingDomReadyListener?.();
+    pendingDomReadyListener = null;
+    removeLikesImportControls();
+  });
   ensureGraphqlVideoCandidateListener();
-  startWhenBodyReady();
+  startWhenBodyReady(ctx);
 }
 
-function startWhenBodyReady(): void {
-  if (initialized) {
+function startWhenBodyReady(ctx: ContentScriptContext): void {
+  if (!isContentScriptActive || initialized) {
     return;
   }
 
   if (document.body === null) {
-    document.addEventListener("DOMContentLoaded", startWhenBodyReady, {
-      once: true
-    });
+    if (pendingDomReadyListener !== null) {
+      return;
+    }
+
+    const handleDomReady = () => {
+      pendingDomReadyListener = null;
+      startWhenBodyReady(ctx);
+    };
+
+    document.addEventListener("DOMContentLoaded", handleDomReady, { once: true });
+    pendingDomReadyListener = () => {
+      document.removeEventListener("DOMContentLoaded", handleDomReady);
+    };
     return;
   }
 
   initialized = true;
   scanTweetArticles();
-  observeDomChanges();
+  observeDomChanges(ctx);
 }
 
-function observeDomChanges(): void {
-  if (document.body === null) {
+function observeDomChanges(ctx: ContentScriptContext): void {
+  if (!isContentScriptActive || document.body === null || bodyObserver !== null) {
     return;
   }
 
-  const observer = new MutationObserver(() => {
+  bodyObserver = new MutationObserver(() => {
+    if (!isContentScriptActive) {
+      return;
+    }
+
     if (scheduled) {
       return;
     }
 
     scheduled = true;
-    window.requestAnimationFrame(() => {
+    ctx.requestAnimationFrame(() => {
+      if (!isContentScriptActive) {
+        return;
+      }
+
       scheduled = false;
       scanTweetArticles();
     });
   });
 
-  observer.observe(document.body, {
+  bodyObserver.observe(document.body, {
     childList: true,
     subtree: true
   });
@@ -124,6 +157,10 @@ async function attachSaveButton(article: HTMLElement): Promise<void> {
     const exists = await requestHasPost(xPostId);
     setButtonState(button, exists ? "saved" : "idle");
   } catch (error) {
+    if (isExtensionContextInvalidatedError(error)) {
+      return;
+    }
+
     console.error("Failed to check saved state.", error);
     setButtonState(button, "idle");
   }
@@ -136,4 +173,8 @@ function syncLikesImportControls(): void {
   }
 
   removeLikesImportControls();
+}
+
+function isExtensionContextInvalidatedError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("Extension context invalidated");
 }

@@ -27,13 +27,16 @@ import {
   getPostTagByNormalizedName,
   listAllPostTags,
   listPostIdsByNormalizedName,
+  listPostTagsByTagId,
   listPostTagsByPostId,
   listPostTagsByPostIds
 } from "../../db/repositories/post-tags-repository";
 import {
   addTag,
   deleteTagsByIds,
-  getTagByNormalizedName
+  getTagById,
+  getTagByNormalizedName,
+  updateTag
 } from "../../db/repositories/tags-repository";
 import { resolveKnownBuiltInTagKey } from "../settings/archive-language";
 import type {
@@ -411,6 +414,163 @@ export async function removeManualTagFromArchivePost(
   });
 
   return tags;
+}
+
+export async function renameTag(
+  tagId: string,
+  newDisplayName: string
+): Promise<
+  | {
+      ok: true;
+      tag: TagRecord;
+    }
+  | {
+      ok: false;
+      error: "collision";
+      conflictingTagId: string;
+    }
+> {
+  const normalizedName = normalizeTagName(newDisplayName);
+
+  if (normalizedName === null) {
+    throw new Error("Invalid tag name.");
+  }
+
+  const displayName = cleanupTagName(newDisplayName);
+  let previousNormalizedName: string | null = null;
+  const result = await archiveDb.transaction<
+    | {
+        ok: true;
+        tag: TagRecord;
+      }
+    | {
+        ok: false;
+        error: "collision";
+        conflictingTagId: string;
+      }
+  >(
+    "rw",
+    archiveDb.tags,
+    archiveDb.post_tags,
+    async () => {
+      const currentTag = await getTagById(tagId);
+
+      if (currentTag === undefined) {
+        throw new Error("Tag not found.");
+      }
+
+      previousNormalizedName = currentTag.normalized_name;
+
+      if (normalizedName !== currentTag.normalized_name) {
+        const conflictingTag = await getTagByNormalizedName(normalizedName);
+
+        if (conflictingTag !== undefined) {
+          return {
+            ok: false,
+            error: "collision",
+            conflictingTagId: conflictingTag.tag_id
+          };
+        }
+      }
+
+      const nextTag: TagRecord = {
+        ...currentTag,
+        normalized_name: normalizedName,
+        display_name: displayName
+      };
+
+      await updateTag(nextTag);
+      await archiveDb.post_tags.where("tag_id").equals(tagId).modify({
+        normalized_name: normalizedName,
+        display_name: displayName
+      });
+
+      return {
+        ok: true,
+        tag: nextTag
+      };
+    }
+  );
+
+  if (result.ok) {
+    logger.info("tags.rename.completed", {
+      context: {
+        tagId,
+        oldNormalizedName: previousNormalizedName,
+        newNormalizedName: normalizedName
+      }
+    });
+  }
+
+  return result;
+}
+
+export async function mergeTags(
+  sourceTagId: string,
+  targetTagId: string
+): Promise<{
+  mergedPostCount: number;
+  removedDuplicateCount: number;
+}> {
+  if (sourceTagId === targetTagId) {
+    throw new Error("Cannot merge the same tag.");
+  }
+
+  let mergedPostCount = 0;
+  let removedDuplicateCount = 0;
+
+  await archiveDb.transaction(
+    "rw",
+    archiveDb.tags,
+    archiveDb.post_tags,
+    async () => {
+      const [sourceTag, targetTag] = await Promise.all([
+        getTagById(sourceTagId),
+        getTagById(targetTagId)
+      ]);
+
+      if (sourceTag === undefined || targetTag === undefined) {
+        throw new Error("Tag not found.");
+      }
+
+      const sourcePostTags = await listPostTagsByTagId(sourceTagId);
+      const targetPostTags = await listPostTagsByTagId(targetTagId);
+      const targetPostIds = new Set(targetPostTags.map((record) => record.x_post_id));
+
+      for (const record of sourcePostTags) {
+        if (targetPostIds.has(record.x_post_id)) {
+          await deletePostTag(record.post_tag_id);
+          removedDuplicateCount += 1;
+          continue;
+        }
+
+        await archiveDb.post_tags.put({
+          ...record,
+          tag_id: targetTag.tag_id,
+          normalized_name: targetTag.normalized_name,
+          display_name: targetTag.display_name
+        });
+        targetPostIds.add(record.x_post_id);
+        mergedPostCount += 1;
+      }
+
+      await deleteTagsByIds([sourceTagId]);
+    }
+  );
+
+  logger.info("tags.merge.completed", {
+    context: {
+      sourceTagId,
+      targetTagId,
+      mergedPostCount,
+      removedDuplicateCount
+    }
+  });
+
+  return {
+    mergedPostCount,
+    removedDuplicateCount
+  };
 }
 
 export async function persistVideoThumbnailPreview(

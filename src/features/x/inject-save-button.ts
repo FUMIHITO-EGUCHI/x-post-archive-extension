@@ -9,7 +9,7 @@ export function injectSaveButton(
   const existing = article.querySelector<HTMLButtonElement>(BUTTON_SELECTOR);
 
   if (existing !== null) {
-    return existing;
+    existing.remove();
   }
 
   const button = document.createElement("button");

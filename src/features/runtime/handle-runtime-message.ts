@@ -6,6 +6,8 @@ import {
   listArchivePostsPage,
   listArchiveTagSummaries,
   listArchivePosts,
+  mergeTags,
+  renameTag,
   removeManualTagFromArchivePost,
   resumePendingMediaPersistence,
   saveArchivePost
@@ -21,6 +23,8 @@ import type {
   ListPostTagSummariesResponse,
   ListPostsPageResponse,
   ListPostsResponse,
+  MergeTagsResponse,
+  RenameTagResponse,
   RuntimeErrorResponse,
   RuntimeMessage,
   RuntimeResponse,
@@ -274,6 +278,51 @@ export async function handleRuntimeMessage(
       return response;
     }
 
+    case "tag.rename": {
+      const result = await renameTag(message.tagId, message.newDisplayName);
+      logger.info("tags.rename.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          tagId: message.tagId,
+          ok: result.ok
+        }
+      });
+      const response: RenameTagResponse = result.ok
+        ? {
+            type: "tag.rename",
+            ok: true,
+            tag: result.tag
+          }
+        : {
+            type: "tag.rename",
+            ok: false,
+            error: "collision",
+            conflictingTagId: result.conflictingTagId
+          };
+      return response;
+    }
+
+    case "tag.merge": {
+      const result = await mergeTags(message.sourceTagId, message.targetTagId);
+      logger.info("tags.merge.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          sourceTagId: message.sourceTagId,
+          targetTagId: message.targetTagId,
+          mergedPostCount: result.mergedPostCount,
+          removedDuplicateCount: result.removedDuplicateCount
+        }
+      });
+      const response: MergeTagsResponse = {
+        type: "tag.merge",
+        mergedPostCount: result.mergedPostCount,
+        removedDuplicateCount: result.removedDuplicateCount
+      };
+      return response;
+    }
+
     case "logs/clear": {
       await clearLogRecords();
       const response: ClearLogsResponse = {
@@ -307,6 +356,8 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/delete" ||
     candidate.type === "posts/tags/add" ||
     candidate.type === "posts/tags/remove" ||
+    candidate.type === "tag.rename" ||
+    candidate.type === "tag.merge" ||
     candidate.type === "logs/clear" ||
     candidate.type === "debug/log"
   );

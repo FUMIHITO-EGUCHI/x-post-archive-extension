@@ -20,6 +20,7 @@ import {
 import { createLogger } from "../../logging/logger";
 import { SettingsArchiveMaintenancePanel } from "./settings-archive-maintenance-panel";
 import { SettingsLogPanel } from "./settings-log-panel";
+import { SettingsTagManagementPanel } from "./settings-tag-management-panel";
 import {
   loadArchiveLanguage,
   localizeKnownAutoTagDisplayName,
@@ -585,6 +586,54 @@ export function ViewerApp() {
 
   async function refreshArchive(): Promise<void> {
     await reloadCurrentArchive();
+  }
+
+  async function handleTagRenamed(
+    oldNormalizedName: string,
+    newNormalizedName: string
+  ): Promise<void> {
+    const nextTagFilter =
+      activeTagFilter === oldNormalizedName ? newNormalizedName : activeTagFilter;
+
+    if (nextTagFilter !== activeTagFilter) {
+      setActiveTagFilter(nextTagFilter);
+    }
+
+    await Promise.all([
+      refreshArchiveMetadata(),
+      loadArchivePage({
+        offset: 0,
+        limit: Math.max(posts.length, DEFAULT_PAGE_SIZE),
+        sortField,
+        sortDirection,
+        tagFilter: nextTagFilter,
+        append: false
+      })
+    ]);
+  }
+
+  async function handleTagMerged(
+    sourceNormalizedName: string,
+    targetNormalizedName: string
+  ): Promise<void> {
+    const nextTagFilter =
+      activeTagFilter === sourceNormalizedName ? targetNormalizedName : activeTagFilter;
+
+    if (nextTagFilter !== activeTagFilter) {
+      setActiveTagFilter(nextTagFilter);
+    }
+
+    await Promise.all([
+      refreshArchiveMetadata(),
+      loadArchivePage({
+        offset: 0,
+        limit: Math.max(posts.length, DEFAULT_PAGE_SIZE),
+        sortField,
+        sortDirection,
+        tagFilter: nextTagFilter,
+        append: false
+      })
+    ]);
   }
 
   async function handleDelete(xPostId: string) {
@@ -1483,6 +1532,12 @@ export function ViewerApp() {
                   </div>
                 </dl>
               </section>
+
+              <SettingsTagManagementPanel
+                language={language}
+                onTagRenamed={handleTagRenamed}
+                onTagMerged={handleTagMerged}
+              />
 
               <SettingsArchiveMaintenancePanel
                 language={language}
