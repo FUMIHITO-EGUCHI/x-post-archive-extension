@@ -8,12 +8,14 @@ const ARCHIVE_LANGUAGE_STORAGE_KEY = "archive.language";
 const DEFAULT_AUTO_TAG_LABELS: Record<ArchiveLanguage, Record<DefaultAutoTagKey, string>> = {
   ja: {
     liked: "いいね",
+    bookmarked: "ブックマーク",
     image: "画像",
     video: "動画",
     quoted: "引用"
   },
   en: {
     liked: "liked",
+    bookmarked: "Bookmarked",
     image: "image",
     video: "video",
     quoted: "quoted"
@@ -135,6 +137,10 @@ function resolveKnownAutoTagKey(
   for (const candidate of candidates) {
     if (candidate === "liked" || candidate === "いいね") {
       return "liked";
+    }
+
+    if (candidate === "bookmarked" || candidate === "bookmark" || candidate === "ブックマーク") {
+      return "bookmarked";
     }
 
     if (candidate === "image" || candidate === "画像") {
