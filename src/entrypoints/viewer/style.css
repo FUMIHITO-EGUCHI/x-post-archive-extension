@@ -316,6 +316,44 @@ body {
   background: var(--color-accent-soft);
 }
 
+.viewer-settings-toggle-list {
+  display: grid;
+  gap: 12px;
+}
+
+.viewer-settings-toggle-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 16px;
+  background: var(--color-bg-input);
+  cursor: pointer;
+}
+
+.viewer-settings-toggle-item input {
+  margin: 4px 0 0;
+}
+
+.viewer-settings-toggle-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.viewer-settings-toggle-copy strong {
+  font-size: calc(15px * var(--viewer-font-scale));
+  color: var(--color-text-strong);
+}
+
+.viewer-settings-toggle-copy span {
+  font-size: calc(13px * var(--viewer-font-scale));
+  line-height: 1.6;
+  color: var(--color-text-sub);
+}
+
 .viewer-log-filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1735,6 +1773,7 @@ body {
 }
 
 :root[data-theme="dark"] .viewer-font-option,
+:root[data-theme="dark"] .viewer-settings-toggle-item,
 :root[data-theme="dark"] .viewer-log-date-input,
 :root[data-theme="dark"] .viewer-log-clear-button,
 :root[data-theme="dark"] .viewer-log-export-option,
@@ -1875,6 +1914,7 @@ body {
 
 :root[data-theme="dark"] .viewer-copy,
 :root[data-theme="dark"] .viewer-settings-card-header p,
+:root[data-theme="dark"] .viewer-settings-toggle-copy span,
 :root[data-theme="dark"] .viewer-settings-inline-note,
 :root[data-theme="dark"] .viewer-log-item-meta,
 :root[data-theme="dark"] .viewer-log-event span,

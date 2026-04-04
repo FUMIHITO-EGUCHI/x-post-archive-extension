@@ -1,6 +1,7 @@
-type SaveButtonState = "idle" | "saving" | "saved" | "error";
+export type SaveButtonState = "idle" | "saving" | "saved" | "error";
 
 const BUTTON_SELECTOR = "[data-xpa-save-button]";
+const transientStateTimers = new WeakMap<HTMLButtonElement, number>();
 
 export function injectSaveButton(
   article: HTMLElement,
@@ -56,6 +57,28 @@ export function injectSaveButton(
 }
 
 export function setButtonState(button: HTMLButtonElement, state: SaveButtonState): void {
+  clearTransientStateTimer(button);
+  applyButtonState(button, state);
+}
+
+export function flashButtonState(
+  button: HTMLButtonElement,
+  state: SaveButtonState,
+  restoreState: SaveButtonState,
+  durationMs = 3000
+): void {
+  clearTransientStateTimer(button);
+  applyButtonState(button, state);
+
+  const timerId = window.setTimeout(() => {
+    transientStateTimers.delete(button);
+    applyButtonState(button, restoreState);
+  }, durationMs);
+
+  transientStateTimers.set(button, timerId);
+}
+
+function applyButtonState(button: HTMLButtonElement, state: SaveButtonState): void {
   switch (state) {
     case "idle":
       button.disabled = false;
@@ -82,6 +105,17 @@ export function setButtonState(button: HTMLButtonElement, state: SaveButtonState
       button.style.color = "#b42318";
       break;
   }
+}
+
+function clearTransientStateTimer(button: HTMLButtonElement): void {
+  const timerId = transientStateTimers.get(button);
+
+  if (timerId === undefined) {
+    return;
+  }
+
+  window.clearTimeout(timerId);
+  transientStateTimers.delete(button);
 }
 
 function findInsertionTarget(article: HTMLElement): HTMLElement {
