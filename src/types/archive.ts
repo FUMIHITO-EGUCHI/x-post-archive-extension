@@ -47,6 +47,14 @@ export type TagRecord = {
   created_at: number;
 };
 
+export type TagRedirectRecord = {
+  tag_redirect_id: string;
+  source_normalized_name: string;
+  source_display_name: string;
+  target_tag_id: string;
+  created_at: number;
+};
+
 export type PostTagRecord = {
   post_tag_id: string;
   x_post_id: string;

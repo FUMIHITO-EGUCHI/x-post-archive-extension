@@ -2,10 +2,12 @@ import type { SavePostInput } from "../../types/archive";
 import type {
   AddPostTagMessage,
   ClearLogsResponse,
+  DeleteTagRedirectResponse,
   DeletePostResponse,
   DebugLogMessage,
   GetArchiveSummaryResponse,
   HasPostResponse,
+  ListTagRedirectsResponse,
   ListPostTagSummariesResponse,
   ListPostsPageResponse,
   ListPostsResponse,
@@ -175,16 +177,45 @@ export async function requestRenameTag(
 
 export async function requestMergeTags(
   sourceTagId: string,
-  targetTagId: string
+  targetTagId: string,
+  preserveFutureTagUses: boolean
 ): Promise<MergeTagsResponse> {
   const response = await sendMessage({
     type: "tag.merge",
     sourceTagId,
-    targetTagId
+    targetTagId,
+    preserveFutureTagUses
   } satisfies MergeTagsMessage, DEFAULT_RUNTIME_TIMEOUT_MS);
 
   if (response.type !== "tag.merge") {
     throw new Error("Unexpected runtime response for merge tags request.");
+  }
+
+  return response;
+}
+
+export async function requestTagRedirects(): Promise<ListTagRedirectsResponse> {
+  const response = await sendMessage({
+    type: "tag.redirects.list"
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "tag.redirects.list") {
+    throw new Error("Unexpected runtime response for tag redirect list request.");
+  }
+
+  return response;
+}
+
+export async function requestDeleteTagRedirect(
+  tagRedirectId: string
+): Promise<DeleteTagRedirectResponse> {
+  const response = await sendMessage({
+    type: "tag.redirects.delete",
+    tagRedirectId
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "tag.redirects.delete") {
+    throw new Error("Unexpected runtime response for tag redirect delete request.");
   }
 
   return response;

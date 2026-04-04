@@ -29,6 +29,8 @@ export function SettingsTagManagementPanel({
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
   const [mergeTargetTagId, setMergeTargetTagId] = useState<string | null>(null);
   const [mergeError, setMergeError] = useState<string | null>(null);
+  const [mergeConfirmationRequired, setMergeConfirmationRequired] = useState(false);
+  const [preserveFutureTagUses, setPreserveFutureTagUses] = useState(true);
   const [mergePending, setMergePending] = useState(false);
   const isJapanese = language === "ja";
 
@@ -68,15 +70,15 @@ export function SettingsTagManagementPanel({
   const rightSelectedTag = selectedTags[1] ?? null;
 
   useEffect(() => {
-    void loadTags();
+    void loadTagList();
   }, []);
 
-  async function loadTags(): Promise<void> {
+  async function loadTagList(): Promise<void> {
     setLoading(true);
 
     try {
-      const response = await requestTagSummaries();
-      setTags(response.tags);
+      const tagResponse = await requestTagSummaries();
+      setTags(tagResponse.tags);
     } catch (error) {
       setNoticeTone("error");
       setNotice(
@@ -116,13 +118,13 @@ export function SettingsTagManagementPanel({
         const attemptedName = renameDraft.trim();
         setRenameError(
           isJapanese
-            ? `「${attemptedName}」は既に存在します。マージする場合は操作 B を使用してください。`
+            ? `「${attemptedName}」は既に存在します。統合する場合は操作 B を使用してください。`
             : `"${attemptedName}" already exists. Use merge if you want to combine them.`
         );
         return;
       }
 
-      await loadTags();
+      await loadTagList();
       await onTagRenamed(tag.tag.normalized_name, response.tag.normalized_name);
       setEditingTagId(null);
       setRenameDraft("");
@@ -164,6 +166,8 @@ export function SettingsTagManagementPanel({
 
     setMergeTargetTagId(selectedTags[0]?.tag.tag_id ?? null);
     setMergeError(null);
+    setMergeConfirmationRequired(false);
+    setPreserveFutureTagUses(true);
     setIsMergeModalOpen(true);
     setNotice(null);
   }
@@ -172,6 +176,17 @@ export function SettingsTagManagementPanel({
     setIsMergeModalOpen(false);
     setMergeTargetTagId(null);
     setMergeError(null);
+    setMergeConfirmationRequired(false);
+    setPreserveFutureTagUses(true);
+  }
+
+  function requestMergeConfirmation(): void {
+    if (selectedTags.length !== 2 || mergeTargetTagId === null || mergePending) {
+      return;
+    }
+
+    setMergeError(null);
+    setMergeConfirmationRequired(true);
   }
 
   async function handleMerge(): Promise<void> {
@@ -192,8 +207,8 @@ export function SettingsTagManagementPanel({
     setNotice(null);
 
     try {
-      await requestMergeTags(source.tag.tag_id, target.tag.tag_id);
-      await loadTags();
+      await requestMergeTags(source.tag.tag_id, target.tag.tag_id, preserveFutureTagUses);
+      await loadTagList();
       await onTagMerged(source.tag.normalized_name, target.tag.normalized_name);
       setSelectedTagIds([]);
       closeMergeModal();
@@ -205,7 +220,7 @@ export function SettingsTagManagementPanel({
       );
     } catch (error) {
       setMergeError(
-        getErrorMessage(error, isJapanese ? "マージに失敗しました。" : "Merge failed.")
+        getErrorMessage(error, isJapanese ? "統合に失敗しました。" : "Merge failed.")
       );
     } finally {
       setMergePending(false);
@@ -275,14 +290,14 @@ export function SettingsTagManagementPanel({
           </section>
         </div>
 
-        <div className="viewer-settings-action-row">
+        <div className="viewer-settings-action-row viewer-settings-action-row-end">
           <button
             className="viewer-action-button"
             type="button"
             disabled={selectedTagIds.length !== 2}
             onClick={openMergeModal}
           >
-            {isJapanese ? "マージ" : "Merge"}
+            {isJapanese ? "統合" : "Merge"}
           </button>
         </div>
 
@@ -306,7 +321,7 @@ export function SettingsTagManagementPanel({
               <span role="columnheader">{isJapanese ? "タグ名" : "Tag"}</span>
               <span role="columnheader">{isJapanese ? "投稿数" : "Posts"}</span>
               <span role="columnheader">{isJapanese ? "リネーム" : "Rename"}</span>
-              <span role="columnheader">{isJapanese ? "マージ" : "Merge"}</span>
+              <span role="columnheader">{isJapanese ? "統合" : "Merge"}</span>
             </div>
 
             {visibleTags.map((summary) => {
@@ -458,7 +473,7 @@ export function SettingsTagManagementPanel({
             className="viewer-modal viewer-tag-management-modal"
             role="dialog"
             aria-modal="true"
-            aria-label={isJapanese ? "タグのマージ" : "Merge tags"}
+            aria-label={isJapanese ? "タグの統合" : "Merge tags"}
             onClick={(event) => {
               event.stopPropagation();
             }}
@@ -495,6 +510,7 @@ export function SettingsTagManagementPanel({
                   disabled={mergePending}
                   onClick={() => {
                     setMergeTargetTagId(summary.tag.tag_id);
+                    setMergeConfirmationRequired(false);
                   }}
                 >
                   <strong>{summary.tag.display_name}</strong>
@@ -524,6 +540,48 @@ export function SettingsTagManagementPanel({
               </p>
             )}
 
+            <label className="viewer-tag-management-merge-option">
+              <input
+                type="checkbox"
+                checked={preserveFutureTagUses}
+                disabled={mergePending}
+                onChange={(event) => {
+                  setPreserveFutureTagUses(event.currentTarget.checked);
+                }}
+              />
+              <span>
+                <strong>
+                  {isJapanese
+                    ? "今後このタグ名が使われたときも同じ統合先へ自動変換する"
+                    : "Automatically redirect future uses of this source tag to the same merged tag"}
+                </strong>
+                <small>
+                  {isJapanese
+                    ? "オンのまま統合すると、以後この元タグ名で保存された投稿も統合先タグへ寄せます。"
+                    : "When enabled, future saves using the old tag name will also be converted to the merged target."}
+                </small>
+              </span>
+            </label>
+
+            {mergeConfirmationRequired && mergeTargetTagId !== null && (
+              <p className="viewer-message viewer-message-warning">
+                {(() => {
+                  const target = selectedTags.find(({ tag }) => tag.tag_id === mergeTargetTagId) ?? null;
+                  const source = selectedTags.find(({ tag }) => tag.tag_id !== mergeTargetTagId) ?? null;
+
+                  if (target === null || source === null) {
+                    return isJapanese
+                      ? "統合対象を確認してから実行してください。"
+                      : "Review the merge targets before continuing.";
+                  }
+
+                  return isJapanese
+                    ? `「${source.tag.display_name}」は削除され、「${target.tag.display_name}」に統合されます。この操作は元に戻せません。`
+                    : `"${source.tag.display_name}" will be removed and merged into "${target.tag.display_name}". This cannot be undone.`;
+                })()}
+              </p>
+            )}
+
             {mergeError !== null && <p className="viewer-message viewer-message-error">{mergeError}</p>}
 
             <div className="viewer-settings-action-row">
@@ -532,14 +590,19 @@ export function SettingsTagManagementPanel({
                 type="button"
                 disabled={mergePending || mergeTargetTagId === null}
                 onClick={() => {
-                  void handleMerge();
+                  if (mergeConfirmationRequired) {
+                    void handleMerge();
+                    return;
+                  }
+
+                  requestMergeConfirmation();
                 }}
               >
                 {mergePending
                   ? isJapanese
                     ? "統合中..."
                     : "Merging..."
-                  : isJapanese
+                  : mergeConfirmationRequired
                     ? "統合する"
                     : "Merge"}
               </button>

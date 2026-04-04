@@ -8,6 +8,7 @@ import type {
 import type { LogLevel } from "./logger";
 import type {
   ArchiveSummaryRecord,
+  ArchiveTagRedirectSummaryRecord,
   ArchiveTagSummaryRecord,
   ListPostsPageInput
 } from "./viewer";
@@ -73,6 +74,16 @@ export type MergeTagsMessage = {
   type: "tag.merge";
   sourceTagId: string;
   targetTagId: string;
+  preserveFutureTagUses: boolean;
+};
+
+export type ListTagRedirectsMessage = {
+  type: "tag.redirects.list";
+};
+
+export type DeleteTagRedirectMessage = {
+  type: "tag.redirects.delete";
+  tagRedirectId: string;
 };
 
 export type ClearLogsMessage = {
@@ -101,6 +112,8 @@ export type RuntimeMessage =
   | RemovePostTagMessage
   | RenameTagMessage
   | MergeTagsMessage
+  | ListTagRedirectsMessage
+  | DeleteTagRedirectMessage
   | ClearLogsMessage
   | DebugLogMessage;
 
@@ -175,6 +188,16 @@ export type MergeTagsResponse = {
   removedDuplicateCount: number;
 };
 
+export type ListTagRedirectsResponse = {
+  type: "tag.redirects.list";
+  redirects: ArchiveTagRedirectSummaryRecord[];
+};
+
+export type DeleteTagRedirectResponse = {
+  type: "tag.redirects.delete";
+  deleted: boolean;
+};
+
 export type ClearLogsResponse = {
   type: "logs/clear-result";
   deleted: boolean;
@@ -197,5 +220,7 @@ export type RuntimeResponse =
   | UpdatePostTagsResponse
   | RenameTagResponse
   | MergeTagsResponse
+  | ListTagRedirectsResponse
+  | DeleteTagRedirectResponse
   | ClearLogsResponse
   | RuntimeErrorResponse;

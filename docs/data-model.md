@@ -236,13 +236,23 @@ media_files: "&file_id, media_id, [media_id+role], storage_status, saved_at"
 - `source: "auto" | "manual"`
 - `assigned_at: number`
 
+### `tag_redirects`
+
+- `tag_redirect_id: string`
+- `source_normalized_name: string`
+- `source_display_name: string`
+- `target_tag_id: string`
+- `created_at: number`
+
 ### Tagging Notes
 
 - `tags` keeps canonical tag labels and optional built-in tag keys.
+- `tag_redirects` keeps automatic conversions created when a tag is merged into another tag.
 - `post_tags` keeps the relation between a saved post and each tag.
 - hashtag auto tags are created from saved snapshot text.
 - built-in auto tags keep `system_key` so display text can change per language without rewriting saved data.
 - manual tags are added later from the viewer and can override an existing auto relation for the same normalized tag.
+- when a future save tries to add a redirected source tag, it is rewritten to the current target tag before persistence.
 
 ## Archive Backup Model
 

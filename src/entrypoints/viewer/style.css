@@ -148,6 +148,48 @@ body {
   line-height: 1.6;
 }
 
+.viewer-settings-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 0 16px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid rgba(16, 32, 51, 0.1);
+  overflow-x: auto;
+}
+
+.viewer-settings-tab {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #526479;
+  font: inherit;
+  font-size: calc(14px * var(--viewer-font-scale));
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.viewer-settings-tab:hover,
+.viewer-settings-tab:focus-visible {
+  color: #17324d;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.viewer-settings-tab:focus-visible {
+  outline: none;
+}
+
+.viewer-settings-tab-active {
+  border-color: rgba(29, 78, 216, 0.22);
+  background: #edf4ff;
+  color: #102f5b;
+}
+
 .viewer-font-option-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -513,6 +555,72 @@ body {
   color: #526479;
 }
 
+.viewer-tag-management-redirects {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(16, 32, 51, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.viewer-tag-management-redirect-list {
+  display: grid;
+  gap: 10px;
+}
+
+.viewer-tag-management-redirect-item {
+  display: grid;
+  gap: 10px;
+}
+
+.viewer-tag-management-redirect-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid rgba(16, 32, 51, 0.06);
+}
+
+.viewer-tag-management-redirect-copy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.viewer-tag-management-redirect-item strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.viewer-tag-management-redirect-item span {
+  color: #526479;
+  font-weight: 700;
+}
+
+.viewer-tag-management-redirect-delete {
+  flex-shrink: 0;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.viewer-tag-management-redirect-delete-soft {
+  border-color: rgba(153, 27, 27, 0.2);
+  background: #fff1f1;
+  color: #8d1f1f;
+}
+
+.viewer-tag-management-redirect-delete-soft:hover,
+.viewer-tag-management-redirect-delete-soft:focus-visible {
+  background: #ffe4e4;
+  color: #7f1d1d;
+}
+
 .viewer-tag-management-row {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) 96px minmax(220px, 1fr);
@@ -592,6 +700,39 @@ body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.viewer-tag-management-merge-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(29, 78, 216, 0.12);
+  border-radius: 16px;
+  background: #f8fbff;
+  color: #17324d;
+  cursor: pointer;
+}
+
+.viewer-tag-management-merge-option input {
+  margin-top: 3px;
+}
+
+.viewer-tag-management-merge-option span {
+  display: grid;
+  gap: 4px;
+}
+
+.viewer-tag-management-merge-option strong {
+  font-size: calc(14px * var(--viewer-font-scale));
+  line-height: 1.5;
+}
+
+.viewer-tag-management-merge-option small {
+  font-size: calc(12px * var(--viewer-font-scale));
+  line-height: 1.5;
+  color: #526479;
 }
 
 .viewer-list-header {
@@ -729,6 +870,10 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.viewer-settings-action-row-end {
+  justify-content: flex-end;
 }
 
 .viewer-settings-file-row {
@@ -1424,6 +1569,10 @@ body {
   .viewer-list-panel {
     padding: 20px 16px;
     border-radius: 20px;
+  }
+
+  .viewer-settings-tabs {
+    margin-bottom: 20px;
   }
 
   .post-card {

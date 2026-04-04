@@ -1,7 +1,9 @@
 import {
   addManualTagToArchivePost,
+  deleteArchiveTagRedirect,
   deleteArchivePost,
   getArchiveSummary,
+  listArchiveTagRedirectSummaries,
   hasSavedPost,
   listArchivePostsPage,
   listArchiveTagSummaries,
@@ -15,11 +17,13 @@ import {
 import { clearLogRecords } from "../../db/repositories/logs-repository";
 import type {
   ClearLogsResponse,
+  DeleteTagRedirectResponse,
   DeletePostMessage,
   DeletePostResponse,
   DebugLogMessage,
   GetArchiveSummaryResponse,
   HasPostResponse,
+  ListTagRedirectsResponse,
   ListPostTagSummariesResponse,
   ListPostsPageResponse,
   ListPostsResponse,
@@ -304,13 +308,18 @@ export async function handleRuntimeMessage(
     }
 
     case "tag.merge": {
-      const result = await mergeTags(message.sourceTagId, message.targetTagId);
+      const result = await mergeTags(
+        message.sourceTagId,
+        message.targetTagId,
+        message.preserveFutureTagUses
+      );
       logger.info("tags.merge.completed", {
         requestId,
         context: {
           type: message.type,
           sourceTagId: message.sourceTagId,
           targetTagId: message.targetTagId,
+          preserveFutureTagUses: message.preserveFutureTagUses,
           mergedPostCount: result.mergedPostCount,
           removedDuplicateCount: result.removedDuplicateCount
         }
@@ -319,6 +328,39 @@ export async function handleRuntimeMessage(
         type: "tag.merge",
         mergedPostCount: result.mergedPostCount,
         removedDuplicateCount: result.removedDuplicateCount
+      };
+      return response;
+    }
+
+    case "tag.redirects.list": {
+      const redirects = await listArchiveTagRedirectSummaries();
+      logger.debug("tags.redirects.list.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          count: redirects.length
+        }
+      });
+      const response: ListTagRedirectsResponse = {
+        type: "tag.redirects.list",
+        redirects
+      };
+      return response;
+    }
+
+    case "tag.redirects.delete": {
+      const deleted = await deleteArchiveTagRedirect(message.tagRedirectId);
+      logger.info("tags.redirects.delete.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          tagRedirectId: message.tagRedirectId,
+          deleted
+        }
+      });
+      const response: DeleteTagRedirectResponse = {
+        type: "tag.redirects.delete",
+        deleted
       };
       return response;
     }
@@ -358,6 +400,8 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/tags/remove" ||
     candidate.type === "tag.rename" ||
     candidate.type === "tag.merge" ||
+    candidate.type === "tag.redirects.list" ||
+    candidate.type === "tag.redirects.delete" ||
     candidate.type === "logs/clear" ||
     candidate.type === "debug/log"
   );

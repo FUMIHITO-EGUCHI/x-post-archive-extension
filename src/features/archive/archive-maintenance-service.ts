@@ -9,7 +9,13 @@ import {
   type FileEntry
 } from "@zip.js/zip.js";
 import { archiveDb } from "../../db/archive-database";
-import type { MediaRecord, PostRecord, PostTagRecord, TagRecord } from "../../types/archive";
+import type {
+  MediaRecord,
+  PostRecord,
+  PostTagRecord,
+  TagRecord,
+  TagRedirectRecord
+} from "../../types/archive";
 import type {
   ArchiveBackupManifest,
   ArchiveBackupFileEntry,
@@ -22,7 +28,7 @@ import {
 } from "../media-storage/opfs-media-storage";
 
 const ARCHIVE_BACKUP_FORMAT = "x-post-archive-backup";
-const ARCHIVE_BACKUP_VERSION = 1;
+const ARCHIVE_BACKUP_VERSION = 2;
 const MEDIA_ROOT_PREFIX = "/media/";
 const BACKUP_MANIFEST_FILE_NAME = "manifest.json";
 
@@ -39,10 +45,11 @@ export async function streamArchiveBackupZip(
 ): Promise<{
   summary: ArchiveBackupSummary;
 }> {
-  const [posts, media, tags, postTags] = await Promise.all([
+  const [posts, media, tags, tagRedirects, postTags] = await Promise.all([
     archiveDb.posts.toArray(),
     archiveDb.media.toArray(),
     archiveDb.tags.toArray(),
+    archiveDb.tag_redirects.toArray(),
     archiveDb.post_tags.toArray()
   ]);
 
@@ -90,6 +97,7 @@ export async function streamArchiveBackupZip(
       posts,
       media,
       tags,
+      tag_redirects: tagRedirects,
       post_tags: postTags,
       files
     }
@@ -220,43 +228,53 @@ export async function importArchiveBackupZip(
     onProgress?.({
       phase: "Restoring database",
       completed: 0,
-      total: 4,
+      total: 5,
       detail: "Writing archive records."
     });
 
     await archiveDb.transaction(
       "rw",
-      archiveDb.posts,
-      archiveDb.media,
-      archiveDb.tags,
-      archiveDb.post_tags,
+      [
+        archiveDb.posts,
+        archiveDb.media,
+        archiveDb.tags,
+        archiveDb.tag_redirects,
+        archiveDb.post_tags
+      ],
       async () => {
         await archiveDb.posts.bulkPut(backup.data.posts);
         onProgress?.({
           phase: "Restoring database",
           completed: 1,
-          total: 4,
+          total: 5,
           detail: "Posts restored."
         });
         await archiveDb.media.bulkPut(backup.data.media);
         onProgress?.({
           phase: "Restoring database",
           completed: 2,
-          total: 4,
+          total: 5,
           detail: "Media restored."
         });
         await archiveDb.tags.bulkPut(backup.data.tags);
         onProgress?.({
           phase: "Restoring database",
           completed: 3,
-          total: 4,
+          total: 5,
           detail: "Tags restored."
+        });
+        await archiveDb.tag_redirects.bulkPut(backup.data.tag_redirects);
+        onProgress?.({
+          phase: "Restoring database",
+          completed: 4,
+          total: 5,
+          detail: "Tag redirects restored."
         });
         await archiveDb.post_tags.bulkPut(backup.data.post_tags);
         onProgress?.({
           phase: "Restoring database",
-          completed: 4,
-          total: 4,
+          completed: 5,
+          total: 5,
           detail: "Post tag relations restored."
         });
       }
@@ -282,12 +300,16 @@ export async function clearArchiveData(): Promise<void> {
 
   await archiveDb.transaction(
     "rw",
-    archiveDb.posts,
-    archiveDb.media,
-    archiveDb.tags,
-    archiveDb.post_tags,
+    [
+      archiveDb.posts,
+      archiveDb.media,
+      archiveDb.tags,
+      archiveDb.tag_redirects,
+      archiveDb.post_tags
+    ],
     async () => {
       await archiveDb.post_tags.clear();
+      await archiveDb.tag_redirects.clear();
       await archiveDb.tags.clear();
       await archiveDb.media.clear();
       await archiveDb.posts.clear();
@@ -301,12 +323,16 @@ export async function resetExtensionState(): Promise<void> {
 
   await archiveDb.transaction(
     "rw",
-    archiveDb.posts,
-    archiveDb.media,
-    archiveDb.tags,
-    archiveDb.post_tags,
+    [
+      archiveDb.posts,
+      archiveDb.media,
+      archiveDb.tags,
+      archiveDb.tag_redirects,
+      archiveDb.post_tags
+    ],
     async () => {
       await archiveDb.post_tags.clear();
+      await archiveDb.tag_redirects.clear();
       await archiveDb.tags.clear();
       await archiveDb.media.clear();
       await archiveDb.posts.clear();
@@ -321,6 +347,7 @@ export function summarizeBackup(backup: ArchiveBackupManifest): ArchiveBackupSum
     postCount: backup.data.posts.length,
     mediaCount: backup.data.media.length,
     tagCount: backup.data.tags.length,
+    tagRedirectCount: backup.data.tag_redirects.length,
     postTagCount: backup.data.post_tags.length,
     fileCount: backup.data.files.length
   };
@@ -381,7 +408,7 @@ function parseArchiveBackupManifest(value: unknown): ArchiveBackupManifest {
     throw new Error("Backup manifest format is not supported.");
   }
 
-  if (value.version !== ARCHIVE_BACKUP_VERSION) {
+  if (value.version !== 1 && value.version !== ARCHIVE_BACKUP_VERSION) {
     throw new Error("Backup manifest version is not supported.");
   }
 
@@ -395,12 +422,16 @@ function parseArchiveBackupManifest(value: unknown): ArchiveBackupManifest {
 
   return {
     format: ARCHIVE_BACKUP_FORMAT,
-    version: ARCHIVE_BACKUP_VERSION,
+    version: value.version,
     exported_at: value.exported_at,
     data: {
       posts: parseArray(value.data.posts, parsePostRecord),
       media: parseArray(value.data.media, parseMediaRecord),
       tags: parseArray(value.data.tags, parseTagRecord),
+      tag_redirects:
+        value.version === 1
+          ? []
+          : parseArray(value.data.tag_redirects, parseTagRedirectRecord),
       post_tags: parseArray(value.data.post_tags, parsePostTagRecord),
       files: parseArray(value.data.files, parseBackupFileEntry)
     }
@@ -499,6 +530,26 @@ function parsePostTagRecord(value: unknown): PostTagRecord {
     system_key: requireNullableBuiltInTagKey(value.system_key, "post_tag.system_key"),
     source,
     assigned_at: requireFiniteNumberValue(value.assigned_at, "post_tag.assigned_at")
+  };
+}
+
+function parseTagRedirectRecord(value: unknown): TagRedirectRecord {
+  if (!isRecord(value)) {
+    throw new Error("Tag redirect record is invalid.");
+  }
+
+  return {
+    tag_redirect_id: requireString(value.tag_redirect_id, "tag_redirect.tag_redirect_id"),
+    source_normalized_name: requireString(
+      value.source_normalized_name,
+      "tag_redirect.source_normalized_name"
+    ),
+    source_display_name: requireString(
+      value.source_display_name,
+      "tag_redirect.source_display_name"
+    ),
+    target_tag_id: requireString(value.target_tag_id, "tag_redirect.target_tag_id"),
+    created_at: requireFiniteNumberValue(value.created_at, "tag_redirect.created_at")
   };
 }
 

@@ -14,6 +14,16 @@ export type ArchiveTagSummaryRecord = {
   postCount: number;
 };
 
+export type ArchiveTagRedirectSummaryRecord = {
+  tag_redirect_id: string;
+  source_normalized_name: string;
+  source_display_name: string;
+  target_tag_id: string;
+  target_normalized_name: string | null;
+  target_display_name: string | null;
+  created_at: number;
+};
+
 export type ArchiveSummaryRecord = {
   postCount: number;
   imageCount: number;
@@ -33,6 +43,15 @@ export type ListPostsPageInput = {
 };
 
 export type ViewerSessionRestoreMode = "off" | "filters" | "filters-and-position";
+
+export type FontSizeOption = "small" | "medium" | "large";
+
+export type StorageEstimateState = {
+  usage: number | null;
+  quota: number | null;
+  available: number | null;
+  status: "idle" | "ready" | "unsupported";
+};
 
 export type ViewerSessionState = {
   version: 1;

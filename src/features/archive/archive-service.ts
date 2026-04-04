@@ -32,6 +32,13 @@ import {
   listPostTagsByPostIds
 } from "../../db/repositories/post-tags-repository";
 import {
+  deleteTagRedirectById,
+  getTagRedirectBySourceNormalizedName,
+  listTagRedirects,
+  listTagRedirectsByTargetTagId,
+  putTagRedirect
+} from "../../db/repositories/tag-redirects-repository";
+import {
   addTag,
   deleteTagsByIds,
   getTagById,
@@ -50,9 +57,11 @@ import type {
   SavePostInput,
   SaveVideoCandidateInput,
   TagRecord,
+  TagRedirectRecord,
   TagSource
 } from "../../types/archive";
 import type {
+  ArchiveTagRedirectSummaryRecord,
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
   ListPostsPageInput
@@ -297,6 +306,62 @@ export async function listArchiveTagSummaries(): Promise<ArchiveTagSummaryRecord
   }));
 }
 
+export async function listArchiveTagRedirectSummaries(): Promise<ArchiveTagRedirectSummaryRecord[]> {
+  const redirects = await listTagRedirects();
+
+  if (redirects.length === 0) {
+    return [];
+  }
+
+  const targetTagEntries = await Promise.all(
+    [...new Set(redirects.map((item) => item.target_tag_id))].map(async (tagId) => [
+      tagId,
+      await getTagById(tagId)
+    ] as const)
+  );
+  const targetTagMap = new Map(targetTagEntries);
+
+  return redirects
+    .map((redirect) => {
+      const targetTag = targetTagMap.get(redirect.target_tag_id) ?? null;
+
+      return {
+        tag_redirect_id: redirect.tag_redirect_id,
+        source_normalized_name: redirect.source_normalized_name,
+        source_display_name: redirect.source_display_name,
+        target_tag_id: redirect.target_tag_id,
+        target_normalized_name: targetTag?.normalized_name ?? null,
+        target_display_name: targetTag?.display_name ?? null,
+        created_at: redirect.created_at
+      };
+    })
+    .sort((left, right) =>
+      left.source_display_name.localeCompare(right.source_display_name, "ja-JP")
+    );
+}
+
+export async function deleteArchiveTagRedirect(tagRedirectId: string): Promise<boolean> {
+  const existing = await archiveDb.tag_redirects.get(tagRedirectId);
+
+  if (existing === undefined) {
+    return false;
+  }
+
+  await archiveDb.transaction("rw", archiveDb.tag_redirects, async () => {
+    await deleteTagRedirectById(tagRedirectId);
+  });
+
+  logger.info("tags.redirects.delete.completed", {
+    context: {
+      tagRedirectId,
+      sourceNormalizedName: existing.source_normalized_name,
+      targetTagId: existing.target_tag_id
+    }
+  });
+
+  return true;
+}
+
 export async function getArchiveSummary(): Promise<ArchiveSummaryRecord> {
   const [posts, media, postTags] = await Promise.all([
     listPosts(),
@@ -354,6 +419,7 @@ export async function addManualTagToArchivePost(
   await archiveDb.transaction(
     "rw",
     archiveDb.tags,
+    archiveDb.tag_redirects,
     archiveDb.post_tags,
     async () => {
       await ensureTagAssignments([prepared]);
@@ -451,6 +517,7 @@ export async function renameTag(
   >(
     "rw",
     archiveDb.tags,
+    archiveDb.tag_redirects,
     archiveDb.post_tags,
     async () => {
       const currentTag = await getTagById(tagId);
@@ -507,7 +574,8 @@ export async function renameTag(
 
 export async function mergeTags(
   sourceTagId: string,
-  targetTagId: string
+  targetTagId: string,
+  preserveFutureTagUses = true
 ): Promise<{
   mergedPostCount: number;
   removedDuplicateCount: number;
@@ -522,6 +590,7 @@ export async function mergeTags(
   await archiveDb.transaction(
     "rw",
     archiveDb.tags,
+    archiveDb.tag_redirects,
     archiveDb.post_tags,
     async () => {
       const [sourceTag, targetTag] = await Promise.all([
@@ -535,6 +604,7 @@ export async function mergeTags(
 
       const sourcePostTags = await listPostTagsByTagId(sourceTagId);
       const targetPostTags = await listPostTagsByTagId(targetTagId);
+      const inheritedRedirects = await listTagRedirectsByTargetTagId(sourceTagId);
       const targetPostIds = new Set(targetPostTags.map((record) => record.x_post_id));
 
       for (const record of sourcePostTags) {
@@ -554,6 +624,21 @@ export async function mergeTags(
         mergedPostCount += 1;
       }
 
+      for (const redirect of inheritedRedirects) {
+        await putTagRedirect({
+          ...redirect,
+          target_tag_id: targetTagId
+        });
+      }
+
+      if (preserveFutureTagUses) {
+        await upsertTagRedirect({
+          source_normalized_name: sourceTag.normalized_name,
+          source_display_name: sourceTag.display_name,
+          target_tag_id: targetTagId
+        });
+      }
+
       await deleteTagsByIds([sourceTagId]);
     }
   );
@@ -562,6 +647,7 @@ export async function mergeTags(
     context: {
       sourceTagId,
       targetTagId,
+      preserveFutureTagUses,
       mergedPostCount,
       removedDuplicateCount
     }
@@ -926,10 +1012,14 @@ function normalizePageLimit(value: number): number {
 
 async function ensureTagAssignments(inputs: PostTagInput[]): Promise<void> {
   for (const item of inputs) {
-    const existingPostTag = await getPostTagByNormalizedName(item.x_post_id, item.normalized_name);
+    const resolvedItem = await resolveTagAssignmentInput(item);
+    const existingPostTag = await getPostTagByNormalizedName(
+      resolvedItem.x_post_id,
+      resolvedItem.normalized_name
+    );
 
     if (existingPostTag !== undefined) {
-      if (existingPostTag.source === "auto" && item.source === "manual") {
+      if (existingPostTag.source === "auto" && resolvedItem.source === "manual") {
         await deletePostTag(existingPostTag.post_tag_id);
         await deleteOrphanedTag(existingPostTag.tag_id);
       } else {
@@ -938,23 +1028,44 @@ async function ensureTagAssignments(inputs: PostTagInput[]): Promise<void> {
     }
 
     const tag = await ensureTagRecord(
-      item.normalized_name,
-      item.display_name,
-      item.system_key,
-      item.assigned_at
+      resolvedItem.normalized_name,
+      resolvedItem.display_name,
+      resolvedItem.system_key,
+      resolvedItem.assigned_at
     );
 
     await addPostTag({
       post_tag_id: crypto.randomUUID(),
-      x_post_id: item.x_post_id,
+      x_post_id: resolvedItem.x_post_id,
       tag_id: tag.tag_id,
       normalized_name: tag.normalized_name,
-      display_name: item.display_name,
-      system_key: item.system_key,
-      source: item.source,
-      assigned_at: item.assigned_at
+      display_name: resolvedItem.display_name,
+      system_key: resolvedItem.system_key,
+      source: resolvedItem.source,
+      assigned_at: resolvedItem.assigned_at
     });
   }
+}
+
+async function resolveTagAssignmentInput(input: PostTagInput): Promise<PostTagInput> {
+  const redirect = await getTagRedirectBySourceNormalizedName(input.normalized_name);
+
+  if (redirect === undefined) {
+    return input;
+  }
+
+  const targetTag = await getTagById(redirect.target_tag_id);
+
+  if (targetTag === undefined) {
+    return input;
+  }
+
+  return {
+    ...input,
+    normalized_name: targetTag.normalized_name,
+    display_name: targetTag.display_name,
+    system_key: targetTag.system_key
+  };
 }
 
 async function ensureTagRecord(
@@ -979,6 +1090,20 @@ async function ensureTagRecord(
 
   await addTag(record);
   return record;
+}
+
+async function upsertTagRedirect(
+  input: Pick<TagRedirectRecord, "source_normalized_name" | "source_display_name" | "target_tag_id">
+): Promise<void> {
+  const existing = await getTagRedirectBySourceNormalizedName(input.source_normalized_name);
+
+  await putTagRedirect({
+    tag_redirect_id: existing?.tag_redirect_id ?? crypto.randomUUID(),
+    source_normalized_name: input.source_normalized_name,
+    source_display_name: input.source_display_name,
+    target_tag_id: input.target_tag_id,
+    created_at: existing?.created_at ?? Date.now()
+  });
 }
 
 async function deleteOrphanedTag(tagId: string): Promise<void> {
