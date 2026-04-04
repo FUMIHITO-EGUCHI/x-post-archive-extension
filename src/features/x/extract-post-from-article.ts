@@ -487,29 +487,21 @@ function findQuotedPermalink(container: HTMLElement): {
     return directPermalink;
   }
 
-  const capturedUrls: string[] = [];
-  const originalPushState = history.pushState.bind(history);
+  return findPermalinkViaReactFiber(container);
+}
 
-  history.pushState = ((_: unknown, __: string, url?: string | URL | null) => {
-    if (typeof url === "string") {
-      capturedUrls.push(url);
-    } else if (url instanceof URL) {
-      capturedUrls.push(url.toString());
-    }
-  }) as History["pushState"];
+function findPermalinkViaReactFiber(container: HTMLElement): {
+  xPostId: string;
+  xUsername: string;
+  postUrl: string;
+} | null {
+  // The main-world content script annotates quoted post containers with
+  // data-xpa-quoted-permalink (read from React Fiber) because isolated-world
+  // content scripts cannot enumerate __reactFiber$* properties on DOM elements.
+  const annotated = container.getAttribute("data-xpa-quoted-permalink");
 
-  try {
-    container.click();
-  } finally {
-    history.pushState = originalPushState;
-  }
-
-  for (const url of capturedUrls) {
-    const parsed = parsePermalink(url);
-
-    if (parsed !== null) {
-      return parsed;
-    }
+  if (annotated !== null) {
+    return parsePermalink(annotated);
   }
 
   return null;
