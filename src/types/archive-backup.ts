@@ -1,4 +1,4 @@
-import type { MediaRecord, PostRecord, PostTagRecord, TagRecord } from "./archive";
+import type { MediaRecord, PostRecord, PostTagRecord, TagRecord, TagRedirectRecord } from "./archive";
 
 export type ArchiveBackupFileEntry = {
   path: string;
@@ -8,12 +8,13 @@ export type ArchiveBackupFileEntry = {
 
 export type ArchiveBackupManifest = {
   format: "x-post-archive-backup";
-  version: 1;
+  version: 1 | 2;
   exported_at: number;
   data: {
     posts: PostRecord[];
     media: MediaRecord[];
     tags: TagRecord[];
+    tag_redirects: TagRedirectRecord[];
     post_tags: PostTagRecord[];
     files: ArchiveBackupFileEntry[];
   };
@@ -23,6 +24,7 @@ export type ArchiveBackupSummary = {
   postCount: number;
   mediaCount: number;
   tagCount: number;
+  tagRedirectCount: number;
   postTagCount: number;
   fileCount: number;
 };

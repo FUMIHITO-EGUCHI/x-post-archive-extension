@@ -4,7 +4,9 @@ import type { ArchivePostRecord, ArchiveTagRecord, MediaRecord } from "../../../
 import type {
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
+  FontSizeOption,
   PostSortField,
+  StorageEstimateState,
   SortDirection,
   ViewerSessionRestoreMode
 } from "../../../types/viewer";
@@ -19,8 +21,10 @@ import {
 } from "../../runtime/client";
 import { createLogger } from "../../logging/logger";
 import { SettingsArchiveMaintenancePanel } from "./settings-archive-maintenance-panel";
+import { SettingsBasicPanel } from "./settings-basic-panel";
 import { SettingsLogPanel } from "./settings-log-panel";
 import { SettingsTagManagementPanel } from "./settings-tag-management-panel";
+import { SettingsTagRedirectsPanel } from "./settings-tag-redirects-panel";
 import {
   loadArchiveLanguage,
   localizeKnownAutoTagDisplayName,
@@ -37,7 +41,7 @@ import {
 
 type ViewerStatus = "idle" | "loading" | "ready";
 type ViewerScreen = "archive" | "settings";
-type FontSizeOption = "small" | "medium" | "large";
+type SettingsTab = "basic" | "tags" | "tag-rules" | "backup" | "log";
 type TagSortOption = "count" | "name";
 type ActiveMedia = {
   items: MediaRecord[];
@@ -48,13 +52,6 @@ type ActiveVideo = {
   objectUrl: string | null;
   status: "loading" | "ready" | "error";
 };
-type StorageEstimateState = {
-  usage: number | null;
-  quota: number | null;
-  available: number | null;
-  status: "idle" | "ready" | "unsupported";
-};
-
 const VIEWER_FONT_SIZE_STORAGE_KEY = "viewer.fontSize";
 const DEFAULT_PAGE_SIZE = 50;
 const FONT_SIZE_SCALE: Record<FontSizeOption, number> = {
@@ -66,6 +63,7 @@ const logger = createLogger("viewer");
 
 export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("basic");
   const [language, setLanguage] = useState<ArchiveLanguage>("ja");
   const [fontSize, setFontSize] = useState<FontSizeOption>("medium");
   const [sessionRestoreMode, setSessionRestoreMode] =
@@ -918,14 +916,15 @@ export function ViewerApp() {
         <>
           <section className="viewer-hero">
             <div className="viewer-eyebrow-row">
-              <button
-                className="viewer-icon-button"
-                type="button"
-                aria-label={language === "ja" ? "設定を開く" : "Open settings"}
-                onClick={() => {
-                  setScreen("settings");
-                }}
-              >
+                <button
+                  className="viewer-icon-button"
+                  type="button"
+                  aria-label={language === "ja" ? "設定を開く" : "Open settings"}
+                  onClick={() => {
+                    setSettingsTab("basic");
+                    setScreen("settings");
+                  }}
+                >
                 <GearIcon />
               </button>
             </div>
@@ -1309,247 +1308,67 @@ export function ViewerApp() {
             <div className="viewer-list-header">
               <h2>{language === "ja" ? "設定" : "Options"}</h2>
             </div>
-            <div className="viewer-settings-grid">
-              <section className="viewer-settings-card">
-                <div className="viewer-settings-card-header">
-                  <h3>{language === "ja" ? "表示言語" : "Language"}</h3>
-                  <p>
-                    {language === "ja"
-                      ? "設定画面と一覧画面の文言、保存時のデフォルトタグの言語を切り替えます。"
-                      : "Switch the settings and archive copy, plus the default tags assigned when posts are saved."}
-                  </p>
-                </div>
-                <div className="viewer-font-option-list" role="radiogroup" aria-label="Language">
-                  {(
-                    [
-                      ["ja", "日本語"],
-                      ["en", "English"]
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      className={
-                        language === value
-                          ? "viewer-font-option viewer-font-option-active"
-                          : "viewer-font-option"
-                      }
-                      type="button"
-                      role="radio"
-                      aria-checked={language === value}
-                      onClick={() => {
-                        void handleLanguageChange(value);
-                      }}
-                    >
-                      <strong>{label}</strong>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="viewer-settings-card">
-                <div className="viewer-settings-card-header">
-                  <h3>{language === "ja" ? "文字サイズ" : "Font size"}</h3>
-                  <p>
-                    {language === "ja"
-                      ? "アーカイブ viewer の文字サイズを調整します。"
-                      : "Adjust text size in the archive viewer."}
-                  </p>
-                </div>
-                <div
-                  className="viewer-font-option-list"
-                  role="radiogroup"
-                  aria-label={language === "ja" ? "文字サイズ" : "Font size"}
-                >
-                  {(
-                    [
-                      ["small", language === "ja" ? "小" : "Small"],
-                      ["medium", language === "ja" ? "中" : "Medium"],
-                      ["large", language === "ja" ? "大" : "Large"]
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      className={
-                        fontSize === value
-                          ? "viewer-font-option viewer-font-option-active"
-                          : "viewer-font-option"
-                      }
-                      type="button"
-                      role="radio"
-                      aria-checked={fontSize === value}
-                      onClick={() => {
-                        void handleFontSizeChange(value);
-                      }}
-                    >
-                      <span>{label}</span>
-                      <strong>{formatFontSizePreview(value)}</strong>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="viewer-settings-card">
-                <div className="viewer-settings-card-header">
-                  <h3>{language === "ja" ? "アーカイブの復元状態" : "Archive session"}</h3>
-                  <p>
-                    {language === "ja"
-                      ? "タブを閉じたあとにフィルタや表示位置を復元するかを選びます。"
-                      : "Choose whether the viewer restores filters and your place after the tab closes."}
-                  </p>
-                </div>
-                <div
-                  className="viewer-font-option-list"
-                  role="radiogroup"
-                  aria-label={language === "ja" ? "アーカイブの復元状態" : "Archive session restore"}
-                >
-                  {(
-                    [
-                      [
-                        "off",
-                        language === "ja" ? "オフ" : "Off",
-                        language === "ja"
-                          ? "毎回まっさらな状態で一覧を開きます。"
-                          : "Always open the archive from a fresh state."
-                      ],
-                      [
-                        "filters",
-                        language === "ja" ? "フィルタのみ" : "Filters only",
-                        language === "ja"
-                          ? "並び順とタグフィルタを復元します。"
-                          : "Restore sort and tag filter choices."
-                      ],
-                      [
-                        "filters-and-position",
-                        language === "ja" ? "フィルタ + 位置" : "Filters + position",
-                        language === "ja"
-                          ? "並び順、タグフィルタ、読み込み済み件数、スクロール位置を復元します。"
-                          : "Restore sort, tag filter, loaded items, and scroll position."
-                      ]
-                    ] as const
-                  ).map(([value, label, description]) => (
-                    <button
-                      key={value}
-                      className={
-                        sessionRestoreMode === value
-                          ? "viewer-font-option viewer-font-option-active"
-                          : "viewer-font-option"
-                      }
-                      type="button"
-                      role="radio"
-                      aria-checked={sessionRestoreMode === value}
-                      onClick={() => {
-                        void handleSessionRestoreModeChange(value);
-                      }}
-                    >
-                      <strong>{label}</strong>
-                      <span>{description}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="viewer-settings-action-row">
-                  <button
-                    className="viewer-secondary-button"
-                    type="button"
+            <nav className="viewer-settings-tabs" aria-label={language === "ja" ? "設定ページ" : "Settings pages"}>
+              {(
+                [
+                  ["basic", language === "ja" ? "基本設定" : "General"],
+                  ["tags", language === "ja" ? "タグ管理" : "Tags"],
+                  ["tag-rules", language === "ja" ? "自動タグ変換" : "Redirects"],
+                  ["backup", language === "ja" ? "バックアップ" : "Backup"],
+                  ["log", language === "ja" ? "ログ" : "Log"]
+                ] as const
+              ).map(([tab, label]) => (
+                <button
+                  key={tab}
+                  type="button"
+                  className={settingsTab === tab ? "viewer-settings-tab viewer-settings-tab-active" : "viewer-settings-tab"}
+                  aria-current={settingsTab === tab ? "page" : undefined}
                   onClick={() => {
-                      void handleClearSavedSession();
-                    }}
-                  >
-                    {language === "ja" ? "保存済みセッションを消去" : "Clear saved session"}
-                  </button>
-                </div>
-              </section>
+                    setSettingsTab(tab);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+            <div className="viewer-settings-grid">
+              {settingsTab === "basic" && (
+                <SettingsBasicPanel
+                  language={language}
+                  fontSize={fontSize}
+                  sessionRestoreMode={sessionRestoreMode}
+                  storageEstimate={storageEstimate}
+                  archiveSummary={archiveSummary}
+                  onLanguageChange={handleLanguageChange}
+                  onFontSizeChange={handleFontSizeChange}
+                  onSessionRestoreModeChange={handleSessionRestoreModeChange}
+                  onClearSavedSession={handleClearSavedSession}
+                />
+              )}
 
-              <section className="viewer-settings-card">
-                <div className="viewer-settings-card-header">
-                  <h3>{language === "ja" ? "ストレージ使用量" : "Storage usage"}</h3>
-                  <p>
-                    {language === "ja"
-                      ? "この拡張で使っているブラウザ管理ストレージの推定値です。"
-                      : "Estimated browser-managed storage for this extension."}
-                  </p>
-                </div>
-                {storageEstimate.status === "unsupported" ? (
-                  <p className="viewer-message">
-                    {language === "ja"
-                      ? "この環境ではストレージ推定値を取得できません。"
-                      : "Storage estimate is not available in this environment."}
-                  </p>
-                ) : (
-                  <dl className="viewer-settings-metric-list">
-                    <div className="viewer-settings-metric">
-                      <dt>{language === "ja" ? "使用中" : "Used"}</dt>
-                      <dd>{formatBytes(storageEstimate.usage)}</dd>
-                    </div>
-                    <div className="viewer-settings-metric">
-                      <dt>{language === "ja" ? "空き" : "Available"}</dt>
-                      <dd>{formatBytes(storageEstimate.available)}</dd>
-                    </div>
-                    <div className="viewer-settings-metric">
-                      <dt>{language === "ja" ? "推定上限" : "Estimated quota"}</dt>
-                      <dd>{formatBytes(storageEstimate.quota)}</dd>
-                    </div>
-                    <div className="viewer-settings-metric">
-                      <dt>{language === "ja" ? "保存済みメディア合計" : "Saved media total"}</dt>
-                      <dd>{formatBytes(archiveSummary.mediaBytes)}</dd>
-                    </div>
-                  </dl>
-                )}
-              </section>
+              {settingsTab === "tags" && (
+                <SettingsTagManagementPanel
+                  language={language}
+                  onTagRenamed={handleTagRenamed}
+                  onTagMerged={handleTagMerged}
+                />
+              )}
 
-              <section className="viewer-settings-card">
-                <div className="viewer-settings-card-header">
-                  <h3>{language === "ja" ? "アーカイブ概要" : "Archive summary"}</h3>
-                  <p>
-                    {language === "ja"
-                      ? "現在このアーカイブに保存されている内容の件数です。"
-                      : "Current counts for saved content in this archive."}
-                  </p>
-                </div>
-                <dl className="viewer-settings-metric-list">
-                  <div className="viewer-settings-metric">
-                    <dt>{language === "ja" ? "投稿" : "Posts"}</dt>
-                    <dd>{formatCount(archiveSummary.postCount, language)}</dd>
-                  </div>
-                  <div className="viewer-settings-metric">
-                    <dt>{language === "ja" ? "メディア" : "Media"}</dt>
-                    <dd>{formatCount(archiveSummary.mediaCount, language)}</dd>
-                  </div>
-                  <div className="viewer-settings-metric">
-                    <dt>{language === "ja" ? "画像" : "Images"}</dt>
-                    <dd>{formatCount(archiveSummary.imageCount, language)}</dd>
-                  </div>
-                  <div className="viewer-settings-metric">
-                    <dt>{language === "ja" ? "動画" : "Videos"}</dt>
-                    <dd>{formatCount(archiveSummary.videoCount, language)}</dd>
-                  </div>
-                  <div className="viewer-settings-metric">
-                    <dt>{language === "ja" ? "アカウント" : "Accounts"}</dt>
-                    <dd>{formatCount(archiveSummary.accountCount, language)}</dd>
-                  </div>
-                  <div className="viewer-settings-metric">
-                    <dt>{language === "ja" ? "タグ" : "Tags"}</dt>
-                    <dd>{formatCount(archiveSummary.tagCount, language)}</dd>
-                  </div>
-                </dl>
-              </section>
+              {settingsTab === "tag-rules" && <SettingsTagRedirectsPanel language={language} />}
 
-              <SettingsTagManagementPanel
-                language={language}
-                onTagRenamed={handleTagRenamed}
-                onTagMerged={handleTagMerged}
-              />
+              {settingsTab === "backup" && (
+                <SettingsArchiveMaintenancePanel
+                  language={language}
+                  archiveSummary={{
+                    postCount: archiveSummary.postCount,
+                    mediaCount: archiveSummary.mediaCount,
+                    tagCount: archiveSummary.tagCount
+                  }}
+                  onArchiveChanged={refreshArchive}
+                />
+              )}
 
-              <SettingsArchiveMaintenancePanel
-                language={language}
-                archiveSummary={{
-                  postCount: archiveSummary.postCount,
-                  mediaCount: archiveSummary.mediaCount,
-                  tagCount: archiveSummary.tagCount
-                }}
-                onArchiveChanged={refreshArchive}
-              />
-
-              <SettingsLogPanel language={language} />
+              {settingsTab === "log" && <SettingsLogPanel language={language} />}
             </div>
           </section>
         </>
@@ -1848,35 +1667,6 @@ function QuotedPostCard({
 
 function isFontSizeOption(value: unknown): value is FontSizeOption {
   return value === "small" || value === "medium" || value === "large";
-}
-
-function formatFontSizePreview(value: FontSizeOption): string {
-  switch (value) {
-    case "small":
-      return "90%";
-    case "medium":
-      return "100%";
-    case "large":
-      return "112%";
-  }
-}
-
-function formatBytes(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) {
-    return "Unknown";
-  }
-
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let currentValue = value;
-  let unitIndex = 0;
-
-  while (currentValue >= 1024 && unitIndex < units.length - 1) {
-    currentValue /= 1024;
-    unitIndex += 1;
-  }
-
-  const digits = currentValue >= 100 || unitIndex === 0 ? 0 : 1;
-  return `${currentValue.toFixed(digits)} ${units[unitIndex]}`;
 }
 
 function formatCount(value: number, language: ArchiveLanguage = "en"): string {

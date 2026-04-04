@@ -3,7 +3,8 @@ import type {
   MediaRecord,
   PostRecord,
   PostTagRecord,
-  TagRecord
+  TagRecord,
+  TagRedirectRecord
 } from "../types/archive";
 import type { LogRecord } from "../types/logger";
 import { resolveKnownBuiltInTagKey } from "../features/settings/archive-language";
@@ -14,6 +15,7 @@ export class ArchiveDatabase extends Dexie {
   posts!: Table<PostRecord, string>;
   media!: Table<MediaRecord, string>;
   tags!: Table<TagRecord, string>;
+  tag_redirects!: Table<TagRedirectRecord, string>;
   post_tags!: Table<PostTagRecord, string>;
   logs!: Table<LogRecord, string>;
 
@@ -149,6 +151,17 @@ export class ArchiveDatabase extends Dexie {
       posts: "&x_post_id, saved_at, posted_at, reply_count, repost_count, like_count, display_name",
       media: "&media_id, x_post_id, [x_post_id+position], storage_status, saved_at",
       tags: "&tag_id, &normalized_name, system_key, display_name, created_at",
+      post_tags:
+        "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, system_key, assigned_at",
+      logs: "&log_id, created_at, level, [level+created_at], scope, event, request_id"
+    });
+
+    this.version(11).stores({
+      posts: "&x_post_id, saved_at, posted_at, reply_count, repost_count, like_count, display_name",
+      media: "&media_id, x_post_id, [x_post_id+position], storage_status, saved_at",
+      tags: "&tag_id, &normalized_name, system_key, display_name, created_at",
+      tag_redirects:
+        "&tag_redirect_id, &source_normalized_name, source_display_name, target_tag_id, created_at",
       post_tags:
         "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, system_key, assigned_at",
       logs: "&log_id, created_at, level, [level+created_at], scope, event, request_id"
