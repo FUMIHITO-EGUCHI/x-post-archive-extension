@@ -149,11 +149,18 @@ history.pushState = orig;
 - この引用投稿では保存がうまく行った
 - Claude には、失敗 2 件との DOM 構造差分、特に引用コンテナ内のアンカー構成と click ターゲットの違いを見てほしい
 
-### この再現報告からの仮説
+### この再現報告からの仮説（→修正済み）
 
-- 引用元 permalink 取得のために使っている `container.click()` が、対象によっては実際の navigation を発生させている
-- 画像なし引用だけでなく、特定の DOM 構造では nested interactive element の既定動作まで走っている可能性がある
-- その結果 `quotedPost` 抽出が途中で崩れ、主投稿単体または誤った対象で保存されている可能性がある
+- 引用元 permalink 取得のために使っていた `container.click()` が、対象によっては実際の navigation を発生させていた
+  - `history.pushState` のモンキーパッチは `location.href = url` 方式のナビゲーションを防げない
+  - 特にテキストのみの引用投稿（コンテナ内アンカーなし）でのみ `container.click()` が呼ばれていた
+
+### 修正 (2026-04-03)
+
+- `findQuotedPermalink` から `container.click()` 呼び出しを完全に削除
+- アンカーが見つからない場合は null を返す（テキストのみ引用投稿の permalink 取得は断念）
+- `src/features/x/extract-post-from-article.ts` の `findQuotedPermalink` 関数を単純化
+- typecheck ✓ / build ✓
 
 ### Codex 側の実装メモ
 
@@ -161,3 +168,86 @@ history.pushState = orig;
 - selector のズレが判明したら、主投稿と引用元で抽出関数を分けるか、`extractEngagementCounts(root, options)` の形に拡張するのが安全
 - 現在の引用元 permalink 取得は `findQuotedPermalink(container)` 内で、アンカーが見つからない場合に `history.pushState` を monkey-patch して `container.click()` を実行している
 - ここが今回の「Save で遷移する」症状の第一容疑
+
+---
+
+## Finding (2026-04-04): isolated world 制限の根本原因確定 + 修正 + 新仮説
+
+### 根本原因確定（isolated world restriction）
+
+Chrome 拡張の isolated world では `Object.keys(domElement)` が `[]` を返す。
+React が DOM 要素に付与する `__reactFiber$xxx` プロパティは main world の JS ヒープに存在するが、
+isolated world からは Object.keys() で列挙できない（プロパティ自体にはアクセス不可ではなく、
+`Reflect.get` 等での直接参照も実際には cross-world では失敗する）。
+
+CDP を使った調査で確認:
+- main world: `fiberKey = "__reactFiber$..."` が見つかり depth≈12 で `tweet.permalink = "/k50_8/status/2038625286254997621"` を取得できる
+- isolated world (`Page.createIsolatedWorld` 経由): `{ error: "no fiber key", allKeys: [] }` → 完全に見えない
+
+### 実装した修正
+
+**ブリッジパターン**: main world でアノテーション → isolated world で属性読み取り
+
+```
+main world (x-main.content.ts)
+  └─ annotate-quoted-post-containers.ts
+      ├─ Object.keys() で __reactFiber$* を取得 (main worldなのでOK)
+      ├─ Fiber を最大30階層辿り memoizedProps.tweet.permalink を探す
+      └─ 見つかれば div[role="link"][tabindex="0"] に data-xpa-quoted-permalink="..." を付与
+
+isolated world (x.content.ts → extract-post-from-article.ts)
+  └─ findPermalinkViaReactFiber()
+      └─ container.getAttribute("data-xpa-quoted-permalink") で読み取る
+```
+
+変更ファイル:
+- `src/features/x/annotate-quoted-post-containers.ts` — 新規作成
+- `src/entrypoints/x-main.content.ts` — installQuotedPostContainerAnnotator() 追加
+- `src/features/x/extract-post-from-article.ts` — findPermalinkViaReactFiber を属性読み取りに変更、Fiber 直接操作コードを削除
+
+typecheck ✓ / build ✓
+
+### ブラウザ確認結果
+
+ユーザーが拡張機能リロード後にテスト → **依然として quoted_post_id = null、引用元未保存**。
+
+### 新仮説: document_start タイミングによる MutationObserver 未設定
+
+`x-main.content.ts` は `runAt: "document_start"` で動作する。
+この時点では `document.body` が `null` の可能性があり、
+`observer.observe(document.body, ...)` が TypeError を投げてアノテーターが無効になる。
+
+`installGraphqlVideoResponseObserver` は `window.fetch` / XHR のパッチだけなので
+document.body に依存せず問題が顕在化しない。アノテーターだけが body 依存。
+
+確認手順:
+1. 引用投稿ページを開く
+2. DevTools Console で:
+   ```javascript
+   document.querySelector('div[role="link"][tabindex="0"]').hasAttribute('data-xpa-quoted-permalink')
+   ```
+   → `false` ならアノテーターが機能していない
+
+対処案（`annotate-quoted-post-containers.ts`）:
+```typescript
+export function installQuotedPostContainerAnnotator(): void {
+  if (document.body !== null) {
+    setupAnnotator();
+  } else {
+    document.addEventListener("DOMContentLoaded", setupAnnotator, { once: true });
+  }
+}
+
+function setupAnnotator(): void {
+  annotateQuotedPostContainers();
+  const observer = new MutationObserver(() => annotateQuotedPostContainers());
+  // DOMContentLoaded 後なら body は確実に存在する
+  observer.observe(document.body!, { childList: true, subtree: true });
+}
+```
+
+### parsePermalink のフォーマット
+
+アノテーターがセットする値は `/k50_8/status/2038625286254997621` 形式 (relative path)。
+`parsePermalink` は `new URL(href, window.location.origin)` で処理するため、
+relative path でも動作するはず（問題なし）。
