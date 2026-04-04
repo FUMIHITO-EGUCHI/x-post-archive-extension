@@ -64,7 +64,8 @@ import type {
   ArchiveTagRedirectSummaryRecord,
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
-  ListPostsPageInput
+  ListPostsPageInput,
+  UserSummary
 } from "../../types/viewer";
 import {
   buildMediaOpfsPath,
@@ -235,8 +236,7 @@ export async function listArchivePostsPage(
 }> {
   const normalizedOffset = normalizePageOffset(input.offset);
   const normalizedLimit = normalizePageLimit(input.limit);
-  const matchingPostIds =
-    input.tagFilter === null ? null : new Set(await listPostIdsByNormalizedName(input.tagFilter));
+  const matchingPostIds = await resolveFilteredPostIds(input);
   const totalCount = matchingPostIds === null ? await countPosts() : matchingPostIds.size;
 
   if (totalCount === 0) {
@@ -256,7 +256,7 @@ export async function listArchivePostsPage(
           normalizedOffset,
           normalizedLimit
         )
-      : await listTaggedPostsPage(input, matchingPostIds, normalizedOffset, normalizedLimit);
+      : await listFilteredPostsPage(input, matchingPostIds, normalizedOffset, normalizedLimit);
 
   return {
     posts: await hydrateArchivePosts(pagePosts),
@@ -299,6 +299,49 @@ export async function listArchiveTagSummaries(): Promise<ArchiveTagSummaryRecord
     tag: entry.tag,
     postCount: entry.postIds.size
   }));
+}
+
+export async function listArchiveUserSummaries(): Promise<UserSummary[]> {
+  const posts = await listPosts();
+  const summaryMap = new Map<
+    string,
+    {
+      display_name: string;
+      screen_name: string;
+      post_count: number;
+    }
+  >();
+
+  for (const post of posts) {
+    const normalizedScreenName = normalizeAuthorFilter(post.x_username);
+
+    if (normalizedScreenName === null) {
+      continue;
+    }
+
+    const existing = summaryMap.get(normalizedScreenName);
+
+    if (existing === undefined) {
+      summaryMap.set(normalizedScreenName, {
+        display_name: post.display_name,
+        screen_name: normalizedScreenName,
+        post_count: 1
+      });
+      continue;
+    }
+
+    existing.post_count += 1;
+  }
+
+  return [...summaryMap.values()].sort((left, right) => {
+    const postCountDifference = right.post_count - left.post_count;
+
+    if (postCountDifference !== 0) {
+      return postCountDifference;
+    }
+
+    return left.screen_name.localeCompare(right.screen_name, "en-US");
+  });
 }
 
 export async function listArchiveTagRedirectSummaries(): Promise<ArchiveTagRedirectSummaryRecord[]> {
@@ -1078,7 +1121,7 @@ async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePost
   }));
 }
 
-async function listTaggedPostsPage(
+async function listFilteredPostsPage(
   input: ListPostsPageInput,
   matchingPostIds: Set<string>,
   offset: number,
@@ -1124,6 +1167,37 @@ async function listTaggedPostsPage(
   return results;
 }
 
+async function resolveFilteredPostIds(input: ListPostsPageInput): Promise<Set<string> | null> {
+  const tagFilterPostIds =
+    input.tagFilter === null ? null : new Set(await listPostIdsByNormalizedName(input.tagFilter));
+  const authorFilter = normalizeAuthorFilter(input.authorFilter);
+
+  if (tagFilterPostIds === null && authorFilter === null) {
+    return null;
+  }
+
+  const authorFilterPostIds =
+    authorFilter === null ? null : new Set(await listPostIdsByAuthorFilter(authorFilter));
+
+  if (tagFilterPostIds === null) {
+    return authorFilterPostIds;
+  }
+
+  if (authorFilterPostIds === null) {
+    return tagFilterPostIds;
+  }
+
+  const intersection = new Set<string>();
+
+  for (const postId of tagFilterPostIds) {
+    if (authorFilterPostIds.has(postId)) {
+      intersection.add(postId);
+    }
+  }
+
+  return intersection;
+}
+
 function normalizePageOffset(value: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
@@ -1134,6 +1208,14 @@ function normalizePageLimit(value: number): number {
   }
 
   return Math.min(Math.floor(value), 250);
+}
+
+async function listPostIdsByAuthorFilter(authorFilter: string): Promise<string[]> {
+  const posts = await listPosts();
+
+  return posts
+    .filter((post) => normalizeAuthorFilter(post.x_username) === authorFilter)
+    .map((post) => post.x_post_id);
 }
 
 async function ensureTagAssignments(inputs: PostTagInput[]): Promise<void> {
@@ -1576,6 +1658,15 @@ function normalizeMediaRecord(media: MediaRecord): MediaRecord {
     preview_image_url: media.preview_image_url ?? null,
     preview_image_opfs_path: media.preview_image_opfs_path ?? null
   };
+}
+
+function normalizeAuthorFilter(value: string | null): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const cleaned = value.trim().replace(/^@+/, "").toLocaleLowerCase("en-US");
+  return cleaned === "" ? null : cleaned;
 }
 
 function getMediaSourceKey(mediaType: MediaRecord["media_type"], sourceUrl: string): string {

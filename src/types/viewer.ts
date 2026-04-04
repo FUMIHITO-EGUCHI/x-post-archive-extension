@@ -14,6 +14,12 @@ export type ArchiveTagSummaryRecord = {
   postCount: number;
 };
 
+export type UserSummary = {
+  display_name: string;
+  screen_name: string;
+  post_count: number;
+};
+
 export type ArchiveTagRedirectSummaryRecord = {
   tag_redirect_id: string;
   source_normalized_name: string;
@@ -40,6 +46,7 @@ export type ListPostsPageInput = {
   sortField: PostSortField;
   sortDirection: SortDirection;
   tagFilter: string | null;
+  authorFilter: string | null;
 };
 
 export type ViewerSessionRestoreMode = "off" | "filters" | "filters-and-position";
@@ -59,6 +66,7 @@ export type ViewerSessionState = {
   sortField: PostSortField;
   sortDirection: SortDirection;
   activeTagFilter: string | null;
+  activeAuthorFilter?: string | null;
   loadedCount: number;
   anchorPostId: string | null;
   scrollTop: number;

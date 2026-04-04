@@ -1651,6 +1651,12 @@ body {
   margin-bottom: 16px;
 }
 
+.viewer-user-modal-controls {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
 .viewer-tag-modal-summary {
   display: flex;
   flex-wrap: wrap;
