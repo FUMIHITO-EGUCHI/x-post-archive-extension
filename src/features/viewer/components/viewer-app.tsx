@@ -1030,6 +1030,39 @@ export function ViewerApp() {
 
                     {post.post_text.trim() !== "" && <p className="post-text">{post.post_text}</p>}
 
+                    {post.quoted_post !== undefined && (
+                      <QuotedPostCard
+                        post={post.quoted_post}
+                        language={language}
+                        onOpenMedia={(quotedPost, media) => {
+                          const items = quotedPost.media.filter(
+                            (postMedia) =>
+                              postMedia.media_type === "image" &&
+                              postMedia.storage_status === "ready"
+                          );
+                          const currentIndex = items.findIndex(
+                            (item) => item.media_id === media.media_id
+                          );
+
+                          if (items.length === 0 || currentIndex < 0) {
+                            return;
+                          }
+
+                          setActiveMedia({
+                            items,
+                            currentIndex
+                          });
+                        }}
+                        onOpenVideo={(media) => {
+                          setActiveVideo({
+                            media,
+                            objectUrl: null,
+                            status: "loading"
+                          });
+                        }}
+                      />
+                    )}
+
                     {post.media.length > 0 && (
                       <div className="post-media-grid">
                         {post.media.map((media) => (
@@ -1701,6 +1734,60 @@ export function ViewerApp() {
         </div>
       )}
     </main>
+  );
+}
+
+function QuotedPostCard({
+  post,
+  language,
+  onOpenMedia,
+  onOpenVideo
+}: {
+  post: ArchivePostRecord;
+  language: ArchiveLanguage;
+  onOpenMedia: (post: ArchivePostRecord, media: MediaRecord) => void;
+  onOpenVideo: (media: MediaRecord) => void;
+}) {
+  return (
+    <section
+      className="quoted-post-card"
+      aria-label={language === "ja" ? "引用投稿" : "Quoted post"}
+    >
+      <div className="quoted-post-header">
+        <p className="quoted-post-username">
+          <span>{post.display_name}</span>
+          <span className="post-handle">@{post.x_username}</span>
+        </p>
+        <span className="quoted-post-date">{formatPostedAt(post.posted_at, language)}</span>
+      </div>
+
+      {post.post_text.trim() !== "" && <p className="quoted-post-text">{post.post_text}</p>}
+
+      {post.media.length > 0 && (
+        <div className="quoted-post-media-grid">
+          {post.media.map((media) => (
+            <MediaCard
+              key={media.media_id}
+              media={media}
+              onOpen={() => {
+                if (media.media_type === "video") {
+                  return;
+                }
+
+                onOpenMedia(post, media);
+              }}
+              onOpenVideo={() => {
+                onOpenVideo(media);
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      <a className="quoted-post-link" href={post.post_url} target="_blank" rel="noreferrer">
+        {language === "ja" ? "引用元を開く" : "Open quoted post"}
+      </a>
+    </section>
   );
 }
 

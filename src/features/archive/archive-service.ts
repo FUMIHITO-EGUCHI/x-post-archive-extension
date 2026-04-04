@@ -14,6 +14,7 @@ import {
   countPosts,
   deletePostRecord,
   getPost,
+  getPostsByIds,
   hasPost,
   listPosts,
   listPostsSliceBySort
@@ -165,6 +166,7 @@ export async function saveArchivePost(
     reply_count: input.reply_count,
     repost_count: input.repost_count,
     like_count: input.like_count,
+    quoted_post_id: input.quoted_post_id ?? null,
     saved_at: savedAt
   };
   const imageMedia = input.media.map((image) =>
@@ -629,6 +631,44 @@ async function listArchiveTagsForPost(xPostId: string): Promise<ArchiveTagRecord
 }
 
 async function hydrateArchivePosts(posts: PostRecord[]): Promise<ArchivePostRecord[]> {
+  const basePosts = await hydrateArchivePostsBase(posts);
+  const quotedPostIds = [...new Set(basePosts.flatMap((post) =>
+    typeof post.quoted_post_id === "string" && post.quoted_post_id.trim() !== ""
+      ? [post.quoted_post_id]
+      : []
+  ))];
+
+  if (quotedPostIds.length === 0) {
+    return basePosts;
+  }
+
+  const quotedPosts = await getPostsByIds(quotedPostIds);
+
+  if (quotedPosts.length === 0) {
+    return basePosts;
+  }
+
+  const hydratedQuotedPosts = await hydrateArchivePostsBase(quotedPosts);
+  const quotedPostMap = new Map(
+    hydratedQuotedPosts.map((post) => [post.x_post_id, post] as const)
+  );
+
+  return basePosts.map((post) => {
+    const quotedPost =
+      typeof post.quoted_post_id === "string"
+        ? quotedPostMap.get(post.quoted_post_id)
+        : undefined;
+
+    return quotedPost === undefined
+      ? post
+      : {
+          ...post,
+          quoted_post: quotedPost
+        };
+  });
+}
+
+async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePostRecord[]> {
   const postIds = posts.map((post) => post.x_post_id);
   const media = await listMediaByPostIds(postIds);
   const postTags = await listPostTagsByPostIds(postIds);
@@ -994,6 +1034,14 @@ function validateSavePostInput(input: SavePostInput): void {
   requireFiniteCount(input.reply_count, "reply_count");
   requireFiniteCount(input.repost_count, "repost_count");
   requireFiniteCount(input.like_count, "like_count");
+
+  if (
+    input.quoted_post_id !== undefined &&
+    input.quoted_post_id !== null &&
+    (typeof input.quoted_post_id !== "string" || input.quoted_post_id.trim() === "")
+  ) {
+    throw new Error("Invalid quoted_post_id.");
+  }
 
   if (typeof input.post_text !== "string") {
     throw new Error("Invalid post_text.");

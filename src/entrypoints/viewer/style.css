@@ -776,6 +776,63 @@ body {
   line-height: 1.7;
 }
 
+.quoted-post-card {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(16, 32, 51, 0.1);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(249, 251, 255, 0.96), rgba(241, 246, 255, 0.96));
+}
+
+.quoted-post-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quoted-post-username {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: calc(15px * var(--viewer-font-scale));
+  font-weight: 700;
+}
+
+.quoted-post-date {
+  font-size: calc(12px * var(--viewer-font-scale));
+  color: #5e7389;
+  white-space: nowrap;
+}
+
+.quoted-post-text {
+  margin: 0;
+  font-size: calc(16px * var(--viewer-font-scale));
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.quoted-post-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.quoted-post-link {
+  font-size: calc(13px * var(--viewer-font-scale));
+  font-weight: 700;
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.quoted-post-link:hover {
+  text-decoration: underline;
+}
+
 .post-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1285,6 +1342,15 @@ body {
 
   .post-date-list {
     gap: 8px;
+  }
+
+  .quoted-post-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .quoted-post-media-grid {
+    grid-template-columns: 1fr;
   }
 
   .tag-editor {

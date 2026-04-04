@@ -6,6 +6,15 @@ export async function getPost(xPostId: string): Promise<PostRecord | undefined> 
   return archiveDb.posts.get(xPostId);
 }
 
+export async function getPostsByIds(xPostIds: string[]): Promise<PostRecord[]> {
+  if (xPostIds.length === 0) {
+    return [];
+  }
+
+  const records = await archiveDb.posts.bulkGet(xPostIds);
+  return records.filter((record): record is PostRecord => record !== undefined);
+}
+
 export async function hasPost(xPostId: string): Promise<boolean> {
   return (await getPost(xPostId)) !== undefined;
 }
