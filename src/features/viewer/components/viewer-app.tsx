@@ -10,6 +10,7 @@ import type {
   SortDirection,
   ViewerSessionRestoreMode
 } from "../../../types/viewer";
+import type { ViewerTheme } from "../../../types/viewer";
 import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
 import {
   requestAddPostTagByName,
@@ -31,6 +32,7 @@ import {
   persistArchiveLanguage,
   type ArchiveLanguage
 } from "../../settings/archive-language";
+import { loadViewerTheme, persistViewerTheme } from "../../settings/viewer-theme";
 import {
   clearViewerSession,
   loadViewerSession,
@@ -66,6 +68,7 @@ export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("basic");
   const [language, setLanguage] = useState<ArchiveLanguage>("ja");
+  const [viewerTheme, setViewerTheme] = useState<ViewerTheme>("light");
   const [fontSize, setFontSize] = useState<FontSizeOption>("medium");
   const [sessionRestoreMode, setSessionRestoreMode] =
     useState<ViewerSessionRestoreMode>("filters");
@@ -109,6 +112,10 @@ export function ViewerApp() {
   const archiveSectionRef = useRef<HTMLElement | null>(null);
 
   const viewerScale = FONT_SIZE_SCALE[fontSize];
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", viewerTheme);
+  }, [viewerTheme]);
 
   const selectedTagFilter = useMemo(
     () => availableTags.find(({ tag }) => tag.normalized_name === activeTagFilter) ?? null,
@@ -169,10 +176,11 @@ export function ViewerApp() {
 
     async function initializeViewer() {
       try {
-        const [storedFont, nextLanguage, nextSessionRestoreMode, savedSession] = await Promise.all([
+        const [storedFont, nextLanguage, nextSessionRestoreMode, nextTheme, savedSession] = await Promise.all([
           browser.storage.local.get(VIEWER_FONT_SIZE_STORAGE_KEY),
           loadArchiveLanguage(),
           loadViewerSessionRestoreMode(),
+          loadViewerTheme(),
           loadViewerSession()
         ]);
 
@@ -188,6 +196,7 @@ export function ViewerApp() {
 
         setLanguage(nextLanguage);
         setSessionRestoreMode(nextSessionRestoreMode);
+        setViewerTheme(nextTheme);
 
         let nextSortField: PostSortField = "saved_at";
         let nextSortDirection: SortDirection = "desc";
@@ -784,6 +793,22 @@ export function ViewerApp() {
     }
   }
 
+  async function handleThemeChange(nextValue: ViewerTheme) {
+    setViewerTheme(nextValue);
+
+    try {
+      await persistViewerTheme(nextValue);
+    } catch (error) {
+      logger.error("viewer.theme.persist_failed", {
+        message: "Failed to persist viewer theme.",
+        context: {
+          nextValue,
+          error
+        }
+      });
+    }
+  }
+
   async function handleSortFieldChange(nextValue: PostSortField) {
     setSortField(nextValue);
     window.scrollTo({
@@ -1296,10 +1321,12 @@ export function ViewerApp() {
               {settingsTab === "basic" && (
                 <SettingsBasicPanel
                   language={language}
+                  currentTheme={viewerTheme}
                   fontSize={fontSize}
                   sessionRestoreMode={sessionRestoreMode}
                   storageEstimate={storageEstimate}
                   archiveSummary={archiveSummary}
+                  onThemeChange={handleThemeChange}
                   onLanguageChange={handleLanguageChange}
                   onFontSizeChange={handleFontSizeChange}
                   onSessionRestoreModeChange={handleSessionRestoreModeChange}

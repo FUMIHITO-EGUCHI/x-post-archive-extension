@@ -43,6 +43,7 @@ export type ListPostsPageInput = {
 };
 
 export type ViewerSessionRestoreMode = "off" | "filters" | "filters-and-position";
+export type ViewerTheme = "light" | "dark";
 
 export type FontSizeOption = "small" | "medium" | "large";
 
