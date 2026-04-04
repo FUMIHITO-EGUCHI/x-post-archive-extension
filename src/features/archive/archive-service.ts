@@ -439,6 +439,90 @@ export async function addManualTagToArchivePost(
   return tags;
 }
 
+export async function addPostTagByName(
+  postId: string,
+  displayName: string
+): Promise<
+  | {
+      ok: true;
+      postTag: PostTagRecord;
+    }
+  | {
+      ok: false;
+      error: string;
+    }
+> {
+  const post = await getPost(postId);
+
+  if (post === undefined) {
+    return {
+      ok: false,
+      error: "post-not-found"
+    };
+  }
+
+  const normalizedName = normalizeTagName(displayName);
+
+  if (normalizedName === null) {
+    return {
+      ok: false,
+      error: "empty-name"
+    };
+  }
+
+  const cleanedDisplayName = cleanupTagName(displayName);
+  return archiveDb.transaction<
+    | {
+        ok: true;
+        postTag: PostTagRecord;
+      }
+    | {
+        ok: false;
+        error: string;
+      }
+  >("rw", archiveDb.tags, archiveDb.post_tags, async () => {
+    let tag = await getTagByNormalizedName(normalizedName);
+
+    if (tag === undefined) {
+      tag = {
+        tag_id: crypto.randomUUID(),
+        normalized_name: normalizedName,
+        display_name: cleanedDisplayName,
+        system_key: null,
+        created_at: Date.now()
+      };
+      await addTag(tag);
+    }
+
+    const existingPostTag = await getPostTagByNormalizedName(postId, normalizedName);
+
+    if (existingPostTag !== undefined) {
+      return {
+        ok: true,
+        postTag: existingPostTag
+      };
+    }
+
+    const postTag: PostTagRecord = {
+      post_tag_id: crypto.randomUUID(),
+      x_post_id: postId,
+      tag_id: tag.tag_id,
+      normalized_name: tag.normalized_name,
+      display_name: tag.display_name,
+      system_key: tag.system_key,
+      source: "manual",
+      assigned_at: Date.now()
+    };
+
+    await addPostTag(postTag);
+
+    return {
+      ok: true,
+      postTag
+    };
+  });
+}
+
 export async function removeManualTagFromArchivePost(
   xPostId: string,
   normalizedTagName: string
@@ -480,6 +564,53 @@ export async function removeManualTagFromArchivePost(
   });
 
   return tags;
+}
+
+export async function removePostTagByName(
+  postId: string,
+  normalizedName: string
+): Promise<
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      error: string;
+    }
+> {
+  const resolvedNormalizedName = normalizeTagName(normalizedName);
+
+  if (resolvedNormalizedName === null) {
+    return {
+      ok: false,
+      error: "invalid-name"
+    };
+  }
+
+  const record = await getPostTagByNormalizedName(postId, resolvedNormalizedName);
+
+  if (record === undefined) {
+    return {
+      ok: false,
+      error: "not-found"
+    };
+  }
+
+  if (record.source !== "manual") {
+    return {
+      ok: false,
+      error: "not-removable"
+    };
+  }
+
+  await archiveDb.transaction("rw", archiveDb.tags, archiveDb.post_tags, async () => {
+    await deletePostTag(record.post_tag_id);
+    await deleteOrphanedTag(record.tag_id);
+  });
+
+  return {
+    ok: true
+  };
 }
 
 export async function renameTag(

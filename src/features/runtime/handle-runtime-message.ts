@@ -1,4 +1,5 @@
 import {
+  addPostTagByName,
   addManualTagToArchivePost,
   deleteArchiveTagRedirect,
   deleteArchivePost,
@@ -10,12 +11,14 @@ import {
   listArchivePosts,
   mergeTags,
   renameTag,
+  removePostTagByName,
   removeManualTagFromArchivePost,
   resumePendingMediaPersistence,
   saveArchivePost
 } from "../archive/archive-service";
 import { clearLogRecords } from "../../db/repositories/logs-repository";
 import type {
+  AddPostTagByNameResponse,
   ClearLogsResponse,
   DeleteTagRedirectResponse,
   DeletePostMessage,
@@ -29,6 +32,7 @@ import type {
   ListPostsResponse,
   MergeTagsResponse,
   RenameTagResponse,
+  RemovePostTagByNameResponse,
   RuntimeErrorResponse,
   RuntimeMessage,
   RuntimeResponse,
@@ -282,6 +286,55 @@ export async function handleRuntimeMessage(
       return response;
     }
 
+    case "post_tag.add": {
+      const result = await addPostTagByName(message.postId, message.displayName);
+      logger.info("post_tag.add.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          postId: message.postId,
+          displayName: message.displayName,
+          ok: result.ok
+        }
+      });
+      const response: AddPostTagByNameResponse = result.ok
+        ? {
+            type: "post_tag.add",
+            ok: true,
+            postTag: result.postTag
+          }
+        : {
+            type: "post_tag.add",
+            ok: false,
+            error: result.error
+          };
+      return response;
+    }
+
+    case "post_tag.remove": {
+      const result = await removePostTagByName(message.postId, message.normalizedName);
+      logger.info("post_tag.remove.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          postId: message.postId,
+          normalizedName: message.normalizedName,
+          ok: result.ok
+        }
+      });
+      const response: RemovePostTagByNameResponse = result.ok
+        ? {
+            type: "post_tag.remove",
+            ok: true
+          }
+        : {
+            type: "post_tag.remove",
+            ok: false,
+            error: result.error
+          };
+      return response;
+    }
+
     case "tag.rename": {
       const result = await renameTag(message.tagId, message.newDisplayName);
       logger.info("tags.rename.completed", {
@@ -398,6 +451,8 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/delete" ||
     candidate.type === "posts/tags/add" ||
     candidate.type === "posts/tags/remove" ||
+    candidate.type === "post_tag.add" ||
+    candidate.type === "post_tag.remove" ||
     candidate.type === "tag.rename" ||
     candidate.type === "tag.merge" ||
     candidate.type === "tag.redirects.list" ||

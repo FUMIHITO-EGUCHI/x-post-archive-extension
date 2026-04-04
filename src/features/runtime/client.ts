@@ -1,6 +1,8 @@
 import type { SavePostInput } from "../../types/archive";
 import type {
   AddPostTagMessage,
+  AddPostTagByNameMessage,
+  AddPostTagByNameResponse,
   ClearLogsResponse,
   DeleteTagRedirectResponse,
   DeletePostResponse,
@@ -16,6 +18,8 @@ import type {
   RenameTagMessage,
   RenameTagResponse,
   RemovePostTagMessage,
+  RemovePostTagByNameMessage,
+  RemovePostTagByNameResponse,
   RuntimeMessage,
   RuntimeResponse,
   SavePostResponse,
@@ -153,6 +157,48 @@ export async function requestRemovePostTag(
 
   if (response.type !== "posts/tags/update-result") {
     throw new Error("Unexpected runtime response for remove tag request.");
+  }
+
+  return response;
+}
+
+export async function requestAddPostTagByName(
+  postId: string,
+  displayName: string
+): Promise<AddPostTagByNameResponse> {
+  const response = await sendMessage({
+    type: "post_tag.add",
+    postId,
+    displayName
+  } satisfies AddPostTagByNameMessage, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "post_tag.add") {
+    throw new Error("Unexpected runtime response for post tag add request.");
+  }
+
+  if (!response.ok) {
+    throw new Error(response.error);
+  }
+
+  return response;
+}
+
+export async function requestRemovePostTagByName(
+  postId: string,
+  normalizedName: string
+): Promise<RemovePostTagByNameResponse> {
+  const response = await sendMessage({
+    type: "post_tag.remove",
+    postId,
+    normalizedName
+  } satisfies RemovePostTagByNameMessage, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "post_tag.remove") {
+    throw new Error("Unexpected runtime response for post tag remove request.");
+  }
+
+  if (!response.ok) {
+    throw new Error(response.error);
   }
 
   return response;
