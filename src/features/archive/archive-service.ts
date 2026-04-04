@@ -130,9 +130,7 @@ export async function saveArchivePost(
     if (autoTags.length > 0) {
       await archiveDb.transaction(
         "rw",
-        archiveDb.media,
-        archiveDb.tags,
-        archiveDb.post_tags,
+        [archiveDb.media, archiveDb.tags, archiveDb.tag_redirects, archiveDb.post_tags],
         async () => {
           if (duplicateMediaWork.newRecords.length > 0) {
             await addMediaRecords(duplicateMediaWork.newRecords);
@@ -192,10 +190,7 @@ export async function saveArchivePost(
   const media = [...imageMedia, ...videoMedia];
   await archiveDb.transaction(
     "rw",
-    archiveDb.posts,
-    archiveDb.media,
-    archiveDb.tags,
-    archiveDb.post_tags,
+    [archiveDb.posts, archiveDb.media, archiveDb.tags, archiveDb.tag_redirects, archiveDb.post_tags],
     async () => {
       await addPost(post);
       await addMediaRecords(media);

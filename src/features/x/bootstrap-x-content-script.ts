@@ -9,6 +9,11 @@ import { findTweetArticles } from "./find-tweet-articles";
 import { ensureGraphqlVideoCandidateListener } from "./graphql-video-candidate-cache";
 import { injectSaveButton, setButtonState } from "./inject-save-button";
 import {
+  ensureBookmarksImportControls,
+  isBookmarksTimelinePage,
+  removeBookmarksImportControls
+} from "./bookmarks-import-controls";
+import {
   ensureLikesImportControls,
   isLikesTimelinePage,
   removeLikesImportControls
@@ -31,6 +36,7 @@ export function bootstrapXContentScript(ctx: ContentScriptContext): void {
     bodyObserver = null;
     pendingDomReadyListener?.();
     pendingDomReadyListener = null;
+    removeBookmarksImportControls();
     removeLikesImportControls();
   });
   ensureGraphqlVideoCandidateListener();
@@ -169,10 +175,16 @@ async function attachSaveButton(article: HTMLElement): Promise<void> {
 function syncLikesImportControls(): void {
   if (isLikesTimelinePage()) {
     ensureLikesImportControls();
+  } else {
+    removeLikesImportControls();
+  }
+
+  if (isBookmarksTimelinePage()) {
+    ensureBookmarksImportControls();
     return;
   }
 
-  removeLikesImportControls();
+  removeBookmarksImportControls();
 }
 
 function isExtensionContextInvalidatedError(error: unknown): boolean {
