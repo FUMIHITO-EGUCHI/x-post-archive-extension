@@ -11,7 +11,8 @@ import type {
   ArchiveSummaryRecord,
   ArchiveTagRedirectSummaryRecord,
   ArchiveTagSummaryRecord,
-  ListPostsPageInput
+  ListPostsPageInput,
+  UserSummary
 } from "./viewer";
 
 export type SavePostMessage = {
@@ -42,6 +43,10 @@ export type ListPostsPageMessage = {
 
 export type ListPostTagSummariesMessage = {
   type: "posts/tags/list";
+};
+
+export type RequestUserSummariesMessage = {
+  type: "users/summaries";
 };
 
 export type GetArchiveSummaryMessage = {
@@ -119,6 +124,7 @@ export type RuntimeMessage =
   | ListPostsMessage
   | ListPostsPageMessage
   | ListPostTagSummariesMessage
+  | RequestUserSummariesMessage
   | GetArchiveSummaryMessage
   | DeletePostMessage
   | AddPostTagMessage
@@ -166,6 +172,11 @@ export type ListPostsPageResponse = {
 export type ListPostTagSummariesResponse = {
   type: "posts/tags/list-result";
   tags: ArchiveTagSummaryRecord[];
+};
+
+export type UserSummariesResponse = {
+  type: "users/summaries-result";
+  users: UserSummary[];
 };
 
 export type GetArchiveSummaryResponse = {
@@ -253,6 +264,7 @@ export type RuntimeResponse =
   | ListPostsResponse
   | ListPostsPageResponse
   | ListPostTagSummariesResponse
+  | UserSummariesResponse
   | GetArchiveSummaryResponse
   | DeletePostResponse
   | UpdatePostTagsResponse

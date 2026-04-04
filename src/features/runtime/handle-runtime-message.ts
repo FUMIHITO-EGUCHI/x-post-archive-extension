@@ -5,6 +5,7 @@ import {
   deleteArchivePost,
   getArchiveSummary,
   listArchiveTagRedirectSummaries,
+  listArchiveUserSummaries,
   hasSavedPost,
   listArchivePostsPage,
   listArchiveTagSummaries,
@@ -30,6 +31,7 @@ import type {
   ListPostTagSummariesResponse,
   ListPostsPageResponse,
   ListPostsResponse,
+  UserSummariesResponse,
   MergeTagsResponse,
   RenameTagResponse,
   RemovePostTagByNameResponse,
@@ -207,6 +209,22 @@ export async function handleRuntimeMessage(
       const response: ListPostTagSummariesResponse = {
         type: "posts/tags/list-result",
         tags
+      };
+      return response;
+    }
+
+    case "users/summaries": {
+      const users = await listArchiveUserSummaries();
+      logger.debug("users.summaries.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          count: users.length
+        }
+      });
+      const response: UserSummariesResponse = {
+        type: "users/summaries-result",
+        users
       };
       return response;
     }
@@ -447,6 +465,7 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/list" ||
     candidate.type === "posts/list-page" ||
     candidate.type === "posts/tags/list" ||
+    candidate.type === "users/summaries" ||
     candidate.type === "posts/summary" ||
     candidate.type === "posts/delete" ||
     candidate.type === "posts/tags/add" ||

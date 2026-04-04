@@ -56,6 +56,9 @@ function isViewerSessionState(value: unknown): value is ViewerSessionState {
     isPostSortField(candidate.sortField) &&
     isSortDirection(candidate.sortDirection) &&
     (candidate.activeTagFilter === null || typeof candidate.activeTagFilter === "string") &&
+    (candidate.activeAuthorFilter === undefined ||
+      candidate.activeAuthorFilter === null ||
+      typeof candidate.activeAuthorFilter === "string") &&
     typeof candidate.loadedCount === "number" &&
     Number.isFinite(candidate.loadedCount) &&
     candidate.loadedCount >= 0 &&

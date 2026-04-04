@@ -13,6 +13,7 @@ import type {
   ListPostTagSummariesResponse,
   ListPostsPageResponse,
   ListPostsResponse,
+  UserSummariesResponse,
   MergeTagsMessage,
   MergeTagsResponse,
   RenameTagMessage,
@@ -98,6 +99,18 @@ export async function requestTagSummaries(): Promise<ListPostTagSummariesRespons
 
   if (response.type !== "posts/tags/list-result") {
     throw new Error("Unexpected runtime response for tag list request.");
+  }
+
+  return response;
+}
+
+export async function requestUserSummaries(): Promise<UserSummariesResponse> {
+  const response = await sendMessage({
+    type: "users/summaries"
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "users/summaries-result") {
+    throw new Error("Unexpected runtime response for user list request.");
   }
 
   return response;
