@@ -1,4 +1,5 @@
 import type { ArchiveLanguage } from "../../settings/archive-language";
+import type { ArchiveSettings } from "../../../types/archive";
 import type {
   ArchiveSummaryRecord,
   FontSizeOption,
@@ -9,11 +10,13 @@ import type {
 
 type SettingsBasicPanelProps = {
   language: ArchiveLanguage;
+  archiveSettings: ArchiveSettings;
   currentTheme: ViewerTheme;
   fontSize: FontSizeOption;
   sessionRestoreMode: ViewerSessionRestoreMode;
   storageEstimate: StorageEstimateState;
   archiveSummary: ArchiveSummaryRecord;
+  onArchiveSettingsChange: (settings: ArchiveSettings) => Promise<void>;
   onThemeChange: (theme: ViewerTheme) => Promise<void>;
   onLanguageChange: (lang: ArchiveLanguage) => Promise<void>;
   onFontSizeChange: (size: FontSizeOption) => Promise<void>;
@@ -23,11 +26,13 @@ type SettingsBasicPanelProps = {
 
 export function SettingsBasicPanel({
   language,
+  archiveSettings,
   currentTheme,
   fontSize,
   sessionRestoreMode,
   storageEstimate,
   archiveSummary,
+  onArchiveSettingsChange,
   onThemeChange,
   onLanguageChange,
   onFontSizeChange,
@@ -79,7 +84,7 @@ export function SettingsBasicPanel({
           <h3>{isJapanese ? "表示言語" : "Language"}</h3>
           <p>
             {isJapanese
-              ? "設定画面と一覧画面の文言、保存時のデフォルトタグの言語を切り替えます。"
+              ? "設定画面と一覧内の文言、保存時に付く既定タグの言語を切り替えます。"
               : "Switch the settings and archive copy, plus the default tags assigned when posts are saved."}
           </p>
         </div>
@@ -102,6 +107,54 @@ export function SettingsBasicPanel({
             >
               <strong>{label}</strong>
             </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="viewer-settings-card">
+        <div className="viewer-settings-card-header">
+          <h3>{isJapanese ? "自動アーカイブ" : "Auto archive"}</h3>
+          <p>
+            {isJapanese
+              ? "X 上でいいねやブックマークを付けた直後に、対象の投稿を自動で保存します。"
+              : "Automatically save a post right after you like or bookmark it on X."}
+          </p>
+        </div>
+        <div className="viewer-settings-toggle-list">
+          {[
+            {
+              key: "autoArchiveOnLike" as const,
+              checked: archiveSettings.autoArchiveOnLike,
+              title: isJapanese ? "いいね時に自動保存" : "Auto-save on like",
+              description: isJapanese
+                ? "FavoriteTweet 成功後に、その投稿をアーカイブします。"
+                : "Archive the post after a successful FavoriteTweet action."
+            },
+            {
+              key: "autoArchiveOnBookmark" as const,
+              checked: archiveSettings.autoArchiveOnBookmark,
+              title: isJapanese ? "ブックマーク時に自動保存" : "Auto-save on bookmark",
+              description: isJapanese
+                ? "CreateBookmark 成功後に、その投稿をアーカイブします。"
+                : "Archive the post after a successful CreateBookmark action."
+            }
+          ].map(({ key, checked, title, description }) => (
+            <label key={key} className="viewer-settings-toggle-item">
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(event) => {
+                  void onArchiveSettingsChange({
+                    ...archiveSettings,
+                    [key]: event.currentTarget.checked
+                  });
+                }}
+              />
+              <span className="viewer-settings-toggle-copy">
+                <strong>{title}</strong>
+                <span>{description}</span>
+              </span>
+            </label>
           ))}
         </div>
       </section>
@@ -144,17 +197,17 @@ export function SettingsBasicPanel({
 
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
-          <h3>{isJapanese ? "アーカイブの復元状態" : "Archive session"}</h3>
+          <h3>{isJapanese ? "アーカイブの復元設定" : "Archive session"}</h3>
           <p>
             {isJapanese
-              ? "タブを閉じたあとにフィルタや表示位置を復元するかを選びます。"
+              ? "タブを閉じたあとにフィルタや表示位置を復元するかを選べます。"
               : "Choose whether the viewer restores filters and your place after the tab closes."}
           </p>
         </div>
         <div
           className="viewer-font-option-list"
           role="radiogroup"
-          aria-label={isJapanese ? "アーカイブの復元状態" : "Archive session restore"}
+          aria-label={isJapanese ? "アーカイブの復元設定" : "Archive session restore"}
         >
           {(
             [
@@ -202,7 +255,7 @@ export function SettingsBasicPanel({
               void onClearSavedSession();
             }}
           >
-            {isJapanese ? "保存済みセッションを消去" : "Clear saved session"}
+            {isJapanese ? "保存済みセッションを削除" : "Clear saved session"}
           </button>
         </div>
       </section>
@@ -237,7 +290,7 @@ export function SettingsBasicPanel({
               <dd>{formatBytes(storageEstimate.quota)}</dd>
             </div>
             <div className="viewer-settings-metric">
-              <dt>{isJapanese ? "保存済みメディア合計" : "Saved media total"}</dt>
+              <dt>{isJapanese ? "保存済みメディア総量" : "Saved media total"}</dt>
               <dd>{formatBytes(archiveSummary.mediaBytes)}</dd>
             </div>
           </dl>
@@ -248,7 +301,7 @@ export function SettingsBasicPanel({
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "アーカイブ概要" : "Archive summary"}</h3>
           <p>
-            {isJapanese ? "現在このアーカイブに保存されている内容の件数です。" : "Current counts for saved content in this archive."}
+            {isJapanese ? "現在このアーカイブに保存されている件数の概要です。" : "Current counts for saved content in this archive."}
           </p>
         </div>
         <dl className="viewer-settings-metric-list">

@@ -75,12 +75,17 @@ export function buildLocalizedDefaultAutoTags(
   post: SavePostInput,
   options: {
     includeLikedTag?: boolean;
+    includeBookmarkedTag?: boolean;
   } = {}
 ): string[] {
   const tags = [...(post.auto_tags ?? [])];
 
   if (options.includeLikedTag) {
     tags.push(getDefaultAutoTagLabel(language, "liked"));
+  }
+
+  if (options.includeBookmarkedTag) {
+    tags.push(getDefaultAutoTagLabel(language, "bookmarked"));
   }
 
   if (post.media.length > 0) {

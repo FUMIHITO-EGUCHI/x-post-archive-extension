@@ -7,7 +7,6 @@ import { loadDebugInspectPostIds } from "../debug/debug-settings";
 import {
   detectDefaultArchiveLanguage,
   buildLocalizedDefaultAutoTags,
-  getDefaultAutoTagLabel,
   loadArchiveLanguage,
   type ArchiveLanguage
 } from "../settings/archive-language";
@@ -646,10 +645,9 @@ async function saveQueuedPostBundle(
 }> {
   const post: SavePostInput = {
     ...item.post,
-    auto_tags: [
-      ...buildLocalizedDefaultAutoTags(language, item.post),
-      getDefaultAutoTagLabel(language, "bookmarked")
-    ]
+    auto_tags: buildLocalizedDefaultAutoTags(language, item.post, {
+      includeBookmarkedTag: true
+    })
   };
 
   if (item.quotedPost === null) {

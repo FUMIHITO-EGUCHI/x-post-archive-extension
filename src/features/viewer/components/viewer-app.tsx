@@ -1,6 +1,12 @@
 ﻿import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ArchivePostRecord, ArchiveTagRecord, MediaRecord } from "../../../types/archive";
+import type {
+  ArchivePostRecord,
+  ArchiveSettings,
+  ArchiveTagRecord,
+  MediaRecord
+} from "../../../types/archive";
+import { defaultArchiveSettings } from "../../../types/archive";
 import type {
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
@@ -32,6 +38,10 @@ import {
   persistArchiveLanguage,
   type ArchiveLanguage
 } from "../../settings/archive-language";
+import {
+  loadArchiveSettings,
+  persistArchiveSettings
+} from "../../settings/archive-settings";
 import { loadViewerTheme, persistViewerTheme } from "../../settings/viewer-theme";
 import {
   clearViewerSession,
@@ -68,6 +78,8 @@ export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("basic");
   const [language, setLanguage] = useState<ArchiveLanguage>("ja");
+  const [archiveSettings, setArchiveSettings] =
+    useState<ArchiveSettings>(defaultArchiveSettings);
   const [viewerTheme, setViewerTheme] = useState<ViewerTheme>("light");
   const [fontSize, setFontSize] = useState<FontSizeOption>("medium");
   const [sessionRestoreMode, setSessionRestoreMode] =
@@ -176,9 +188,17 @@ export function ViewerApp() {
 
     async function initializeViewer() {
       try {
-        const [storedFont, nextLanguage, nextSessionRestoreMode, nextTheme, savedSession] = await Promise.all([
+        const [
+          storedFont,
+          nextLanguage,
+          nextArchiveSettings,
+          nextSessionRestoreMode,
+          nextTheme,
+          savedSession
+        ] = await Promise.all([
           browser.storage.local.get(VIEWER_FONT_SIZE_STORAGE_KEY),
           loadArchiveLanguage(),
+          loadArchiveSettings(),
           loadViewerSessionRestoreMode(),
           loadViewerTheme(),
           loadViewerSession()
@@ -195,6 +215,7 @@ export function ViewerApp() {
         }
 
         setLanguage(nextLanguage);
+        setArchiveSettings(nextArchiveSettings);
         setSessionRestoreMode(nextSessionRestoreMode);
         setViewerTheme(nextTheme);
 
@@ -809,6 +830,22 @@ export function ViewerApp() {
     }
   }
 
+  async function handleArchiveSettingsChange(nextValue: ArchiveSettings) {
+    setArchiveSettings(nextValue);
+
+    try {
+      await persistArchiveSettings(nextValue);
+    } catch (error) {
+      logger.error("viewer.archive_settings.persist_failed", {
+        message: "Failed to persist archive settings.",
+        context: {
+          nextValue,
+          error
+        }
+      });
+    }
+  }
+
   async function handleSortFieldChange(nextValue: PostSortField) {
     setSortField(nextValue);
     window.scrollTo({
@@ -1321,11 +1358,13 @@ export function ViewerApp() {
               {settingsTab === "basic" && (
                 <SettingsBasicPanel
                   language={language}
+                  archiveSettings={archiveSettings}
                   currentTheme={viewerTheme}
                   fontSize={fontSize}
                   sessionRestoreMode={sessionRestoreMode}
                   storageEstimate={storageEstimate}
                   archiveSummary={archiveSummary}
+                  onArchiveSettingsChange={handleArchiveSettingsChange}
                   onThemeChange={handleThemeChange}
                   onLanguageChange={handleLanguageChange}
                   onFontSizeChange={handleFontSizeChange}
