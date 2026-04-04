@@ -6,5 +6,9 @@ coverage/
 *.log
 samples/
 scripts/results/
-.claude/
+.mcp.json
+.serena/
+.claude/*
+!.claude/rules/
+!.claude/rules/**
 
