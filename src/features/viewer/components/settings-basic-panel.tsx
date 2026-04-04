@@ -3,15 +3,18 @@ import type {
   ArchiveSummaryRecord,
   FontSizeOption,
   StorageEstimateState,
-  ViewerSessionRestoreMode
+  ViewerSessionRestoreMode,
+  ViewerTheme
 } from "../../../types/viewer";
 
 type SettingsBasicPanelProps = {
   language: ArchiveLanguage;
+  currentTheme: ViewerTheme;
   fontSize: FontSizeOption;
   sessionRestoreMode: ViewerSessionRestoreMode;
   storageEstimate: StorageEstimateState;
   archiveSummary: ArchiveSummaryRecord;
+  onThemeChange: (theme: ViewerTheme) => Promise<void>;
   onLanguageChange: (lang: ArchiveLanguage) => Promise<void>;
   onFontSizeChange: (size: FontSizeOption) => Promise<void>;
   onSessionRestoreModeChange: (mode: ViewerSessionRestoreMode) => Promise<void>;
@@ -20,10 +23,12 @@ type SettingsBasicPanelProps = {
 
 export function SettingsBasicPanel({
   language,
+  currentTheme,
   fontSize,
   sessionRestoreMode,
   storageEstimate,
   archiveSummary,
+  onThemeChange,
   onLanguageChange,
   onFontSizeChange,
   onSessionRestoreModeChange,
@@ -33,6 +38,42 @@ export function SettingsBasicPanel({
 
   return (
     <>
+      <section className="viewer-settings-card">
+        <div className="viewer-settings-card-header">
+          <h3>{isJapanese ? "テーマ" : "Theme"}</h3>
+          <p>
+            {isJapanese
+              ? "ビューア全体の配色をライトまたはダークに切り替えます。"
+              : "Switch the archive viewer between light and dark color themes."}
+          </p>
+        </div>
+        <div className="viewer-font-option-list" role="radiogroup" aria-label={isJapanese ? "テーマ" : "Theme"}>
+          {(
+            [
+              ["light", isJapanese ? "ライト" : "Light"],
+              ["dark", isJapanese ? "ダーク" : "Dark"]
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              className={
+                currentTheme === value
+                  ? "viewer-font-option viewer-font-option-active"
+                  : "viewer-font-option"
+              }
+              type="button"
+              role="radio"
+              aria-checked={currentTheme === value}
+              onClick={() => {
+                void onThemeChange(value);
+              }}
+            >
+              <strong>{label}</strong>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "表示言語" : "Language"}</h3>
