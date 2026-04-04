@@ -12,11 +12,11 @@ import type {
 } from "../../../types/viewer";
 import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
 import {
-  requestAddPostTag,
+  requestAddPostTagByName,
   requestArchiveSummary,
   requestDeletePost,
   requestPostsPage,
-  requestRemovePostTag,
+  requestRemovePostTagByName,
   requestTagSummaries
 } from "../../runtime/client";
 import { createLogger } from "../../logging/logger";
@@ -38,6 +38,7 @@ import {
   persistViewerSession,
   persistViewerSessionRestoreMode
 } from "../viewer-session-storage";
+import { TagPickerOverlay } from "./tag-picker-overlay";
 
 type ViewerStatus = "idle" | "loading" | "ready";
 type ViewerScreen = "archive" | "settings";
@@ -93,8 +94,8 @@ export function ViewerApp() {
   const [isTagFilterModalOpen, setIsTagFilterModalOpen] = useState(false);
   const [tagSearchQuery, setTagSearchQuery] = useState("");
   const [tagSortOption, setTagSortOption] = useState<TagSortOption>("count");
-  const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
   const [tagActionPostId, setTagActionPostId] = useState<string | null>(null);
+  const [tagPickerPostId, setTagPickerPostId] = useState<string | null>(null);
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState>({
     usage: null,
     quota: null,
@@ -113,6 +114,16 @@ export function ViewerApp() {
     () => availableTags.find(({ tag }) => tag.normalized_name === activeTagFilter) ?? null,
     [activeTagFilter, availableTags]
   );
+
+  useEffect(() => {
+    if (tagPickerPostId === null) {
+      return;
+    }
+
+    if (!posts.some((post) => post.x_post_id === tagPickerPostId)) {
+      setTagPickerPostId(null);
+    }
+  }, [posts, tagPickerPostId]);
 
   function getTagDisplayName(tag: ArchiveTagRecord): string {
     if (tag.source !== "auto") {
@@ -656,33 +667,22 @@ export function ViewerApp() {
     }
   }
 
-  async function handleAddTag(xPostId: string) {
-    const draft = tagDrafts[xPostId]?.trim() ?? "";
-
-    if (draft === "") {
+  async function handleAddTagToPost(xPostId: string, displayName: string) {
+    if (displayName.trim() === "") {
       return;
     }
 
     setTagActionPostId(xPostId);
 
     try {
-      const response = await requestAddPostTag(xPostId, draft);
-      setTagDrafts((current) => ({
-        ...current,
-        [xPostId]: ""
-      }));
-      setPosts((current) =>
-        current.map((post) =>
-          post.x_post_id === xPostId ? { ...post, tags: response.tags } : post
-        )
-      );
+      await requestAddPostTagByName(xPostId, displayName);
       await reloadCurrentArchive();
     } catch (error) {
       logger.error("post.tags.add.failed", {
         message: "Failed to add tag.",
         context: {
           xPostId,
-          tagName: draft,
+          displayName,
           error
         }
       });
@@ -691,42 +691,18 @@ export function ViewerApp() {
     }
   }
 
-  async function handleRemoveTag(xPostId: string, tag: ArchiveTagRecord) {
-    if (tag.source !== "manual") {
-      const nextTagFilter =
-        activeTagFilter === tag.normalized_name ? null : tag.normalized_name;
-
-      setActiveTagFilter(nextTagFilter);
-      window.scrollTo({
-        top: 0
-      });
-      await loadArchivePage({
-        offset: 0,
-        limit: DEFAULT_PAGE_SIZE,
-        sortField,
-        sortDirection,
-        tagFilter: nextTagFilter,
-        append: false
-      });
-      return;
-    }
-
+  async function handleRemoveTagFromPost(xPostId: string, normalizedName: string) {
     setTagActionPostId(xPostId);
 
     try {
-      const response = await requestRemovePostTag(xPostId, tag.normalized_name);
-      setPosts((current) =>
-        current.map((post) =>
-          post.x_post_id === xPostId ? { ...post, tags: response.tags } : post
-        )
-      );
+      await requestRemovePostTagByName(xPostId, normalizedName);
       await reloadCurrentArchive();
     } catch (error) {
       logger.error("post.tags.remove.failed", {
         message: "Failed to remove tag.",
         context: {
           xPostId,
-          normalizedTagName: tag.normalized_name,
+          normalizedTagName: normalizedName,
           error
         }
       });
@@ -1171,84 +1147,69 @@ export function ViewerApp() {
                     </dl>
 
                     <div className="post-tag-section">
-                      {post.tags.length > 0 && (
-                        <div className="tag-list">
-                          {post.tags.map((tag) => (
-                            <span
-                              className={
-                                tag.source === "manual"
-                                  ? "tag-chip tag-chip-manual"
-                                  : "tag-chip"
-                              }
-                              key={`${post.x_post_id}-${tag.tag_id}`}
-                            >
-                              <button
-                                className="tag-chip-button"
-                                type="button"
-                                onClick={() => {
-                                  void handleToggleTagFilter(tag.normalized_name);
-                                }}
+                      <div className="post-tag-toolbar">
+                        {post.tags.length > 0 && (
+                          <div className="tag-list">
+                            {post.tags.map((tag) => (
+                              <span
+                                className={
+                                  tag.source === "manual"
+                                    ? "tag-chip tag-chip-manual"
+                                    : "tag-chip"
+                                }
+                                key={`${post.x_post_id}-${tag.tag_id}`}
                               >
-                                {getTagDisplayName(tag)}
-                              </button>
-                              {tag.source === "manual" && (
                                 <button
-                                  className="tag-chip-remove"
+                                  className="tag-chip-button"
                                   type="button"
-                                  aria-label={
-                                    language === "ja"
-                                      ? `タグ ${getTagDisplayName(tag)} を削除`
-                                      : `Remove tag ${getTagDisplayName(tag)}`
-                                  }
                                   onClick={() => {
-                                    void handleRemoveTag(post.x_post_id, tag);
+                                    void handleToggleTagFilter(tag.normalized_name);
                                   }}
-                                  disabled={tagActionPostId === post.x_post_id}
                                 >
-                                  x
+                                  {getTagDisplayName(tag)}
                                 </button>
-                              )}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
 
-                      <div className="tag-editor">
-                        <input
-                          className="tag-input"
-                          type="text"
-                          value={tagDrafts[post.x_post_id] ?? ""}
-                          placeholder={language === "ja" ? "手動タグを追加" : "Add manual tag"}
-                          onChange={(event) => {
-                            const value = event.currentTarget.value;
-                            setTagDrafts((current) => ({
-                              ...current,
-                              [post.x_post_id]: value
-                            }));
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              void handleAddTag(post.x_post_id);
+                        <div className="post-tag-picker-anchor">
+                          <button
+                            className="post-tag-picker-button"
+                            type="button"
+                            aria-label={
+                              language === "ja"
+                                ? "投稿タグを追加または除去"
+                                : "Add or remove post tags"
                             }
-                          }}
-                        />
-                        <button
-                          className="tag-add-button"
-                          type="button"
-                          onClick={() => {
-                            void handleAddTag(post.x_post_id);
-                          }}
-                          disabled={tagActionPostId === post.x_post_id}
-                        >
-                          {tagActionPostId === post.x_post_id
-                            ? language === "ja"
-                              ? "保存中..."
-                              : "Saving..."
-                            : language === "ja"
-                              ? "タグ追加"
-                              : "Add tag"}
-                        </button>
+                            data-tag-picker-trigger-post-id={post.x_post_id}
+                            onClick={() => {
+                              setTagPickerPostId((current) =>
+                                current === post.x_post_id ? null : post.x_post_id
+                              );
+                            }}
+                            disabled={tagActionPostId === post.x_post_id}
+                          >
+                            +
+                          </button>
+                          {tagPickerPostId === post.x_post_id && (
+                            <TagPickerOverlay
+                              currentPostTags={post.tags}
+                              allTagSummaries={availableTags}
+                              onAdd={async (displayName) => {
+                                await handleAddTagToPost(post.x_post_id, displayName);
+                              }}
+                              onRemove={async (normalizedName) => {
+                                await handleRemoveTagFromPost(post.x_post_id, normalizedName);
+                              }}
+                              onClose={() => {
+                                setTagPickerPostId(null);
+                              }}
+                              language={language}
+                              isPending={tagActionPostId === post.x_post_id}
+                            />
+                          )}
+                        </div>
                       </div>
                     </div>
 

@@ -112,7 +112,7 @@ function dedupeTagNames(tagNames: string[]): string[] {
   return [...uniqueTags.values()];
 }
 
-function normalizeTagName(tagName: string): string | null {
+export function normalizeTagName(tagName: string): string | null {
   if (typeof tagName !== "string") {
     return null;
   }

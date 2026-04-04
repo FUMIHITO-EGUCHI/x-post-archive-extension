@@ -1,6 +1,7 @@
 import type {
   ArchivePostRecord,
   ArchiveTagRecord,
+  PostTagRecord,
   PostRecord,
   SavePostInput,
   TagRecord
@@ -64,6 +65,18 @@ export type RemovePostTagMessage = {
   normalizedTagName: string;
 };
 
+export type AddPostTagByNameMessage = {
+  type: "post_tag.add";
+  postId: string;
+  displayName: string;
+};
+
+export type RemovePostTagByNameMessage = {
+  type: "post_tag.remove";
+  postId: string;
+  normalizedName: string;
+};
+
 export type RenameTagMessage = {
   type: "tag.rename";
   tagId: string;
@@ -110,6 +123,8 @@ export type RuntimeMessage =
   | DeletePostMessage
   | AddPostTagMessage
   | RemovePostTagMessage
+  | AddPostTagByNameMessage
+  | RemovePostTagByNameMessage
   | RenameTagMessage
   | MergeTagsMessage
   | ListTagRedirectsMessage
@@ -169,6 +184,29 @@ export type UpdatePostTagsResponse = {
   tags: ArchiveTagRecord[];
 };
 
+export type AddPostTagByNameResponse =
+  | {
+      type: "post_tag.add";
+      ok: true;
+      postTag: PostTagRecord;
+    }
+  | {
+      type: "post_tag.add";
+      ok: false;
+      error: string;
+    };
+
+export type RemovePostTagByNameResponse =
+  | {
+      type: "post_tag.remove";
+      ok: true;
+    }
+  | {
+      type: "post_tag.remove";
+      ok: false;
+      error: string;
+    };
+
 export type RenameTagResponse =
   | {
       type: "tag.rename";
@@ -218,6 +256,8 @@ export type RuntimeResponse =
   | GetArchiveSummaryResponse
   | DeletePostResponse
   | UpdatePostTagsResponse
+  | AddPostTagByNameResponse
+  | RemovePostTagByNameResponse
   | RenameTagResponse
   | MergeTagsResponse
   | ListTagRedirectsResponse
