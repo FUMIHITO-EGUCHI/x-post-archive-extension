@@ -214,7 +214,15 @@ function createRootElement(): HTMLDivElement {
 }
 
 async function startLikesImport(): Promise<void> {
-  overlayLanguage = await loadArchiveLanguage();
+  try {
+    overlayLanguage = await loadArchiveLanguage();
+  } catch (error) {
+    if (isExtensionContextInvalidatedError(error)) {
+      return;
+    }
+
+    throw error;
+  }
 
   if (!isLikesTimelinePage()) {
     updateOverlay({
@@ -767,7 +775,15 @@ function updateOverlay(stats: OverlayStats): void {
 }
 
 async function refreshOverlayLanguage(): Promise<void> {
-  overlayLanguage = await loadArchiveLanguage();
+  try {
+    overlayLanguage = await loadArchiveLanguage();
+  } catch (error) {
+    if (isExtensionContextInvalidatedError(error)) {
+      return;
+    }
+
+    throw error;
+  }
 
   if (rootElement !== null) {
     if (currentRun === null && lastOverlayStats.status === "idle") {
@@ -781,6 +797,10 @@ async function refreshOverlayLanguage(): Promise<void> {
 
     updateOverlay(currentRun?.stats ?? lastOverlayStats);
   }
+}
+
+function isExtensionContextInvalidatedError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("Extension context invalidated");
 }
 
 function createDefaultOverlayStats(): OverlayStats {

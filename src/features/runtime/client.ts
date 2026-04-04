@@ -9,6 +9,10 @@ import type {
   ListPostTagSummariesResponse,
   ListPostsPageResponse,
   ListPostsResponse,
+  MergeTagsMessage,
+  MergeTagsResponse,
+  RenameTagMessage,
+  RenameTagResponse,
   RemovePostTagMessage,
   RuntimeMessage,
   RuntimeResponse,
@@ -147,6 +151,40 @@ export async function requestRemovePostTag(
 
   if (response.type !== "posts/tags/update-result") {
     throw new Error("Unexpected runtime response for remove tag request.");
+  }
+
+  return response;
+}
+
+export async function requestRenameTag(
+  tagId: string,
+  newDisplayName: string
+): Promise<RenameTagResponse> {
+  const response = await sendMessage({
+    type: "tag.rename",
+    tagId,
+    newDisplayName
+  } satisfies RenameTagMessage, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "tag.rename") {
+    throw new Error("Unexpected runtime response for rename tag request.");
+  }
+
+  return response;
+}
+
+export async function requestMergeTags(
+  sourceTagId: string,
+  targetTagId: string
+): Promise<MergeTagsResponse> {
+  const response = await sendMessage({
+    type: "tag.merge",
+    sourceTagId,
+    targetTagId
+  } satisfies MergeTagsMessage, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "tag.merge") {
+    throw new Error("Unexpected runtime response for merge tags request.");
   }
 
   return response;

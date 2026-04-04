@@ -3,8 +3,8 @@ import { bootstrapXContentScript } from "../features/x/bootstrap-x-content-scrip
 export default defineContentScript({
   matches: ["https://x.com/*", "https://twitter.com/*"],
   runAt: "document_start",
-  main() {
-    bootstrapXContentScript();
+  main(ctx) {
+    bootstrapXContentScript(ctx);
   }
 });
 

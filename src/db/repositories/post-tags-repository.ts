@@ -27,6 +27,10 @@ export async function listPostTagsByPostId(xPostId: string): Promise<PostTagReco
   return archiveDb.post_tags.where("x_post_id").equals(xPostId).sortBy("assigned_at");
 }
 
+export async function listPostTagsByTagId(tagId: string): Promise<PostTagRecord[]> {
+  return archiveDb.post_tags.where("tag_id").equals(tagId).sortBy("assigned_at");
+}
+
 export async function listPostIdsByNormalizedName(normalizedName: string): Promise<string[]> {
   const records = await archiveDb.post_tags
     .where("normalized_name")
