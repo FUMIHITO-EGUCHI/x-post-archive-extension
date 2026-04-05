@@ -1,6 +1,5 @@
 import {
   addPostTagByName,
-  addManualTagToArchivePost,
   deleteArchiveTagRedirect,
   deleteArchivePost,
   getArchiveSummary,
@@ -13,7 +12,6 @@ import {
   mergeTags,
   renameTag,
   removePostTagByName,
-  removeManualTagFromArchivePost,
   resumePendingMediaPersistence,
   saveArchivePost
 } from "../archive/archive-service";
@@ -39,8 +37,7 @@ import type {
   RuntimeMessage,
   RuntimeResponse,
   SavePostResponse,
-  SavePostsBatchResponse,
-  UpdatePostTagsResponse
+  SavePostsBatchResponse
 } from "../../types/runtime";
 import { createLogger, createRequestId } from "../logging/logger";
 
@@ -263,47 +260,6 @@ export async function handleRuntimeMessage(
       return response;
     }
 
-    case "posts/tags/add": {
-      const tags = await addManualTagToArchivePost(message.xPostId, message.tagName);
-      logger.info("post.tags.add.completed", {
-        requestId,
-        context: {
-          type: message.type,
-          xPostId: message.xPostId,
-          tagName: message.tagName,
-          tagCount: tags.length
-        }
-      });
-      const response: UpdatePostTagsResponse = {
-        type: "posts/tags/update-result",
-        xPostId: message.xPostId,
-        tags
-      };
-      return response;
-    }
-
-    case "posts/tags/remove": {
-      const tags = await removeManualTagFromArchivePost(
-        message.xPostId,
-        message.normalizedTagName
-      );
-      logger.info("post.tags.remove.completed", {
-        requestId,
-        context: {
-          type: message.type,
-          xPostId: message.xPostId,
-          normalizedTagName: message.normalizedTagName,
-          tagCount: tags.length
-        }
-      });
-      const response: UpdatePostTagsResponse = {
-        type: "posts/tags/update-result",
-        xPostId: message.xPostId,
-        tags
-      };
-      return response;
-    }
-
     case "post_tag.add": {
       const result = await addPostTagByName(message.postId, message.displayName);
       logger.info("post_tag.add.completed", {
@@ -468,8 +424,6 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "users/summaries" ||
     candidate.type === "posts/summary" ||
     candidate.type === "posts/delete" ||
-    candidate.type === "posts/tags/add" ||
-    candidate.type === "posts/tags/remove" ||
     candidate.type === "post_tag.add" ||
     candidate.type === "post_tag.remove" ||
     candidate.type === "tag.rename" ||

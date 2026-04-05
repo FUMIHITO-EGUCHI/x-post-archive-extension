@@ -1,6 +1,5 @@
 import type {
   ArchivePostRecord,
-  ArchiveTagRecord,
   PostTagRecord,
   PostRecord,
   SavePostInput,
@@ -56,18 +55,6 @@ export type GetArchiveSummaryMessage = {
 export type DeletePostMessage = {
   type: "posts/delete";
   xPostId: string;
-};
-
-export type AddPostTagMessage = {
-  type: "posts/tags/add";
-  xPostId: string;
-  tagName: string;
-};
-
-export type RemovePostTagMessage = {
-  type: "posts/tags/remove";
-  xPostId: string;
-  normalizedTagName: string;
 };
 
 export type AddPostTagByNameMessage = {
@@ -127,8 +114,6 @@ export type RuntimeMessage =
   | RequestUserSummariesMessage
   | GetArchiveSummaryMessage
   | DeletePostMessage
-  | AddPostTagMessage
-  | RemovePostTagMessage
   | AddPostTagByNameMessage
   | RemovePostTagByNameMessage
   | RenameTagMessage
@@ -187,12 +172,6 @@ export type GetArchiveSummaryResponse = {
 export type DeletePostResponse = {
   type: "posts/delete-result";
   deleted: boolean;
-};
-
-export type UpdatePostTagsResponse = {
-  type: "posts/tags/update-result";
-  xPostId: string;
-  tags: ArchiveTagRecord[];
 };
 
 export type AddPostTagByNameResponse =
@@ -267,7 +246,6 @@ export type RuntimeResponse =
   | UserSummariesResponse
   | GetArchiveSummaryResponse
   | DeletePostResponse
-  | UpdatePostTagsResponse
   | AddPostTagByNameResponse
   | RemovePostTagByNameResponse
   | RenameTagResponse
