@@ -111,6 +111,23 @@ body {
   color: inherit;
 }
 
+:where(button, a, input, select, [tabindex="0"], [role="tab"], [role="option"]):focus-visible {
+  outline: 3px solid var(--color-accent-soft-strong);
+  outline-offset: 3px;
+}
+
+.viewer-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 #root {
   min-height: 100vh;
 }
@@ -271,10 +288,6 @@ body {
 .viewer-settings-tab:focus-visible {
   color: var(--color-text-strong);
   background: var(--color-bg-hover);
-}
-
-.viewer-settings-tab:focus-visible {
-  outline: none;
 }
 
 .viewer-settings-tab-active {
@@ -769,13 +782,9 @@ body {
 }
 
 .viewer-tag-management-row:hover,
-.viewer-tag-management-row:focus-visible {
+.viewer-tag-management-row:focus-within {
   border-color: rgba(38, 99, 235, 0.28);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-}
-
-.viewer-tag-management-row:focus-visible {
-  outline: none;
 }
 
 .viewer-tag-management-row-selected {
@@ -815,11 +824,6 @@ body {
 .viewer-tag-management-inline {
   display: grid;
   gap: 10px;
-}
-
-.viewer-tag-management-row-header span:last-child,
-.viewer-tag-management-row > .viewer-tag-management-cell:last-child {
-  display: none;
 }
 
 .viewer-tag-management-modal {
@@ -1828,7 +1832,7 @@ body {
 }
 
 :root[data-theme="dark"] .viewer-tag-management-row:hover,
-:root[data-theme="dark"] .viewer-tag-management-row:focus-visible {
+:root[data-theme="dark"] .viewer-tag-management-row:focus-within {
   border-color: var(--color-accent-soft-strong);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
 }
@@ -1836,9 +1840,12 @@ body {
 :root[data-theme="dark"] .viewer-tag-management-row-selected {
   border-color: var(--color-accent);
   box-shadow:
-    inset 0 0 0 1px rgba(29, 155, 240, 0.22),
-    0 12px 28px rgba(0, 0, 0, 0.24);
-  background: linear-gradient(180deg, #1b2733 0%, #22303c 100%);
+    inset 0 0 0 2px rgba(29, 155, 240, 0.52),
+    0 0 0 1px rgba(29, 155, 240, 0.24),
+    0 12px 28px rgba(0, 0, 0, 0.28);
+  background:
+    linear-gradient(180deg, rgba(29, 155, 240, 0.22) 0%, rgba(29, 155, 240, 0.12) 100%),
+    linear-gradient(180deg, #1b2733 0%, #22303c 100%);
 }
 
 :root[data-theme="dark"] .viewer-tag-management-row-header {
@@ -1897,6 +1904,13 @@ body {
   color: var(--color-inverse-text);
 }
 
+:root[data-theme="dark"] .viewer-sort-select,
+:root[data-theme="dark"] .viewer-sort-direction-button {
+  border-color: var(--color-accent-soft-strong);
+  background: var(--color-accent);
+  color: var(--color-inverse-text);
+}
+
 :root[data-theme="dark"] .viewer-tag-option {
   background: #22303c;
 }
@@ -1922,7 +1936,10 @@ body {
 :root[data-theme="dark"] .viewer-settings-card-header p,
 :root[data-theme="dark"] .viewer-settings-toggle-copy span,
 :root[data-theme="dark"] .viewer-settings-inline-note,
+:root[data-theme="dark"] .viewer-list-header span,
+:root[data-theme="dark"] .viewer-sort-label,
 :root[data-theme="dark"] .viewer-log-item-meta,
+:root[data-theme="dark"] .viewer-log-request-id,
 :root[data-theme="dark"] .viewer-log-event span,
 :root[data-theme="dark"] .viewer-log-message,
 :root[data-theme="dark"] .viewer-log-context-item dt,
@@ -1944,8 +1961,20 @@ body {
   color: var(--color-accent);
 }
 
-:root[data-theme="dark"] .viewer-tag-modal .viewer-modal-copy h2 {
+:root[data-theme="dark"] .viewer-settings-card-header h3,
+:root[data-theme="dark"] .viewer-list-header h2,
+:root[data-theme="dark"] .viewer-modal-copy h2,
+:root[data-theme="dark"] .viewer-log-export-copy strong,
+:root[data-theme="dark"] .viewer-log-event strong,
+:root[data-theme="dark"] .viewer-log-context-item dd,
+:root[data-theme="dark"] .viewer-settings-metric dd,
+:root[data-theme="dark"] .post-metric dd {
   color: var(--color-text-strong);
+}
+
+:root[data-theme="dark"] .viewer-settings-metric dt,
+:root[data-theme="dark"] .post-metric dt {
+  color: var(--color-text-sub);
 }
 
 :root[data-theme="dark"] .viewer-log-level-debug {
@@ -2078,11 +2107,15 @@ body {
   }
 
   .viewer-tag-management-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .viewer-tag-management-row-header {
     display: none;
+  }
+
+  .viewer-tag-management-row > .viewer-tag-management-cell:nth-child(3) {
+    grid-column: 1 / -1;
   }
 
   .viewer-tag-management-selection {
