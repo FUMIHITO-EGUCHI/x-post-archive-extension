@@ -39,14 +39,26 @@ export async function requestSavePost(
     traceId?: string;
   } = {}
 ): Promise<SavePostResponse> {
+  const autoTags = [...(post.auto_tags ?? [])];
   const response = await sendMessage({
     type: "posts/save",
-    post,
+    post: {
+      ...post,
+      auto_tags: []
+    },
     ...(options.traceId === undefined ? {} : { traceId: options.traceId })
   }, SAVE_RUNTIME_TIMEOUT_MS);
 
   if (response.type !== "posts/save-result") {
     throw new Error("Unexpected runtime response for save request.");
+  }
+
+  if (autoTags.length > 0) {
+    const postId = response.post?.x_post_id ?? post.x_post_id;
+
+    for (const tagName of autoTags) {
+      await requestAddPostTagByName(postId, tagName);
+    }
   }
 
   return response;

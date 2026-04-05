@@ -128,32 +128,20 @@ export async function saveArchivePost(
       }
     });
 
-    if (autoTags.length > 0) {
-      await archiveDb.transaction(
-        "rw",
-        [archiveDb.media, archiveDb.tags, archiveDb.tag_redirects, archiveDb.post_tags],
-        async () => {
-          if (duplicateMediaWork.newRecords.length > 0) {
-            await addMediaRecords(duplicateMediaWork.newRecords);
-          }
+    if (duplicateMediaWork.newRecords.length > 0 || duplicateMediaWork.retryRecords.length > 0) {
+      if (duplicateMediaWork.newRecords.length > 0) {
+        await addMediaRecords(duplicateMediaWork.newRecords);
+      }
 
-          for (const media of duplicateMediaWork.retryRecords) {
-            await markMediaPending(media.media_id);
-          }
+      for (const media of duplicateMediaWork.retryRecords) {
+        await markMediaPending(media.media_id);
+      }
+    }
 
-          await ensureTagAssignments(autoTags);
-        }
-      );
-    } else if (duplicateMediaWork.newRecords.length > 0 || duplicateMediaWork.retryRecords.length > 0) {
-      await archiveDb.transaction("rw", archiveDb.media, async () => {
-        if (duplicateMediaWork.newRecords.length > 0) {
-          await addMediaRecords(duplicateMediaWork.newRecords);
-        }
-
-        for (const media of duplicateMediaWork.retryRecords) {
-          await markMediaPending(media.media_id);
-        }
-      });
+    try {
+      await assignAutoTags(input.x_post_id, autoTags);
+    } catch (error) {
+      throw new Error(`Post save failed while assigning duplicate auto tags: ${formatError(error)}`);
     }
 
     if (duplicateMediaWork.persistRecords.length > 0) {
@@ -189,15 +177,28 @@ export async function saveArchivePost(
       createPendingVideoRecord(input.x_post_id, candidate, savedAt, imageMedia.length + index)
     );
   const media = [...imageMedia, ...videoMedia];
-  await archiveDb.transaction(
-    "rw",
-    [archiveDb.posts, archiveDb.media, archiveDb.tags, archiveDb.tag_redirects, archiveDb.post_tags],
-    async () => {
-      await addPost(post);
-      await addMediaRecords(media);
-      await ensureTagAssignments(autoTags);
+  let postCreated = false;
+
+  try {
+    await addPost(post);
+    postCreated = true;
+    await addMediaRecords(media);
+  } catch (error) {
+    if (postCreated) {
+      await Promise.allSettled([
+        deleteMediaRecordsByPostId(post.x_post_id),
+        deletePostRecord(post.x_post_id)
+      ]);
     }
-  );
+
+    throw new Error(`Post save failed in create transaction: ${formatError(error)}`);
+  }
+
+  try {
+    await assignAutoTags(input.x_post_id, autoTags);
+  } catch (error) {
+    throw new Error(`Post save failed while assigning auto tags: ${formatError(error)}`);
+  }
 
   enqueueMediaPersistence(media, options.traceId);
 
@@ -446,25 +447,26 @@ export async function addManualTagToArchivePost(
   xPostId: string,
   tagName: string
 ): Promise<ArchiveTagRecord[]> {
-  const post = await getPost(xPostId);
+  const result = await addPostTagByName(xPostId, tagName);
 
-  if (post === undefined) {
-    throw new Error("Post not found.");
+  if (!result.ok) {
+    if (result.error === "post-not-found") {
+      throw new Error("Post not found.");
+    }
+
+    if (result.error === "empty-name") {
+      throw new Error("Invalid tag name.");
+    }
+
+    throw new Error(`Manual tag add failed: ${result.error}`);
   }
 
-  const prepared = createPostTagInput(xPostId, tagName, "manual");
-
-  await archiveDb.transaction(
-    "rw",
-    archiveDb.tags,
-    archiveDb.tag_redirects,
-    archiveDb.post_tags,
-    async () => {
-      await ensureTagAssignments([prepared]);
-    }
-  );
-
-  const tags = await listArchiveTagsForPost(xPostId);
+  let tags: ArchiveTagRecord[];
+  try {
+    tags = await listArchiveTagsForPost(xPostId);
+  } catch (error) {
+    throw new Error(`Manual tag add failed while listing post tags: ${formatError(error)}`);
+  }
 
   logger.info("post.tags.manual_added", {
     context: {
@@ -1220,60 +1222,109 @@ async function listPostIdsByAuthorFilter(authorFilter: string): Promise<string[]
 
 async function ensureTagAssignments(inputs: PostTagInput[]): Promise<void> {
   for (const item of inputs) {
-    const resolvedItem = await resolveTagAssignmentInput(item);
-    const existingPostTag = await getPostTagByNormalizedName(
-      resolvedItem.x_post_id,
-      resolvedItem.normalized_name
-    );
+    const resolvedItem = item;
+    let existingPostTag: PostTagRecord | undefined;
+
+    try {
+      existingPostTag = await getPostTagByNormalizedName(
+        resolvedItem.x_post_id,
+        resolvedItem.normalized_name
+      );
+    } catch (error) {
+      throw new Error(`Tag assignment failed while checking existing tags: ${formatError(error)}`);
+    }
 
     if (existingPostTag !== undefined) {
       if (existingPostTag.source === "auto" && resolvedItem.source === "manual") {
-        await deletePostTag(existingPostTag.post_tag_id);
-        await deleteOrphanedTag(existingPostTag.tag_id);
+        try {
+          await deletePostTag(existingPostTag.post_tag_id);
+          await deleteOrphanedTag(existingPostTag.tag_id);
+        } catch (error) {
+          throw new Error(`Tag assignment failed while replacing an auto tag: ${formatError(error)}`);
+        }
       } else {
         continue;
       }
     }
 
-    const tag = await ensureTagRecord(
-      resolvedItem.normalized_name,
-      resolvedItem.display_name,
-      resolvedItem.system_key,
-      resolvedItem.assigned_at
-    );
+    let tag: TagRecord;
 
-    await addPostTag({
-      post_tag_id: crypto.randomUUID(),
-      x_post_id: resolvedItem.x_post_id,
-      tag_id: tag.tag_id,
-      normalized_name: tag.normalized_name,
-      display_name: resolvedItem.display_name,
-      system_key: resolvedItem.system_key,
-      source: resolvedItem.source,
-      assigned_at: resolvedItem.assigned_at
+    try {
+      tag = await ensureTagRecord(
+        resolvedItem.normalized_name,
+        resolvedItem.display_name,
+        resolvedItem.system_key,
+        resolvedItem.assigned_at
+      );
+    } catch (error) {
+      throw new Error(`Tag assignment failed while ensuring a tag record: ${formatError(error)}`);
+    }
+
+    try {
+      await addPostTag({
+        post_tag_id: crypto.randomUUID(),
+        x_post_id: resolvedItem.x_post_id,
+        tag_id: tag.tag_id,
+        normalized_name: tag.normalized_name,
+        display_name: resolvedItem.display_name,
+        system_key: resolvedItem.system_key,
+        source: resolvedItem.source,
+        assigned_at: resolvedItem.assigned_at
+      });
+    } catch (error) {
+      throw new Error(`Tag assignment failed while writing post_tags: ${formatError(error)}`);
+    }
+  }
+}
+
+async function assignPostTagsDirectly(inputs: PostTagInput[]): Promise<void> {
+  for (const item of inputs) {
+    await archiveDb.transaction("rw", archiveDb.tags, archiveDb.post_tags, async () => {
+      let tag = await getTagByNormalizedName(item.normalized_name);
+
+      if (tag === undefined) {
+        tag = {
+          tag_id: crypto.randomUUID(),
+          normalized_name: item.normalized_name,
+          display_name: item.display_name,
+          system_key: item.system_key,
+          created_at: item.assigned_at
+        };
+        await addTag(tag);
+      }
+
+      const existingPostTag = await getPostTagByNormalizedName(item.x_post_id, item.normalized_name);
+
+      if (existingPostTag !== undefined) {
+        if (existingPostTag.source === "auto" && item.source === "manual") {
+          await deletePostTag(existingPostTag.post_tag_id);
+        } else {
+          return;
+        }
+      }
+
+      await addPostTag({
+        post_tag_id: crypto.randomUUID(),
+        x_post_id: item.x_post_id,
+        tag_id: tag.tag_id,
+        normalized_name: tag.normalized_name,
+        display_name: item.display_name,
+        system_key: item.system_key,
+        source: item.source,
+        assigned_at: item.assigned_at
+      });
     });
   }
 }
 
-async function resolveTagAssignmentInput(input: PostTagInput): Promise<PostTagInput> {
-  const redirect = await getTagRedirectBySourceNormalizedName(input.normalized_name);
+async function assignAutoTags(xPostId: string, inputs: PostTagInput[]): Promise<void> {
+  for (const item of inputs) {
+    const result = await addPostTagByName(xPostId, item.display_name);
 
-  if (redirect === undefined) {
-    return input;
+    if (!result.ok) {
+      throw new Error(`Auto tag add failed: ${result.error}`);
+    }
   }
-
-  const targetTag = await getTagById(redirect.target_tag_id);
-
-  if (targetTag === undefined) {
-    return input;
-  }
-
-  return {
-    ...input,
-    normalized_name: targetTag.normalized_name,
-    display_name: targetTag.display_name,
-    system_key: targetTag.system_key
-  };
 }
 
 async function ensureTagRecord(
@@ -1710,6 +1761,10 @@ function sortArchiveTags(tags: ArchiveTagRecord[]): ArchiveTagRecord[] {
 
     return left.display_name.localeCompare(right.display_name);
   });
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 type PostTagInput = {
