@@ -1,68 +1,50 @@
 # Current Task
 
-## Active Task
+## Active
 - id: `2026-04-04-bookmarks-import`
-- title: bookmarks import の調査継続
-- owner: Codex
-- status: in_progress
-- task file: `ai-handoff/tasks/2026-04-04-bookmarks-import.md`
+- title: bookmarks import investigation and implementation
+- owner: `Codex`
+- status: `in_progress`
+- branch: `master`
+- priority: `high`
+- task_file: `ai-handoff/tasks/2026-04-04-bookmarks-import.md`
 
----
+## Scope
+- files_in_scope: `src/features/x/bookmarks-import-controls.ts`
+- files_in_scope: `src/features/x/bootstrap-x-content-script.ts`
+- files_in_scope: `src/features/settings/archive-language.ts`
+- files_in_scope: `src/types/archive.ts`
+- files_in_scope: `src/features/x/extract-post-from-article.ts`
+- out_of_scope: full bookmarks spec expansion
+- out_of_scope: URL support outside `/i/bookmarks`
+- out_of_scope: commit and push
 
-## Recently Completed: `2026-04-05-viewer-cdp-review-blocker`
+## Coordination
+- blocked_by: `none`
+- related_findings: `ai-handoff/findings/2026-04-05-bookmarks-import-runtime-error.md`
+- related_findings: `ai-handoff/findings/2026-04-05-viewer-cdp-review-blocker.md`
+- needs_from_claude: capture browser-side console, message, and stack details on `/i/bookmarks` if the runtime error still reproduces
+- handoff_to_codex: keep implementation, verification, and root-cause notes aligned with the task packet and findings
 
-**status: resolved**  
-findings: `ai-handoff/findings/2026-04-05-viewer-cdp-review-blocker.md`
+## Next Action
+- next_action: verify the remaining runtime error path around bookmarks import and finish end-to-end validation on `/i/bookmarks`
+- acceptance_criteria: import overlay renders on `x.com/i/bookmarks`
+- acceptance_criteria: save flow processes visible posts without crashing
+- acceptance_criteria: saved posts receive the `bookmarked` built-in tag
+- acceptance_criteria: `npm run typecheck`
+- acceptance_criteria: `npm run build`
 
-### Summary
-
-ERR_FILE_NOT_FOUND の根本原因は3つの複合問題。viewer.html 自体や WXT ビルドに問題はなし。
-
-1. **Wrong extension ID**: `fignfifoniblkonapihmkfakmlgkbkcf` は Google Network Speech（Chrome 組み込み）。`start-cdp-chrome.ps1` が `*/service_worker.js` パターンで誤検知していた。正しくは `*/background.js` で検出。
-
-2. **`--load-extension` がサイレント無視**: Chrome stable は developer mode が OFF のプロファイルでは `--load-extension` を無視する。新規プロファイルはデフォルト OFF。
-
-3. **`--disable-extensions-except` は Chrome stable で無効**: サイレント無視されるフラグ。スクリプトから削除済み。
-
-### What Changed
-
-- `scripts/start-cdp-chrome.ps1`: 2フェーズ起動（Phase 1: dev mode 有効化、Phase 2: extension ロード）、検出パターン修正、不正なフラグ削除
-- `scripts/enable-dev-mode.mjs`: 新規作成。CDP 経由で developer mode を有効化して Chrome を graceful close
-- `scripts/enable-dev-mode.js`: 廃止。`scripts/load-ext.mjs`: デバッグ用途のみ（削除可）
-
-### CDP 起動手順（Codex 用）
-
-```powershell
-# 通常起動（プロファイル再利用）— extension ID が出力される
-powershell -ExecutionPolicy Bypass -File scripts\start-cdp-chrome.ps1
-
-# 初回 or プロファイルリセット
-powershell -ExecutionPolicy Bypass -File scripts\start-cdp-chrome.ps1 -ResetProfile
-# → extension が検出されない場合は chrome://extensions/ から手動 Load unpacked (.output\chrome-mv3)
-```
-
-Extension ID は起動時に出力される。`fignfifoniblkonapihmkfakmlgkbkcf` は使用禁止（Google Network Speech）。
-
----
+## Recent Updates
+- `2026-04-06 Codex`: normalized this dashboard into a fixed handoff format with explicit scope, coordination, and next action fields.
+- `2026-04-05 Codex`: bookmarks import implementation is in progress; remaining work is runtime-error verification and browser-side confirmation.
+- `2026-04-05 Claude`: viewer CDP blocker was reduced to extension-loading workflow issues and documented separately.
 
 ## Waiting Tasks
-| Order | ID | Title |
-|---|---|---|
-| 1 | `2026-04-04-bookmarks-import` | bookmarks import の調査継続 |
-| 2 | `2026-04-04-auto-archive-triggers` | いいね / ブックマーク時の自動保存 |
-| 3 | `2026-04-04-user-filter` | 一覧のユーザー絞り込み |
-
----
+- `2026-04-04-auto-archive-triggers`: auto archive trigger implementation
+- `2026-04-04-user-filter`: single-user filter
 
 ## Recently Completed
-- id: `2026-04-04-viewer-tag-inline`
-- title: 投稿タグの inline UI 改善
-- status: codex-done
-
-- id: `2026-04-04-viewer-theme`
-- title: viewer / settings の UI 調整
-- status: codex-done
-
-- id: `2026-04-04-settings-page-split`
-- title: 設定ページ分割
-- status: codex-done
+- `2026-04-05-viewer-cdp-review-blocker`: resolved, see `ai-handoff/findings/2026-04-05-viewer-cdp-review-blocker.md`
+- `2026-04-04-viewer-tag-inline`: codex-done
+- `2026-04-04-viewer-theme`: codex-done
+- `2026-04-04-settings-page-split`: codex-done
