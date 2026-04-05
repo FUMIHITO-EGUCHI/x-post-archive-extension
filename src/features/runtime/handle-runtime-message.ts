@@ -1,21 +1,23 @@
 import {
-  addManualTagToArchivePost,
+  addPostTagByName,
   deleteArchiveTagRedirect,
   deleteArchivePost,
   getArchiveSummary,
   listArchiveTagRedirectSummaries,
+  listArchiveUserSummaries,
   hasSavedPost,
   listArchivePostsPage,
   listArchiveTagSummaries,
   listArchivePosts,
   mergeTags,
   renameTag,
-  removeManualTagFromArchivePost,
+  removePostTagByName,
   resumePendingMediaPersistence,
   saveArchivePost
 } from "../archive/archive-service";
 import { clearLogRecords } from "../../db/repositories/logs-repository";
 import type {
+  AddPostTagByNameResponse,
   ClearLogsResponse,
   DeleteTagRedirectResponse,
   DeletePostMessage,
@@ -27,14 +29,15 @@ import type {
   ListPostTagSummariesResponse,
   ListPostsPageResponse,
   ListPostsResponse,
+  UserSummariesResponse,
   MergeTagsResponse,
   RenameTagResponse,
+  RemovePostTagByNameResponse,
   RuntimeErrorResponse,
   RuntimeMessage,
   RuntimeResponse,
   SavePostResponse,
-  SavePostsBatchResponse,
-  UpdatePostTagsResponse
+  SavePostsBatchResponse
 } from "../../types/runtime";
 import { createLogger, createRequestId } from "../logging/logger";
 
@@ -207,6 +210,22 @@ export async function handleRuntimeMessage(
       return response;
     }
 
+    case "users/summaries": {
+      const users = await listArchiveUserSummaries();
+      logger.debug("users.summaries.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          count: users.length
+        }
+      });
+      const response: UserSummariesResponse = {
+        type: "users/summaries-result",
+        users
+      };
+      return response;
+    }
+
     case "posts/summary": {
       const summary = await getArchiveSummary();
       logger.debug("posts.summary.completed", {
@@ -241,44 +260,52 @@ export async function handleRuntimeMessage(
       return response;
     }
 
-    case "posts/tags/add": {
-      const tags = await addManualTagToArchivePost(message.xPostId, message.tagName);
-      logger.info("post.tags.add.completed", {
+    case "post_tag.add": {
+      const result = await addPostTagByName(message.postId, message.displayName);
+      logger.info("post_tag.add.completed", {
         requestId,
         context: {
           type: message.type,
-          xPostId: message.xPostId,
-          tagName: message.tagName,
-          tagCount: tags.length
+          postId: message.postId,
+          displayName: message.displayName,
+          ok: result.ok
         }
       });
-      const response: UpdatePostTagsResponse = {
-        type: "posts/tags/update-result",
-        xPostId: message.xPostId,
-        tags
-      };
+      const response: AddPostTagByNameResponse = result.ok
+        ? {
+            type: "post_tag.add",
+            ok: true,
+            postTag: result.postTag
+          }
+        : {
+            type: "post_tag.add",
+            ok: false,
+            error: result.error
+          };
       return response;
     }
 
-    case "posts/tags/remove": {
-      const tags = await removeManualTagFromArchivePost(
-        message.xPostId,
-        message.normalizedTagName
-      );
-      logger.info("post.tags.remove.completed", {
+    case "post_tag.remove": {
+      const result = await removePostTagByName(message.postId, message.normalizedName);
+      logger.info("post_tag.remove.completed", {
         requestId,
         context: {
           type: message.type,
-          xPostId: message.xPostId,
-          normalizedTagName: message.normalizedTagName,
-          tagCount: tags.length
+          postId: message.postId,
+          normalizedName: message.normalizedName,
+          ok: result.ok
         }
       });
-      const response: UpdatePostTagsResponse = {
-        type: "posts/tags/update-result",
-        xPostId: message.xPostId,
-        tags
-      };
+      const response: RemovePostTagByNameResponse = result.ok
+        ? {
+            type: "post_tag.remove",
+            ok: true
+          }
+        : {
+            type: "post_tag.remove",
+            ok: false,
+            error: result.error
+          };
       return response;
     }
 
@@ -394,10 +421,11 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/list" ||
     candidate.type === "posts/list-page" ||
     candidate.type === "posts/tags/list" ||
+    candidate.type === "users/summaries" ||
     candidate.type === "posts/summary" ||
     candidate.type === "posts/delete" ||
-    candidate.type === "posts/tags/add" ||
-    candidate.type === "posts/tags/remove" ||
+    candidate.type === "post_tag.add" ||
+    candidate.type === "post_tag.remove" ||
     candidate.type === "tag.rename" ||
     candidate.type === "tag.merge" ||
     candidate.type === "tag.redirects.list" ||

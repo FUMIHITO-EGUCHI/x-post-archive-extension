@@ -1,6 +1,7 @@
 import type { SavePostInput } from "../../types/archive";
 import type {
-  AddPostTagMessage,
+  AddPostTagByNameMessage,
+  AddPostTagByNameResponse,
   ClearLogsResponse,
   DeleteTagRedirectResponse,
   DeletePostResponse,
@@ -11,16 +12,17 @@ import type {
   ListPostTagSummariesResponse,
   ListPostsPageResponse,
   ListPostsResponse,
+  UserSummariesResponse,
   MergeTagsMessage,
   MergeTagsResponse,
   RenameTagMessage,
   RenameTagResponse,
-  RemovePostTagMessage,
+  RemovePostTagByNameMessage,
+  RemovePostTagByNameResponse,
   RuntimeMessage,
   RuntimeResponse,
   SavePostResponse,
-  SavePostsBatchResponse,
-  UpdatePostTagsResponse
+  SavePostsBatchResponse
 } from "../../types/runtime";
 import type { ListPostsPageInput } from "../../types/viewer";
 
@@ -34,14 +36,26 @@ export async function requestSavePost(
     traceId?: string;
   } = {}
 ): Promise<SavePostResponse> {
+  const autoTags = [...(post.auto_tags ?? [])];
   const response = await sendMessage({
     type: "posts/save",
-    post,
+    post: {
+      ...post,
+      auto_tags: []
+    },
     ...(options.traceId === undefined ? {} : { traceId: options.traceId })
   }, SAVE_RUNTIME_TIMEOUT_MS);
 
   if (response.type !== "posts/save-result") {
     throw new Error("Unexpected runtime response for save request.");
+  }
+
+  if (autoTags.length > 0) {
+    const postId = response.post?.x_post_id ?? post.x_post_id;
+
+    for (const tagName of autoTags) {
+      await requestAddPostTagByName(postId, tagName);
+    }
   }
 
   return response;
@@ -99,6 +113,18 @@ export async function requestTagSummaries(): Promise<ListPostTagSummariesRespons
   return response;
 }
 
+export async function requestUserSummaries(): Promise<UserSummariesResponse> {
+  const response = await sendMessage({
+    type: "users/summaries"
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "users/summaries-result") {
+    throw new Error("Unexpected runtime response for user list request.");
+  }
+
+  return response;
+}
+
 export async function requestArchiveSummary(): Promise<GetArchiveSummaryResponse> {
   const response = await sendMessage({
     type: "posts/summary"
@@ -124,35 +150,43 @@ export async function requestDeletePost(xPostId: string): Promise<DeletePostResp
   return response;
 }
 
-export async function requestAddPostTag(
-  xPostId: string,
-  tagName: string
-): Promise<UpdatePostTagsResponse> {
+export async function requestAddPostTagByName(
+  postId: string,
+  displayName: string
+): Promise<AddPostTagByNameResponse> {
   const response = await sendMessage({
-    type: "posts/tags/add",
-    xPostId,
-    tagName
-  } satisfies AddPostTagMessage, DEFAULT_RUNTIME_TIMEOUT_MS);
+    type: "post_tag.add",
+    postId,
+    displayName
+  } satisfies AddPostTagByNameMessage, DEFAULT_RUNTIME_TIMEOUT_MS);
 
-  if (response.type !== "posts/tags/update-result") {
-    throw new Error("Unexpected runtime response for add tag request.");
+  if (response.type !== "post_tag.add") {
+    throw new Error("Unexpected runtime response for post tag add request.");
+  }
+
+  if (!response.ok) {
+    throw new Error(response.error);
   }
 
   return response;
 }
 
-export async function requestRemovePostTag(
-  xPostId: string,
-  normalizedTagName: string
-): Promise<UpdatePostTagsResponse> {
+export async function requestRemovePostTagByName(
+  postId: string,
+  normalizedName: string
+): Promise<RemovePostTagByNameResponse> {
   const response = await sendMessage({
-    type: "posts/tags/remove",
-    xPostId,
-    normalizedTagName
-  } satisfies RemovePostTagMessage, DEFAULT_RUNTIME_TIMEOUT_MS);
+    type: "post_tag.remove",
+    postId,
+    normalizedName
+  } satisfies RemovePostTagByNameMessage, DEFAULT_RUNTIME_TIMEOUT_MS);
 
-  if (response.type !== "posts/tags/update-result") {
-    throw new Error("Unexpected runtime response for remove tag request.");
+  if (response.type !== "post_tag.remove") {
+    throw new Error("Unexpected runtime response for post tag remove request.");
+  }
+
+  if (!response.ok) {
+    throw new Error(response.error);
   }
 
   return response;

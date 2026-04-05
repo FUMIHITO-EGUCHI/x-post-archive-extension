@@ -456,13 +456,14 @@ function extractQuotedPostFromContainer(container: HTMLElement): SavePostInput |
 
   const text = extractPostText(container);
   const media = extractPostImages(container);
+  const videoCandidates = getCachedGraphqlVideoCandidates(permalink.xPostId);
   const engagement = extractEngagementCounts(container);
 
-  if (text === "" && media.length === 0) {
+  if (text === "" && media.length === 0 && videoCandidates.length === 0) {
     return null;
   }
 
-  return {
+  const result: SavePostInput = {
     x_post_id: permalink.xPostId,
     display_name: extractDisplayName(container, permalink.xUsername),
     x_username: permalink.xUsername,
@@ -474,6 +475,12 @@ function extractQuotedPostFromContainer(container: HTMLElement): SavePostInput |
     like_count: engagement.like_count,
     media
   };
+
+  if (videoCandidates.length > 0) {
+    result.video_candidates = videoCandidates;
+  }
+
+  return result;
 }
 
 function findQuotedPermalink(container: HTMLElement): {

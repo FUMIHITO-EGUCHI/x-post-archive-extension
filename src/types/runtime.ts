@@ -1,6 +1,6 @@
 import type {
   ArchivePostRecord,
-  ArchiveTagRecord,
+  PostTagRecord,
   PostRecord,
   SavePostInput,
   TagRecord
@@ -10,7 +10,8 @@ import type {
   ArchiveSummaryRecord,
   ArchiveTagRedirectSummaryRecord,
   ArchiveTagSummaryRecord,
-  ListPostsPageInput
+  ListPostsPageInput,
+  UserSummary
 } from "./viewer";
 
 export type SavePostMessage = {
@@ -43,6 +44,10 @@ export type ListPostTagSummariesMessage = {
   type: "posts/tags/list";
 };
 
+export type RequestUserSummariesMessage = {
+  type: "users/summaries";
+};
+
 export type GetArchiveSummaryMessage = {
   type: "posts/summary";
 };
@@ -52,16 +57,16 @@ export type DeletePostMessage = {
   xPostId: string;
 };
 
-export type AddPostTagMessage = {
-  type: "posts/tags/add";
-  xPostId: string;
-  tagName: string;
+export type AddPostTagByNameMessage = {
+  type: "post_tag.add";
+  postId: string;
+  displayName: string;
 };
 
-export type RemovePostTagMessage = {
-  type: "posts/tags/remove";
-  xPostId: string;
-  normalizedTagName: string;
+export type RemovePostTagByNameMessage = {
+  type: "post_tag.remove";
+  postId: string;
+  normalizedName: string;
 };
 
 export type RenameTagMessage = {
@@ -106,10 +111,11 @@ export type RuntimeMessage =
   | ListPostsMessage
   | ListPostsPageMessage
   | ListPostTagSummariesMessage
+  | RequestUserSummariesMessage
   | GetArchiveSummaryMessage
   | DeletePostMessage
-  | AddPostTagMessage
-  | RemovePostTagMessage
+  | AddPostTagByNameMessage
+  | RemovePostTagByNameMessage
   | RenameTagMessage
   | MergeTagsMessage
   | ListTagRedirectsMessage
@@ -153,6 +159,11 @@ export type ListPostTagSummariesResponse = {
   tags: ArchiveTagSummaryRecord[];
 };
 
+export type UserSummariesResponse = {
+  type: "users/summaries-result";
+  users: UserSummary[];
+};
+
 export type GetArchiveSummaryResponse = {
   type: "posts/summary-result";
   summary: ArchiveSummaryRecord;
@@ -163,11 +174,28 @@ export type DeletePostResponse = {
   deleted: boolean;
 };
 
-export type UpdatePostTagsResponse = {
-  type: "posts/tags/update-result";
-  xPostId: string;
-  tags: ArchiveTagRecord[];
-};
+export type AddPostTagByNameResponse =
+  | {
+      type: "post_tag.add";
+      ok: true;
+      postTag: PostTagRecord;
+    }
+  | {
+      type: "post_tag.add";
+      ok: false;
+      error: string;
+    };
+
+export type RemovePostTagByNameResponse =
+  | {
+      type: "post_tag.remove";
+      ok: true;
+    }
+  | {
+      type: "post_tag.remove";
+      ok: false;
+      error: string;
+    };
 
 export type RenameTagResponse =
   | {
@@ -215,9 +243,11 @@ export type RuntimeResponse =
   | ListPostsResponse
   | ListPostsPageResponse
   | ListPostTagSummariesResponse
+  | UserSummariesResponse
   | GetArchiveSummaryResponse
   | DeletePostResponse
-  | UpdatePostTagsResponse
+  | AddPostTagByNameResponse
+  | RemovePostTagByNameResponse
   | RenameTagResponse
   | MergeTagsResponse
   | ListTagRedirectsResponse

@@ -64,7 +64,8 @@ import type {
   ArchiveTagRedirectSummaryRecord,
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
-  ListPostsPageInput
+  ListPostsPageInput,
+  UserSummary
 } from "../../types/viewer";
 import {
   buildMediaOpfsPath,
@@ -127,34 +128,20 @@ export async function saveArchivePost(
       }
     });
 
-    if (autoTags.length > 0) {
-      await archiveDb.transaction(
-        "rw",
-        archiveDb.media,
-        archiveDb.tags,
-        archiveDb.post_tags,
-        async () => {
-          if (duplicateMediaWork.newRecords.length > 0) {
-            await addMediaRecords(duplicateMediaWork.newRecords);
-          }
+    if (duplicateMediaWork.newRecords.length > 0 || duplicateMediaWork.retryRecords.length > 0) {
+      if (duplicateMediaWork.newRecords.length > 0) {
+        await addMediaRecords(duplicateMediaWork.newRecords);
+      }
 
-          for (const media of duplicateMediaWork.retryRecords) {
-            await markMediaPending(media.media_id);
-          }
+      for (const media of duplicateMediaWork.retryRecords) {
+        await markMediaPending(media.media_id);
+      }
+    }
 
-          await ensureTagAssignments(autoTags);
-        }
-      );
-    } else if (duplicateMediaWork.newRecords.length > 0 || duplicateMediaWork.retryRecords.length > 0) {
-      await archiveDb.transaction("rw", archiveDb.media, async () => {
-        if (duplicateMediaWork.newRecords.length > 0) {
-          await addMediaRecords(duplicateMediaWork.newRecords);
-        }
-
-        for (const media of duplicateMediaWork.retryRecords) {
-          await markMediaPending(media.media_id);
-        }
-      });
+    try {
+      await assignAutoTags(input.x_post_id, autoTags);
+    } catch (error) {
+      throw new Error(`Post save failed while assigning duplicate auto tags: ${formatError(error)}`);
     }
 
     if (duplicateMediaWork.persistRecords.length > 0) {
@@ -190,18 +177,28 @@ export async function saveArchivePost(
       createPendingVideoRecord(input.x_post_id, candidate, savedAt, imageMedia.length + index)
     );
   const media = [...imageMedia, ...videoMedia];
-  await archiveDb.transaction(
-    "rw",
-    archiveDb.posts,
-    archiveDb.media,
-    archiveDb.tags,
-    archiveDb.post_tags,
-    async () => {
-      await addPost(post);
-      await addMediaRecords(media);
-      await ensureTagAssignments(autoTags);
+  let postCreated = false;
+
+  try {
+    await addPost(post);
+    postCreated = true;
+    await addMediaRecords(media);
+  } catch (error) {
+    if (postCreated) {
+      await Promise.allSettled([
+        deleteMediaRecordsByPostId(post.x_post_id),
+        deletePostRecord(post.x_post_id)
+      ]);
     }
-  );
+
+    throw new Error(`Post save failed in create transaction: ${formatError(error)}`);
+  }
+
+  try {
+    await assignAutoTags(input.x_post_id, autoTags);
+  } catch (error) {
+    throw new Error(`Post save failed while assigning auto tags: ${formatError(error)}`);
+  }
 
   enqueueMediaPersistence(media, options.traceId);
 
@@ -240,8 +237,7 @@ export async function listArchivePostsPage(
 }> {
   const normalizedOffset = normalizePageOffset(input.offset);
   const normalizedLimit = normalizePageLimit(input.limit);
-  const matchingPostIds =
-    input.tagFilter === null ? null : new Set(await listPostIdsByNormalizedName(input.tagFilter));
+  const matchingPostIds = await resolveFilteredPostIds(input);
   const totalCount = matchingPostIds === null ? await countPosts() : matchingPostIds.size;
 
   if (totalCount === 0) {
@@ -261,7 +257,7 @@ export async function listArchivePostsPage(
           normalizedOffset,
           normalizedLimit
         )
-      : await listTaggedPostsPage(input, matchingPostIds, normalizedOffset, normalizedLimit);
+      : await listFilteredPostsPage(input, matchingPostIds, normalizedOffset, normalizedLimit);
 
   return {
     posts: await hydrateArchivePosts(pagePosts),
@@ -304,6 +300,49 @@ export async function listArchiveTagSummaries(): Promise<ArchiveTagSummaryRecord
     tag: entry.tag,
     postCount: entry.postIds.size
   }));
+}
+
+export async function listArchiveUserSummaries(): Promise<UserSummary[]> {
+  const posts = await listPosts();
+  const summaryMap = new Map<
+    string,
+    {
+      display_name: string;
+      screen_name: string;
+      post_count: number;
+    }
+  >();
+
+  for (const post of posts) {
+    const normalizedScreenName = normalizeAuthorFilter(post.x_username);
+
+    if (normalizedScreenName === null) {
+      continue;
+    }
+
+    const existing = summaryMap.get(normalizedScreenName);
+
+    if (existing === undefined) {
+      summaryMap.set(normalizedScreenName, {
+        display_name: post.display_name,
+        screen_name: normalizedScreenName,
+        post_count: 1
+      });
+      continue;
+    }
+
+    existing.post_count += 1;
+  }
+
+  return [...summaryMap.values()].sort((left, right) => {
+    const postCountDifference = right.post_count - left.post_count;
+
+    if (postCountDifference !== 0) {
+      return postCountDifference;
+    }
+
+    return left.screen_name.localeCompare(right.screen_name, "en-US");
+  });
 }
 
 export async function listArchiveTagRedirectSummaries(): Promise<ArchiveTagRedirectSummaryRecord[]> {
@@ -404,82 +443,135 @@ export async function getArchiveSummary(): Promise<ArchiveSummaryRecord> {
   };
 }
 
-export async function addManualTagToArchivePost(
-  xPostId: string,
-  tagName: string
-): Promise<ArchiveTagRecord[]> {
-  const post = await getPost(xPostId);
+export async function addPostTagByName(
+  postId: string,
+  displayName: string
+): Promise<
+  | {
+      ok: true;
+      postTag: PostTagRecord;
+    }
+  | {
+      ok: false;
+      error: string;
+    }
+> {
+  const post = await getPost(postId);
 
   if (post === undefined) {
-    throw new Error("Post not found.");
+    return {
+      ok: false,
+      error: "post-not-found"
+    };
   }
 
-  const prepared = createPostTagInput(xPostId, tagName, "manual");
-
-  await archiveDb.transaction(
-    "rw",
-    archiveDb.tags,
-    archiveDb.tag_redirects,
-    archiveDb.post_tags,
-    async () => {
-      await ensureTagAssignments([prepared]);
-    }
-  );
-
-  const tags = await listArchiveTagsForPost(xPostId);
-
-  logger.info("post.tags.manual_added", {
-    context: {
-      xPostId,
-      tagName,
-      tagCount: tags.length
-    }
-  });
-
-  return tags;
-}
-
-export async function removeManualTagFromArchivePost(
-  xPostId: string,
-  normalizedTagName: string
-): Promise<ArchiveTagRecord[]> {
-  const normalizedName = normalizeTagName(normalizedTagName);
+  const normalizedName = normalizeTagName(displayName);
 
   if (normalizedName === null) {
-    throw new Error("Invalid tag name.");
+    return {
+      ok: false,
+      error: "empty-name"
+    };
   }
 
-  const record = await getPostTagByNormalizedName(xPostId, normalizedName);
+  const cleanedDisplayName = cleanupTagName(displayName);
+  return archiveDb.transaction<
+    | {
+        ok: true;
+        postTag: PostTagRecord;
+      }
+    | {
+        ok: false;
+        error: string;
+      }
+  >("rw", archiveDb.tags, archiveDb.post_tags, async () => {
+    let tag = await getTagByNormalizedName(normalizedName);
+
+    if (tag === undefined) {
+      tag = {
+        tag_id: crypto.randomUUID(),
+        normalized_name: normalizedName,
+        display_name: cleanedDisplayName,
+        system_key: null,
+        created_at: Date.now()
+      };
+      await addTag(tag);
+    }
+
+    const existingPostTag = await getPostTagByNormalizedName(postId, normalizedName);
+
+    if (existingPostTag !== undefined) {
+      return {
+        ok: true,
+        postTag: existingPostTag
+      };
+    }
+
+    const postTag: PostTagRecord = {
+      post_tag_id: crypto.randomUUID(),
+      x_post_id: postId,
+      tag_id: tag.tag_id,
+      normalized_name: tag.normalized_name,
+      display_name: tag.display_name,
+      system_key: tag.system_key,
+      source: "manual",
+      assigned_at: Date.now()
+    };
+
+    await addPostTag(postTag);
+
+    return {
+      ok: true,
+      postTag
+    };
+  });
+}
+
+export async function removePostTagByName(
+  postId: string,
+  normalizedName: string
+): Promise<
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      error: string;
+    }
+> {
+  const resolvedNormalizedName = normalizeTagName(normalizedName);
+
+  if (resolvedNormalizedName === null) {
+    return {
+      ok: false,
+      error: "invalid-name"
+    };
+  }
+
+  const record = await getPostTagByNormalizedName(postId, resolvedNormalizedName);
 
   if (record === undefined) {
-    return listArchiveTagsForPost(xPostId);
+    return {
+      ok: false,
+      error: "not-found"
+    };
   }
 
   if (record.source !== "manual") {
-    throw new Error("Auto tags cannot be removed manually.");
+    return {
+      ok: false,
+      error: "not-removable"
+    };
   }
 
-  await archiveDb.transaction(
-    "rw",
-    archiveDb.tags,
-    archiveDb.post_tags,
-    async () => {
-      await deletePostTag(record.post_tag_id);
-      await deleteOrphanedTag(record.tag_id);
-    }
-  );
-
-  const tags = await listArchiveTagsForPost(xPostId);
-
-  logger.info("post.tags.manual_removed", {
-    context: {
-      xPostId,
-      normalizedTagName,
-      tagCount: tags.length
-    }
+  await archiveDb.transaction("rw", archiveDb.tags, archiveDb.post_tags, async () => {
+    await deletePostTag(record.post_tag_id);
+    await deleteOrphanedTag(record.tag_id);
   });
 
-  return tags;
+  return {
+    ok: true
+  };
 }
 
 export async function renameTag(
@@ -871,11 +963,6 @@ export async function resumePendingMediaPersistence(): Promise<void> {
   return pendingResumePromise;
 }
 
-async function listArchiveTagsForPost(xPostId: string): Promise<ArchiveTagRecord[]> {
-  const postTags = await listPostTagsByPostId(xPostId);
-  return sortArchiveTags(postTags.map((item) => normalizeArchiveTag(item).tag));
-}
-
 async function hydrateArchivePosts(posts: PostRecord[]): Promise<ArchivePostRecord[]> {
   const basePosts = await hydrateArchivePostsBase(posts);
   const quotedPostIds = [...new Set(basePosts.flatMap((post) =>
@@ -952,7 +1039,7 @@ async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePost
   }));
 }
 
-async function listTaggedPostsPage(
+async function listFilteredPostsPage(
   input: ListPostsPageInput,
   matchingPostIds: Set<string>,
   offset: number,
@@ -998,6 +1085,37 @@ async function listTaggedPostsPage(
   return results;
 }
 
+async function resolveFilteredPostIds(input: ListPostsPageInput): Promise<Set<string> | null> {
+  const tagFilterPostIds =
+    input.tagFilter === null ? null : new Set(await listPostIdsByNormalizedName(input.tagFilter));
+  const authorFilter = normalizeAuthorFilter(input.authorFilter);
+
+  if (tagFilterPostIds === null && authorFilter === null) {
+    return null;
+  }
+
+  const authorFilterPostIds =
+    authorFilter === null ? null : new Set(await listPostIdsByAuthorFilter(authorFilter));
+
+  if (tagFilterPostIds === null) {
+    return authorFilterPostIds;
+  }
+
+  if (authorFilterPostIds === null) {
+    return tagFilterPostIds;
+  }
+
+  const intersection = new Set<string>();
+
+  for (const postId of tagFilterPostIds) {
+    if (authorFilterPostIds.has(postId)) {
+      intersection.add(postId);
+    }
+  }
+
+  return intersection;
+}
+
 function normalizePageOffset(value: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
@@ -1010,62 +1128,119 @@ function normalizePageLimit(value: number): number {
   return Math.min(Math.floor(value), 250);
 }
 
+async function listPostIdsByAuthorFilter(authorFilter: string): Promise<string[]> {
+  const posts = await listPosts();
+
+  return posts
+    .filter((post) => normalizeAuthorFilter(post.x_username) === authorFilter)
+    .map((post) => post.x_post_id);
+}
+
 async function ensureTagAssignments(inputs: PostTagInput[]): Promise<void> {
   for (const item of inputs) {
-    const resolvedItem = await resolveTagAssignmentInput(item);
-    const existingPostTag = await getPostTagByNormalizedName(
-      resolvedItem.x_post_id,
-      resolvedItem.normalized_name
-    );
+    const resolvedItem = item;
+    let existingPostTag: PostTagRecord | undefined;
+
+    try {
+      existingPostTag = await getPostTagByNormalizedName(
+        resolvedItem.x_post_id,
+        resolvedItem.normalized_name
+      );
+    } catch (error) {
+      throw new Error(`Tag assignment failed while checking existing tags: ${formatError(error)}`);
+    }
 
     if (existingPostTag !== undefined) {
       if (existingPostTag.source === "auto" && resolvedItem.source === "manual") {
-        await deletePostTag(existingPostTag.post_tag_id);
-        await deleteOrphanedTag(existingPostTag.tag_id);
+        try {
+          await deletePostTag(existingPostTag.post_tag_id);
+          await deleteOrphanedTag(existingPostTag.tag_id);
+        } catch (error) {
+          throw new Error(`Tag assignment failed while replacing an auto tag: ${formatError(error)}`);
+        }
       } else {
         continue;
       }
     }
 
-    const tag = await ensureTagRecord(
-      resolvedItem.normalized_name,
-      resolvedItem.display_name,
-      resolvedItem.system_key,
-      resolvedItem.assigned_at
-    );
+    let tag: TagRecord;
 
-    await addPostTag({
-      post_tag_id: crypto.randomUUID(),
-      x_post_id: resolvedItem.x_post_id,
-      tag_id: tag.tag_id,
-      normalized_name: tag.normalized_name,
-      display_name: resolvedItem.display_name,
-      system_key: resolvedItem.system_key,
-      source: resolvedItem.source,
-      assigned_at: resolvedItem.assigned_at
+    try {
+      tag = await ensureTagRecord(
+        resolvedItem.normalized_name,
+        resolvedItem.display_name,
+        resolvedItem.system_key,
+        resolvedItem.assigned_at
+      );
+    } catch (error) {
+      throw new Error(`Tag assignment failed while ensuring a tag record: ${formatError(error)}`);
+    }
+
+    try {
+      await addPostTag({
+        post_tag_id: crypto.randomUUID(),
+        x_post_id: resolvedItem.x_post_id,
+        tag_id: tag.tag_id,
+        normalized_name: tag.normalized_name,
+        display_name: resolvedItem.display_name,
+        system_key: resolvedItem.system_key,
+        source: resolvedItem.source,
+        assigned_at: resolvedItem.assigned_at
+      });
+    } catch (error) {
+      throw new Error(`Tag assignment failed while writing post_tags: ${formatError(error)}`);
+    }
+  }
+}
+
+async function assignPostTagsDirectly(inputs: PostTagInput[]): Promise<void> {
+  for (const item of inputs) {
+    await archiveDb.transaction("rw", archiveDb.tags, archiveDb.post_tags, async () => {
+      let tag = await getTagByNormalizedName(item.normalized_name);
+
+      if (tag === undefined) {
+        tag = {
+          tag_id: crypto.randomUUID(),
+          normalized_name: item.normalized_name,
+          display_name: item.display_name,
+          system_key: item.system_key,
+          created_at: item.assigned_at
+        };
+        await addTag(tag);
+      }
+
+      const existingPostTag = await getPostTagByNormalizedName(item.x_post_id, item.normalized_name);
+
+      if (existingPostTag !== undefined) {
+        if (existingPostTag.source === "auto" && item.source === "manual") {
+          await deletePostTag(existingPostTag.post_tag_id);
+        } else {
+          return;
+        }
+      }
+
+      await addPostTag({
+        post_tag_id: crypto.randomUUID(),
+        x_post_id: item.x_post_id,
+        tag_id: tag.tag_id,
+        normalized_name: tag.normalized_name,
+        display_name: item.display_name,
+        system_key: item.system_key,
+        source: item.source,
+        assigned_at: item.assigned_at
+      });
     });
   }
 }
 
-async function resolveTagAssignmentInput(input: PostTagInput): Promise<PostTagInput> {
-  const redirect = await getTagRedirectBySourceNormalizedName(input.normalized_name);
+async function assignAutoTags(xPostId: string, inputs: PostTagInput[]): Promise<void> {
+  for (const item of inputs) {
+    const result = await addPostTagByName(xPostId, item.display_name);
 
-  if (redirect === undefined) {
-    return input;
+    if (!result.ok) {
+      throw new Error(`Auto tag add failed: ${result.error}`);
+    }
   }
-
-  const targetTag = await getTagById(redirect.target_tag_id);
-
-  if (targetTag === undefined) {
-    return input;
-  }
-
-  return {
-    ...input,
-    normalized_name: targetTag.normalized_name,
-    display_name: targetTag.display_name,
-    system_key: targetTag.system_key
-  };
 }
 
 async function ensureTagRecord(
@@ -1452,6 +1627,15 @@ function normalizeMediaRecord(media: MediaRecord): MediaRecord {
   };
 }
 
+function normalizeAuthorFilter(value: string | null): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const cleaned = value.trim().replace(/^@+/, "").toLocaleLowerCase("en-US");
+  return cleaned === "" ? null : cleaned;
+}
+
 function getMediaSourceKey(mediaType: MediaRecord["media_type"], sourceUrl: string): string {
   return `${mediaType}:${sourceUrl}`;
 }
@@ -1493,6 +1677,10 @@ function sortArchiveTags(tags: ArchiveTagRecord[]): ArchiveTagRecord[] {
 
     return left.display_name.localeCompare(right.display_name);
   });
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 type PostTagInput = {
