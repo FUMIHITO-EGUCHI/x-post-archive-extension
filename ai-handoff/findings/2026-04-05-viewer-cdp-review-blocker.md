@@ -50,6 +50,9 @@ Rewritten with two-phase approach. Key changes:
 - Phase 1 (new profiles only): enables developer mode via `enable-dev-mode.mjs`, then closes Chrome
 - Phase 2: starts Chrome with `--load-extension`
 - Extension detection: `*/background.js` (was `*/service_worker.js`)
+- Reuses an existing CDP browser on the requested port instead of killing Chrome unconditionally
+- If the port is occupied by Chrome but CDP is not reachable, the script now stops and asks for an explicit rerun with `-TakeoverPort`
+- `-TakeoverPort` uses `taskkill` only as an explicit opt-in takeover path
 - PSPossibleIncorrectComparisonWithNull fixed (`$null -ne $x` pattern)
 
 ### `scripts/enable-dev-mode.mjs` (new)
@@ -72,6 +75,14 @@ Do NOT use `-ResetProfile` unless you have a specific reason to start fresh. The
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\start-cdp-chrome.ps1
+```
+
+If Chrome is already listening on that port with CDP enabled, the script will now reuse it and print the extension ID / viewer URL without restarting the browser.
+
+If the port is occupied but CDP is not reachable, the script fails fast instead of killing Chrome. After confirming it is safe to terminate that Chrome instance, rerun with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start-cdp-chrome.ps1 -TakeoverPort
 ```
 
 ### Option B: First-Time Setup from Fresh Profile
