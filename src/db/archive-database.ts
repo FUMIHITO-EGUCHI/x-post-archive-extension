@@ -170,6 +170,38 @@ export class ArchiveDatabase extends Dexie {
 }
 
 export const archiveDb = new ArchiveDatabase();
+let objectStoreNamesPromise: Promise<Set<string>> | null = null;
+
+export function isMissingObjectStoreError(error: unknown): boolean {
+  const name =
+    typeof error === "object" && error !== null && "name" in error
+      ? String(error.name)
+      : null;
+  const message = error instanceof Error ? error.message : String(error);
+  const normalizedMessage = message.toLocaleLowerCase("en-US");
+
+  return (
+    name === "NotFoundError" &&
+    (normalizedMessage.includes("object store") || normalizedMessage.includes("objectstore")) &&
+    normalizedMessage.includes("not found")
+  ) ||
+    message.includes("The specified object store was not found.");
+}
+
+export async function getArchiveObjectStoreNames(): Promise<Set<string>> {
+  if (objectStoreNamesPromise === null) {
+    objectStoreNamesPromise = archiveDb.open().then(() => {
+      const nativeDb = archiveDb.backendDB();
+      return new Set(Array.from(nativeDb.objectStoreNames));
+    });
+  }
+
+  return objectStoreNamesPromise;
+}
+
+export async function hasArchiveObjectStore(storeName: string): Promise<boolean> {
+  return (await getArchiveObjectStoreNames()).has(storeName);
+}
 
 function normalizeStoredCount(value: number | undefined): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;

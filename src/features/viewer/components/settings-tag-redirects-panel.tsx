@@ -95,8 +95,8 @@ export function SettingsTagRedirectsPanel({ language }: SettingsTagRedirectsPane
         <h3>{isJapanese ? "自動タグ変換" : "Automatic tag redirects"}</h3>
         <p>
           {isJapanese
-            ? "タグを統合したあと、元のタグ名が再び使われても自動で統合先へ寄せるルールを確認できます。"
-            : "Review the rules that automatically redirect future uses of merged source tags to their merged targets."}
+            ? "統合したタグの古い名前が再び使われたときに、どのタグへ自動で置き換えるかを確認できます。"
+            : "Review which tag each old merged tag will be replaced with the next time it is used."}
         </p>
       </div>
 

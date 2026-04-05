@@ -1,6 +1,13 @@
 ﻿import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ArchivePostRecord, ArchiveTagRecord, MediaRecord } from "../../../types/archive";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import type {
+  ArchivePostRecord,
+  ArchiveSettings,
+  ArchiveTagRecord,
+  MediaRecord
+} from "../../../types/archive";
+import { defaultArchiveSettings } from "../../../types/archive";
 import type {
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
@@ -8,16 +15,19 @@ import type {
   PostSortField,
   StorageEstimateState,
   SortDirection,
+  UserSummary,
   ViewerSessionRestoreMode
 } from "../../../types/viewer";
+import type { ViewerTheme } from "../../../types/viewer";
 import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
 import {
-  requestAddPostTag,
+  requestAddPostTagByName,
   requestArchiveSummary,
   requestDeletePost,
   requestPostsPage,
-  requestRemovePostTag,
-  requestTagSummaries
+  requestRemovePostTagByName,
+  requestTagSummaries,
+  requestUserSummaries
 } from "../../runtime/client";
 import { createLogger } from "../../logging/logger";
 import { SettingsArchiveMaintenancePanel } from "./settings-archive-maintenance-panel";
@@ -32,12 +42,19 @@ import {
   type ArchiveLanguage
 } from "../../settings/archive-language";
 import {
+  loadArchiveSettings,
+  persistArchiveSettings
+} from "../../settings/archive-settings";
+import { loadViewerTheme, persistViewerTheme } from "../../settings/viewer-theme";
+import {
   clearViewerSession,
   loadViewerSession,
   loadViewerSessionRestoreMode,
   persistViewerSession,
   persistViewerSessionRestoreMode
 } from "../viewer-session-storage";
+import { TagPickerOverlay } from "./tag-picker-overlay";
+import { useDialogA11y } from "./use-dialog-a11y";
 
 type ViewerStatus = "idle" | "loading" | "ready";
 type ViewerScreen = "archive" | "settings";
@@ -65,6 +82,9 @@ export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("basic");
   const [language, setLanguage] = useState<ArchiveLanguage>("ja");
+  const [archiveSettings, setArchiveSettings] =
+    useState<ArchiveSettings>(defaultArchiveSettings);
+  const [viewerTheme, setViewerTheme] = useState<ViewerTheme>("light");
   const [fontSize, setFontSize] = useState<FontSizeOption>("medium");
   const [sessionRestoreMode, setSessionRestoreMode] =
     useState<ViewerSessionRestoreMode>("filters");
@@ -90,11 +110,15 @@ export function ViewerApp() {
   const [activeMedia, setActiveMedia] = useState<ActiveMedia | null>(null);
   const [activeVideo, setActiveVideo] = useState<ActiveVideo | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [activeAuthorFilter, setActiveAuthorFilter] = useState<string | null>(null);
   const [isTagFilterModalOpen, setIsTagFilterModalOpen] = useState(false);
+  const [isAuthorFilterModalOpen, setIsAuthorFilterModalOpen] = useState(false);
   const [tagSearchQuery, setTagSearchQuery] = useState("");
+  const [userSearchQuery, setUserSearchQuery] = useState("");
   const [tagSortOption, setTagSortOption] = useState<TagSortOption>("count");
-  const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
+  const [userSummaries, setUserSummaries] = useState<UserSummary[]>([]);
   const [tagActionPostId, setTagActionPostId] = useState<string | null>(null);
+  const [tagPickerPostId, setTagPickerPostId] = useState<string | null>(null);
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState>({
     usage: null,
     quota: null,
@@ -106,13 +130,100 @@ export function ViewerApp() {
   const restoreScrollTopRef = useRef<number | null>(null);
   const [restoreTargetPostId, setRestoreTargetPostId] = useState<string | null>(null);
   const archiveSectionRef = useRef<HTMLElement | null>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const backToArchiveButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previousScreenRef = useRef<ViewerScreen>("archive");
+  const tagFilterDialogRef = useRef<HTMLElement | null>(null);
+  const tagFilterSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const authorFilterDialogRef = useRef<HTMLElement | null>(null);
+  const authorFilterSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const imageLightboxRef = useRef<HTMLDivElement | null>(null);
+  const imageLightboxCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const videoLightboxRef = useRef<HTMLDivElement | null>(null);
+  const videoLightboxCloseButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const viewerScale = FONT_SIZE_SCALE[fontSize];
+  const settingsTabOptions = getSettingsTabOptions(language);
+  const activeSettingsTabPanelId = getSettingsTabPanelId(settingsTab);
+  const activeSettingsTabButtonId = getSettingsTabButtonId(settingsTab);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", viewerTheme);
+  }, [viewerTheme]);
+
+  useEffect(() => {
+    if (screen === "settings") {
+      window.requestAnimationFrame(() => {
+        backToArchiveButtonRef.current?.focus();
+      });
+    } else if (previousScreenRef.current === "settings") {
+      window.requestAnimationFrame(() => {
+        settingsButtonRef.current?.focus();
+      });
+    }
+
+    previousScreenRef.current = screen;
+  }, [screen]);
 
   const selectedTagFilter = useMemo(
     () => availableTags.find(({ tag }) => tag.normalized_name === activeTagFilter) ?? null,
     [activeTagFilter, availableTags]
   );
+  const selectedAuthorFilter = useMemo(
+    () => userSummaries.find((user) => user.screen_name === activeAuthorFilter) ?? null,
+    [activeAuthorFilter, userSummaries]
+  );
+
+  function closeTagFilterModal() {
+    setIsTagFilterModalOpen(false);
+  }
+
+  function closeAuthorFilterModal() {
+    setIsAuthorFilterModalOpen(false);
+  }
+
+  function closeImageLightbox() {
+    setActiveMedia(null);
+  }
+
+  function closeVideoLightbox() {
+    setActiveVideo(null);
+  }
+
+  useDialogA11y({
+    isOpen: isTagFilterModalOpen,
+    containerRef: tagFilterDialogRef,
+    initialFocusRef: tagFilterSearchInputRef,
+    onClose: closeTagFilterModal
+  });
+  useDialogA11y({
+    isOpen: isAuthorFilterModalOpen,
+    containerRef: authorFilterDialogRef,
+    initialFocusRef: authorFilterSearchInputRef,
+    onClose: closeAuthorFilterModal
+  });
+  useDialogA11y({
+    isOpen: activeMedia !== null,
+    containerRef: imageLightboxRef,
+    initialFocusRef: imageLightboxCloseButtonRef,
+    onClose: closeImageLightbox
+  });
+  useDialogA11y({
+    isOpen: activeVideo !== null,
+    containerRef: videoLightboxRef,
+    initialFocusRef: videoLightboxCloseButtonRef,
+    onClose: closeVideoLightbox
+  });
+
+  useEffect(() => {
+    if (tagPickerPostId === null) {
+      return;
+    }
+
+    if (!posts.some((post) => post.x_post_id === tagPickerPostId)) {
+      setTagPickerPostId(null);
+    }
+  }, [posts, tagPickerPostId]);
 
   function getTagDisplayName(tag: ArchiveTagRecord): string {
     if (tag.source !== "auto") {
@@ -153,15 +264,39 @@ export function ViewerApp() {
     });
   }, [availableTags, language, tagSearchQuery, tagSortOption]);
 
+  const visibleUserOptions = useMemo(() => {
+    const normalizedQuery = normalizeUserSearchQuery(userSearchQuery);
+
+    if (normalizedQuery === "") {
+      return userSummaries;
+    }
+
+    return userSummaries.filter((user) => {
+      return (
+        user.display_name.toLocaleLowerCase("ja-JP").includes(normalizedQuery) ||
+        user.screen_name.includes(normalizedQuery)
+      );
+    });
+  }, [userSearchQuery, userSummaries]);
+
   useEffect(() => {
     let cancelled = false;
 
     async function initializeViewer() {
       try {
-        const [storedFont, nextLanguage, nextSessionRestoreMode, savedSession] = await Promise.all([
+        const [
+          storedFont,
+          nextLanguage,
+          nextArchiveSettings,
+          nextSessionRestoreMode,
+          nextTheme,
+          savedSession
+        ] = await Promise.all([
           browser.storage.local.get(VIEWER_FONT_SIZE_STORAGE_KEY),
           loadArchiveLanguage(),
+          loadArchiveSettings(),
           loadViewerSessionRestoreMode(),
+          loadViewerTheme(),
           loadViewerSession()
         ]);
 
@@ -176,17 +311,21 @@ export function ViewerApp() {
         }
 
         setLanguage(nextLanguage);
+        setArchiveSettings(nextArchiveSettings);
         setSessionRestoreMode(nextSessionRestoreMode);
+        setViewerTheme(nextTheme);
 
         let nextSortField: PostSortField = "saved_at";
         let nextSortDirection: SortDirection = "desc";
         let nextTagFilter: string | null = null;
+        let nextAuthorFilter: string | null = null;
         let initialLimit = DEFAULT_PAGE_SIZE;
 
         if (nextSessionRestoreMode !== "off" && savedSession !== null) {
           nextSortField = savedSession.sortField;
           nextSortDirection = savedSession.sortDirection;
           nextTagFilter = savedSession.activeTagFilter;
+          nextAuthorFilter = savedSession.activeAuthorFilter ?? null;
 
           if (nextSessionRestoreMode === "filters-and-position") {
             initialLimit = Math.max(DEFAULT_PAGE_SIZE, savedSession.loadedCount);
@@ -198,6 +337,7 @@ export function ViewerApp() {
         setSortField(nextSortField);
         setSortDirection(nextSortDirection);
         setActiveTagFilter(nextTagFilter);
+        setActiveAuthorFilter(nextAuthorFilter);
 
         await Promise.all([
           refreshArchiveMetadata(),
@@ -207,6 +347,7 @@ export function ViewerApp() {
             sortField: nextSortField,
             sortDirection: nextSortDirection,
             tagFilter: nextTagFilter,
+            authorFilter: nextAuthorFilter,
             append: false
           })
         ]);
@@ -364,11 +505,6 @@ export function ViewerApp() {
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setActiveMedia(null);
-        return;
-      }
-
       if (event.key === "ArrowLeft") {
         setActiveMedia((current) => moveActiveMedia(current, -1));
         return;
@@ -385,24 +521,6 @@ export function ViewerApp() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [activeMedia]);
-
-  useEffect(() => {
-    if (!isTagFilterModalOpen) {
-      return undefined;
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setIsTagFilterModalOpen(false);
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isTagFilterModalOpen]);
 
   useEffect(() => {
     if (restoreTargetPostId === null && restoreScrollTopRef.current === null) {
@@ -449,7 +567,15 @@ export function ViewerApp() {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [activeTagFilter, posts.length, screen, sessionRestoreMode, sortDirection, sortField]);
+  }, [
+    activeAuthorFilter,
+    activeTagFilter,
+    posts.length,
+    screen,
+    sessionRestoreMode,
+    sortDirection,
+    sortField
+  ]);
 
   useEffect(() => {
     if (
@@ -483,17 +609,27 @@ export function ViewerApp() {
 
       window.removeEventListener("scroll", handleScroll);
     };
-  }, [activeTagFilter, posts.length, screen, sessionRestoreMode, sortDirection, sortField]);
+  }, [
+    activeAuthorFilter,
+    activeTagFilter,
+    posts.length,
+    screen,
+    sessionRestoreMode,
+    sortDirection,
+    sortField
+  ]);
 
   async function refreshArchiveMetadata(): Promise<void> {
     try {
-      const [summaryResponse, tagsResponse] = await Promise.all([
+      const [summaryResponse, tagsResponse, usersResponse] = await Promise.all([
         requestArchiveSummary(),
-        requestTagSummaries()
+        requestTagSummaries(),
+        requestUserSummaries()
       ]);
 
       setArchiveSummary(summaryResponse.summary);
       setAvailableTags(tagsResponse.tags);
+      setUserSummaries(usersResponse.users);
     } catch (error) {
       logger.error("archive.metadata.load.failed", {
         message: "Failed to load archive metadata.",
@@ -510,6 +646,7 @@ export function ViewerApp() {
     sortField: PostSortField;
     sortDirection: SortDirection;
     tagFilter: string | null;
+    authorFilter: string | null;
     append: boolean;
   }): Promise<void> {
     if (input.append) {
@@ -526,7 +663,8 @@ export function ViewerApp() {
         limit: input.limit,
         sortField: input.sortField,
         sortDirection: input.sortDirection,
-        tagFilter: input.tagFilter
+        tagFilter: input.tagFilter,
+        authorFilter: input.authorFilter
       });
 
       if (input.append) {
@@ -577,6 +715,7 @@ export function ViewerApp() {
         sortField,
         sortDirection,
         tagFilter: activeTagFilter,
+        authorFilter: activeAuthorFilter,
         append: false
       })
     ]);
@@ -605,6 +744,7 @@ export function ViewerApp() {
         sortField,
         sortDirection,
         tagFilter: nextTagFilter,
+        authorFilter: activeAuthorFilter,
         append: false
       })
     ]);
@@ -629,6 +769,7 @@ export function ViewerApp() {
         sortField,
         sortDirection,
         tagFilter: nextTagFilter,
+        authorFilter: activeAuthorFilter,
         append: false
       })
     ]);
@@ -656,33 +797,22 @@ export function ViewerApp() {
     }
   }
 
-  async function handleAddTag(xPostId: string) {
-    const draft = tagDrafts[xPostId]?.trim() ?? "";
-
-    if (draft === "") {
+  async function handleAddTagToPost(xPostId: string, displayName: string) {
+    if (displayName.trim() === "") {
       return;
     }
 
     setTagActionPostId(xPostId);
 
     try {
-      const response = await requestAddPostTag(xPostId, draft);
-      setTagDrafts((current) => ({
-        ...current,
-        [xPostId]: ""
-      }));
-      setPosts((current) =>
-        current.map((post) =>
-          post.x_post_id === xPostId ? { ...post, tags: response.tags } : post
-        )
-      );
+      await requestAddPostTagByName(xPostId, displayName);
       await reloadCurrentArchive();
     } catch (error) {
       logger.error("post.tags.add.failed", {
         message: "Failed to add tag.",
         context: {
           xPostId,
-          tagName: draft,
+          displayName,
           error
         }
       });
@@ -691,42 +821,18 @@ export function ViewerApp() {
     }
   }
 
-  async function handleRemoveTag(xPostId: string, tag: ArchiveTagRecord) {
-    if (tag.source !== "manual") {
-      const nextTagFilter =
-        activeTagFilter === tag.normalized_name ? null : tag.normalized_name;
-
-      setActiveTagFilter(nextTagFilter);
-      window.scrollTo({
-        top: 0
-      });
-      await loadArchivePage({
-        offset: 0,
-        limit: DEFAULT_PAGE_SIZE,
-        sortField,
-        sortDirection,
-        tagFilter: nextTagFilter,
-        append: false
-      });
-      return;
-    }
-
+  async function handleRemoveTagFromPost(xPostId: string, normalizedName: string) {
     setTagActionPostId(xPostId);
 
     try {
-      const response = await requestRemovePostTag(xPostId, tag.normalized_name);
-      setPosts((current) =>
-        current.map((post) =>
-          post.x_post_id === xPostId ? { ...post, tags: response.tags } : post
-        )
-      );
+      await requestRemovePostTagByName(xPostId, normalizedName);
       await reloadCurrentArchive();
     } catch (error) {
       logger.error("post.tags.remove.failed", {
         message: "Failed to remove tag.",
         context: {
           xPostId,
-          normalizedTagName: tag.normalized_name,
+          normalizedTagName: normalizedName,
           error
         }
       });
@@ -808,6 +914,38 @@ export function ViewerApp() {
     }
   }
 
+  async function handleThemeChange(nextValue: ViewerTheme) {
+    setViewerTheme(nextValue);
+
+    try {
+      await persistViewerTheme(nextValue);
+    } catch (error) {
+      logger.error("viewer.theme.persist_failed", {
+        message: "Failed to persist viewer theme.",
+        context: {
+          nextValue,
+          error
+        }
+      });
+    }
+  }
+
+  async function handleArchiveSettingsChange(nextValue: ArchiveSettings) {
+    setArchiveSettings(nextValue);
+
+    try {
+      await persistArchiveSettings(nextValue);
+    } catch (error) {
+      logger.error("viewer.archive_settings.persist_failed", {
+        message: "Failed to persist archive settings.",
+        context: {
+          nextValue,
+          error
+        }
+      });
+    }
+  }
+
   async function handleSortFieldChange(nextValue: PostSortField) {
     setSortField(nextValue);
     window.scrollTo({
@@ -819,6 +957,7 @@ export function ViewerApp() {
       sortField: nextValue,
       sortDirection,
       tagFilter: activeTagFilter,
+      authorFilter: activeAuthorFilter,
       append: false
     });
   }
@@ -835,6 +974,7 @@ export function ViewerApp() {
       sortField,
       sortDirection: nextValue,
       tagFilter: activeTagFilter,
+      authorFilter: activeAuthorFilter,
       append: false
     });
   }
@@ -843,7 +983,7 @@ export function ViewerApp() {
     const nextValue = activeTagFilter === normalizedName ? null : normalizedName;
 
     setActiveTagFilter(nextValue);
-    setIsTagFilterModalOpen(false);
+    closeTagFilterModal();
     window.scrollTo({
       top: 0
     });
@@ -853,6 +993,26 @@ export function ViewerApp() {
       sortField,
       sortDirection,
       tagFilter: nextValue,
+      authorFilter: activeAuthorFilter,
+      append: false
+    });
+  }
+
+  async function handleToggleAuthorFilter(screenName: string) {
+    const nextValue = activeAuthorFilter === screenName ? null : screenName;
+
+    setActiveAuthorFilter(nextValue);
+    closeAuthorFilterModal();
+    window.scrollTo({
+      top: 0
+    });
+    await loadArchivePage({
+      offset: 0,
+      limit: DEFAULT_PAGE_SIZE,
+      sortField,
+      sortDirection,
+      tagFilter: activeTagFilter,
+      authorFilter: nextValue,
       append: false
     });
   }
@@ -864,6 +1024,7 @@ export function ViewerApp() {
       sortField,
       sortDirection,
       tagFilter: activeTagFilter,
+      authorFilter: activeAuthorFilter,
       append: true
     });
   }
@@ -882,6 +1043,7 @@ export function ViewerApp() {
         sortField,
         sortDirection,
         activeTagFilter,
+        activeAuthorFilter,
         loadedCount: posts.length,
         anchorPostId:
           sessionRestoreMode === "filters-and-position"
@@ -903,9 +1065,37 @@ export function ViewerApp() {
     }
   }
 
+  function handleSettingsTabKeyDown(
+    currentIndex: number,
+    event: ReactKeyboardEvent<HTMLButtonElement>
+  ) {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.key === "Home") {
+      setSettingsTab(settingsTabOptions[0]?.tab ?? "basic");
+      return;
+    }
+
+    if (event.key === "End") {
+      setSettingsTab(settingsTabOptions[settingsTabOptions.length - 1]?.tab ?? "log");
+      return;
+    }
+
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    const nextIndex =
+      (currentIndex + direction + settingsTabOptions.length) % settingsTabOptions.length;
+
+    setSettingsTab(settingsTabOptions[nextIndex]?.tab ?? settingsTab);
+  }
+
   return (
     <main
       className="viewer-shell"
+      lang={language === "ja" ? "ja" : "en"}
       style={
         {
           "--viewer-font-scale": viewerScale
@@ -916,15 +1106,16 @@ export function ViewerApp() {
         <>
           <section className="viewer-hero">
             <div className="viewer-eyebrow-row">
-                <button
-                  className="viewer-icon-button"
-                  type="button"
-                  aria-label={language === "ja" ? "設定を開く" : "Open settings"}
-                  onClick={() => {
-                    setSettingsTab("basic");
-                    setScreen("settings");
-                  }}
-                >
+              <button
+                ref={settingsButtonRef}
+                className="viewer-icon-button"
+                type="button"
+                aria-label={language === "ja" ? "設定を開く" : "Open settings"}
+                onClick={() => {
+                  setSettingsTab("basic");
+                  setScreen("settings");
+                }}
+              >
                 <GearIcon />
               </button>
             </div>
@@ -942,6 +1133,17 @@ export function ViewerApp() {
                 className="viewer-sort-controls"
                 aria-label={language === "ja" ? "投稿の並び替え" : "Sort posts"}
               >
+                {userSummaries.length > 0 && (
+                  <button
+                    className="viewer-secondary-button"
+                    type="button"
+                    onClick={() => {
+                      setIsAuthorFilterModalOpen(true);
+                    }}
+                  >
+                    {language === "ja" ? "ユーザー絞り込み" : "User filter"}
+                  </button>
+                )}
                 {availableTags.length > 0 && (
                   <button
                     className="viewer-secondary-button"
@@ -972,6 +1174,15 @@ export function ViewerApp() {
                 <button
                   className="viewer-sort-direction-button"
                   type="button"
+                  aria-label={
+                    sortDirection === "desc"
+                      ? language === "ja"
+                        ? "降順で並び替え中。昇順へ切り替える"
+                        : "Sorting descending. Switch to ascending"
+                      : language === "ja"
+                        ? "昇順で並び替え中。降順へ切り替える"
+                        : "Sorting ascending. Switch to descending"
+                  }
                   onClick={() => {
                     void handleSortDirectionToggle();
                   }}
@@ -986,6 +1197,33 @@ export function ViewerApp() {
                 </button>
               </div>
             </div>
+
+            {activeAuthorFilter !== null && (
+              <div className="viewer-active-tag-filter">
+                <div className="viewer-active-tag-copy">
+                  <strong>{language === "ja" ? "ユーザーで絞り込み中" : "Filtered by user"}</strong>
+                  <span>
+                    {formatAuthorFilterLabel(
+                      selectedAuthorFilter,
+                      activeAuthorFilter,
+                      archiveTotalCount,
+                      language
+                    )}
+                  </span>
+                </div>
+                <div className="viewer-active-tag-actions">
+                  <button
+                    className="viewer-tag-filter-clear"
+                    type="button"
+                    onClick={() => {
+                      void handleToggleAuthorFilter(activeAuthorFilter);
+                    }}
+                  >
+                    {language === "ja" ? "解除" : "Clear"}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {selectedTagFilter !== null && (
               <div className="viewer-active-tag-filter">
@@ -1023,13 +1261,13 @@ export function ViewerApp() {
             )}
             {status === "ready" && posts.length === 0 && (
               <p className="viewer-message">
-                {selectedTagFilter === null
-                  ? language === "ja"
-                    ? "保存済み投稿はありません。"
-                    : "No saved posts."
-                  : language === "ja"
-                    ? `${getTagDisplayName(selectedTagFilter.tag)} に一致する保存済み投稿はありません。`
-                    : `No saved posts match ${getTagDisplayName(selectedTagFilter.tag)}.`}
+                {formatEmptyArchiveMessage({
+                  language,
+                  selectedTagFilter,
+                  activeAuthorFilter,
+                  selectedAuthorFilter,
+                  getTagDisplayName
+                })}
               </p>
             )}
 
@@ -1061,6 +1299,11 @@ export function ViewerApp() {
                       <button
                         className="post-delete-button"
                         type="button"
+                        aria-label={
+                          language === "ja"
+                            ? `@${post.x_username} の投稿を削除`
+                            : `Delete post by @${post.x_username}`
+                        }
                         onClick={() => {
                           void handleDelete(post.x_post_id);
                         }}
@@ -1116,6 +1359,7 @@ export function ViewerApp() {
                         {post.media.map((media) => (
                           <MediaCard
                             key={media.media_id}
+                            language={language}
                             media={media}
                             onOpen={() => {
                               if (media.media_type === "video") {
@@ -1171,84 +1415,71 @@ export function ViewerApp() {
                     </dl>
 
                     <div className="post-tag-section">
-                      {post.tags.length > 0 && (
-                        <div className="tag-list">
-                          {post.tags.map((tag) => (
-                            <span
-                              className={
-                                tag.source === "manual"
-                                  ? "tag-chip tag-chip-manual"
-                                  : "tag-chip"
-                              }
-                              key={`${post.x_post_id}-${tag.tag_id}`}
-                            >
-                              <button
-                                className="tag-chip-button"
-                                type="button"
-                                onClick={() => {
+                      <div className="post-tag-toolbar">
+                        {post.tags.length > 0 && (
+                          <div className="tag-list">
+                            {post.tags.map((tag) => (
+                              <span
+                                className={
+                                  tag.source === "manual"
+                                    ? "tag-chip tag-chip-manual"
+                                    : "tag-chip"
+                                }
+                                key={`${post.x_post_id}-${tag.tag_id}`}
+                              >
+                                <button
+                                  className="tag-chip-button"
+                                  type="button"
+                                  onClick={() => {
                                   void handleToggleTagFilter(tag.normalized_name);
                                 }}
                               >
                                 {getTagDisplayName(tag)}
                               </button>
-                              {tag.source === "manual" && (
-                                <button
-                                  className="tag-chip-remove"
-                                  type="button"
-                                  aria-label={
-                                    language === "ja"
-                                      ? `タグ ${getTagDisplayName(tag)} を削除`
-                                      : `Remove tag ${getTagDisplayName(tag)}`
-                                  }
-                                  onClick={() => {
-                                    void handleRemoveTag(post.x_post_id, tag);
-                                  }}
-                                  disabled={tagActionPostId === post.x_post_id}
-                                >
-                                  x
-                                </button>
-                              )}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
 
-                      <div className="tag-editor">
-                        <input
-                          className="tag-input"
-                          type="text"
-                          value={tagDrafts[post.x_post_id] ?? ""}
-                          placeholder={language === "ja" ? "手動タグを追加" : "Add manual tag"}
-                          onChange={(event) => {
-                            const value = event.currentTarget.value;
-                            setTagDrafts((current) => ({
-                              ...current,
-                              [post.x_post_id]: value
-                            }));
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              void handleAddTag(post.x_post_id);
+                        <div className="post-tag-picker-anchor">
+                          <button
+                            className="post-tag-picker-button"
+                            type="button"
+                            aria-label={
+                              language === "ja"
+                                ? `@${post.x_username} の投稿タグを編集`
+                                : `Edit tags for post by @${post.x_username}`
                             }
-                          }}
-                        />
-                        <button
-                          className="tag-add-button"
-                          type="button"
-                          onClick={() => {
-                            void handleAddTag(post.x_post_id);
-                          }}
-                          disabled={tagActionPostId === post.x_post_id}
-                        >
-                          {tagActionPostId === post.x_post_id
-                            ? language === "ja"
-                              ? "保存中..."
-                              : "Saving..."
-                            : language === "ja"
-                              ? "タグ追加"
-                              : "Add tag"}
-                        </button>
+                            aria-haspopup="dialog"
+                            aria-expanded={tagPickerPostId === post.x_post_id}
+                            data-tag-picker-trigger-post-id={post.x_post_id}
+                            onClick={() => {
+                              setTagPickerPostId((current) =>
+                                current === post.x_post_id ? null : post.x_post_id
+                              );
+                            }}
+                            disabled={tagActionPostId === post.x_post_id}
+                          >
+                            +
+                          </button>
+                          {tagPickerPostId === post.x_post_id && (
+                            <TagPickerOverlay
+                              currentPostTags={post.tags}
+                              allTagSummaries={availableTags}
+                              onAdd={async (displayName) => {
+                                await handleAddTagToPost(post.x_post_id, displayName);
+                              }}
+                              onRemove={async (normalizedName) => {
+                                await handleRemoveTagFromPost(post.x_post_id, normalizedName);
+                              }}
+                              onClose={() => {
+                                setTagPickerPostId(null);
+                              }}
+                              language={language}
+                              isPending={tagActionPostId === post.x_post_id}
+                            />
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -1292,6 +1523,7 @@ export function ViewerApp() {
           <section className="viewer-hero viewer-settings-hero">
             <div className="viewer-hero-header">
               <button
+                ref={backToArchiveButtonRef}
                 className="viewer-icon-button"
                 type="button"
                 aria-label={language === "ja" ? "一覧へ戻る" : "Back to archive"}
@@ -1308,37 +1540,49 @@ export function ViewerApp() {
             <div className="viewer-list-header">
               <h2>{language === "ja" ? "設定" : "Options"}</h2>
             </div>
-            <nav className="viewer-settings-tabs" aria-label={language === "ja" ? "設定ページ" : "Settings pages"}>
-              {(
-                [
-                  ["basic", language === "ja" ? "基本設定" : "General"],
-                  ["tags", language === "ja" ? "タグ管理" : "Tags"],
-                  ["tag-rules", language === "ja" ? "自動タグ変換" : "Redirects"],
-                  ["backup", language === "ja" ? "バックアップ" : "Backup"],
-                  ["log", language === "ja" ? "ログ" : "Log"]
-                ] as const
-              ).map(([tab, label]) => (
+            <nav
+              className="viewer-settings-tabs"
+              aria-label={language === "ja" ? "設定ページ" : "Settings pages"}
+              role="tablist"
+            >
+              {settingsTabOptions.map(({ tab, label }, index) => (
                 <button
                   key={tab}
+                  id={getSettingsTabButtonId(tab)}
                   type="button"
                   className={settingsTab === tab ? "viewer-settings-tab viewer-settings-tab-active" : "viewer-settings-tab"}
-                  aria-current={settingsTab === tab ? "page" : undefined}
+                  role="tab"
+                  aria-selected={settingsTab === tab}
+                  aria-controls={settingsTab === tab ? getSettingsTabPanelId(tab) : undefined}
+                  tabIndex={settingsTab === tab ? 0 : -1}
                   onClick={() => {
                     setSettingsTab(tab);
+                  }}
+                  onKeyDown={(event) => {
+                    handleSettingsTabKeyDown(index, event);
                   }}
                 >
                   {label}
                 </button>
               ))}
             </nav>
-            <div className="viewer-settings-grid">
+            <div
+              className="viewer-settings-grid"
+              id={activeSettingsTabPanelId}
+              role="tabpanel"
+              aria-labelledby={activeSettingsTabButtonId}
+            >
               {settingsTab === "basic" && (
                 <SettingsBasicPanel
                   language={language}
+                  archiveSettings={archiveSettings}
+                  currentTheme={viewerTheme}
                   fontSize={fontSize}
                   sessionRestoreMode={sessionRestoreMode}
                   storageEstimate={storageEstimate}
                   archiveSummary={archiveSummary}
+                  onArchiveSettingsChange={handleArchiveSettingsChange}
+                  onThemeChange={handleThemeChange}
                   onLanguageChange={handleLanguageChange}
                   onFontSizeChange={handleFontSizeChange}
                   onSessionRestoreModeChange={handleSessionRestoreModeChange}
@@ -1379,14 +1623,16 @@ export function ViewerApp() {
           className="viewer-modal-backdrop"
           role="presentation"
           onClick={() => {
-            setIsTagFilterModalOpen(false);
+            closeTagFilterModal();
           }}
         >
           <section
+            ref={tagFilterDialogRef}
             className="viewer-modal viewer-tag-modal"
             role="dialog"
             aria-modal="true"
             aria-label={language === "ja" ? "タグ絞り込み" : "Tag filter"}
+            tabIndex={-1}
             onClick={(event) => {
               event.stopPropagation();
             }}
@@ -1404,7 +1650,7 @@ export function ViewerApp() {
                 className="viewer-secondary-button"
                 type="button"
                 onClick={() => {
-                  setIsTagFilterModalOpen(false);
+                  closeTagFilterModal();
                 }}
               >
                 {language === "ja" ? "閉じる" : "Close"}
@@ -1415,9 +1661,11 @@ export function ViewerApp() {
               <label className="viewer-sort-label">
                 <span>{language === "ja" ? "検索" : "Search"}</span>
                 <input
+                  ref={tagFilterSearchInputRef}
                   className="tag-input"
                   type="search"
                   value={tagSearchQuery}
+                  aria-label={language === "ja" ? "タグを検索" : "Search tags"}
                   placeholder={language === "ja" ? "タグを検索" : "Search tags"}
                   onChange={(event) => {
                     setTagSearchQuery(event.currentTarget.value);
@@ -1450,13 +1698,13 @@ export function ViewerApp() {
                   )}
                 </span>
                 <button
-                    className="viewer-tag-filter-clear"
-                    type="button"
-                    onClick={() => {
-                      void handleToggleTagFilter(selectedTagFilter.tag.normalized_name);
-                    }}
-                  >
-                    {language === "ja" ? "解除" : "Clear"}
+                  className="viewer-tag-filter-clear"
+                  type="button"
+                  onClick={() => {
+                    void handleToggleTagFilter(selectedTagFilter.tag.normalized_name);
+                  }}
+                >
+                  {language === "ja" ? "解除" : "Clear"}
                 </button>
               </div>
             )}
@@ -1479,8 +1727,7 @@ export function ViewerApp() {
                     }
                     type="button"
                     onClick={() => {
-                      handleToggleTagFilter(tag.normalized_name);
-                      setIsTagFilterModalOpen(false);
+                      void handleToggleTagFilter(tag.normalized_name);
                     }}
                   >
                     <strong>{getTagDisplayName(tag)}</strong>
@@ -1495,53 +1742,169 @@ export function ViewerApp() {
         </div>
       )}
 
+      {isAuthorFilterModalOpen && (
+        <div
+          className="viewer-modal-backdrop"
+          role="presentation"
+          onClick={() => {
+            closeAuthorFilterModal();
+          }}
+        >
+          <section
+            ref={authorFilterDialogRef}
+            className="viewer-modal viewer-tag-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={language === "ja" ? "ユーザー絞り込み" : "User filter"}
+            tabIndex={-1}
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <div className="viewer-modal-header">
+              <div className="viewer-modal-copy">
+                <h2>{language === "ja" ? "ユーザーで絞り込む" : "Filter by user"}</h2>
+                <p>
+                  {language === "ja"
+                    ? "投稿者名や @screen_name で検索し、1人選んで一覧を絞り込みます。"
+                    : "Search authors by name or @screen_name and choose one to narrow the archive list."}
+                </p>
+              </div>
+              <button
+                className="viewer-secondary-button"
+                type="button"
+                onClick={() => {
+                  closeAuthorFilterModal();
+                }}
+              >
+                {language === "ja" ? "閉じる" : "Close"}
+              </button>
+            </div>
+
+            <div className="viewer-user-modal-controls">
+              <label className="viewer-sort-label">
+                <span>{language === "ja" ? "検索" : "Search"}</span>
+                <input
+                  ref={authorFilterSearchInputRef}
+                  className="tag-input"
+                  type="search"
+                  value={userSearchQuery}
+                  aria-label={language === "ja" ? "ユーザーを検索" : "Search users"}
+                  placeholder={language === "ja" ? "ユーザーを検索" : "Search users"}
+                  onChange={(event) => {
+                    setUserSearchQuery(event.currentTarget.value);
+                  }}
+                />
+              </label>
+            </div>
+
+            {activeAuthorFilter !== null && (
+              <div className="viewer-tag-modal-summary">
+                <span>
+                  {language === "ja" ? "適用中" : "Active"}:{" "}
+                  {formatAuthorFilterLabel(
+                    selectedAuthorFilter,
+                    activeAuthorFilter,
+                    archiveTotalCount,
+                    language
+                  )}
+                </span>
+                <button
+                  className="viewer-tag-filter-clear"
+                  type="button"
+                  onClick={() => {
+                    void handleToggleAuthorFilter(activeAuthorFilter);
+                  }}
+                >
+                  {language === "ja" ? "解除" : "Clear"}
+                </button>
+              </div>
+            )}
+
+            {visibleUserOptions.length === 0 ? (
+              <p className="viewer-message">
+                {language === "ja"
+                  ? "現在の検索条件に一致するユーザーはありません。"
+                  : "No users match the current search."}
+              </p>
+            ) : (
+              <div className="viewer-tag-option-list">
+                {visibleUserOptions.map((user) => (
+                  <button
+                    key={user.screen_name}
+                    className={
+                      user.screen_name === activeAuthorFilter
+                        ? "viewer-tag-option viewer-tag-option-active"
+                        : "viewer-tag-option"
+                    }
+                    type="button"
+                    onClick={() => {
+                      void handleToggleAuthorFilter(user.screen_name);
+                    }}
+                  >
+                    <strong>{formatUserSummaryLabel(user)}</strong>
+                    <span>
+                      {formatCount(user.post_count, language)}{" "}
+                      {language === "ja" ? "件" : "posts"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
       {activeMedia !== null && (
         <div
+          ref={imageLightboxRef}
           className="media-lightbox"
           role="dialog"
           aria-modal="true"
-          aria-label="Expanded image viewer"
+          aria-label={language === "ja" ? "画像ビューア" : "Image viewer"}
+          tabIndex={-1}
           onClick={() => {
-            setActiveMedia(null);
+            closeImageLightbox();
           }}
         >
           {activeMedia.items.length > 1 && (
             <button
               className="media-lightbox-nav media-lightbox-nav-prev"
               type="button"
-              aria-label="Show previous image"
+              aria-label={language === "ja" ? "前の画像を表示" : "Show previous image"}
               disabled={activeMedia.currentIndex === 0}
               onClick={(event) => {
                 event.stopPropagation();
                 setActiveMedia((current) => moveActiveMedia(current, -1));
               }}
             >
-              Previous
+              {language === "ja" ? "前へ" : "Previous"}
             </button>
           )}
           {activeMedia.items.length > 1 && (
             <button
               className="media-lightbox-nav media-lightbox-nav-next"
               type="button"
-              aria-label="Show next image"
+              aria-label={language === "ja" ? "次の画像を表示" : "Show next image"}
               disabled={activeMedia.currentIndex === activeMedia.items.length - 1}
               onClick={(event) => {
                 event.stopPropagation();
                 setActiveMedia((current) => moveActiveMedia(current, 1));
               }}
             >
-              Next
+              {language === "ja" ? "次へ" : "Next"}
             </button>
           )}
           <button
+            ref={imageLightboxCloseButtonRef}
             className="media-lightbox-close"
             type="button"
-            aria-label="Close image viewer"
+            aria-label={language === "ja" ? "画像ビューアを閉じる" : "Close image viewer"}
             onClick={() => {
-              setActiveMedia(null);
+              closeImageLightbox();
             }}
           >
-            Close
+            {language === "ja" ? "閉じる" : "Close"}
           </button>
           <figure
             className="media-lightbox-panel"
@@ -1549,7 +1912,10 @@ export function ViewerApp() {
               event.stopPropagation();
             }}
           >
-            <LightboxImage media={activeMedia.items[activeMedia.currentIndex] ?? null} />
+            <LightboxImage
+              media={activeMedia.items[activeMedia.currentIndex] ?? null}
+              language={language}
+            />
             {activeMedia.items[activeMedia.currentIndex]?.alt_text !== null && (
               <figcaption className="media-lightbox-alt">
                 {activeMedia.items[activeMedia.currentIndex]?.alt_text}
@@ -1561,23 +1927,26 @@ export function ViewerApp() {
 
       {activeVideo !== null && (
         <div
+          ref={videoLightboxRef}
           className="media-lightbox"
           role="dialog"
           aria-modal="true"
-          aria-label="Expanded video viewer"
+          aria-label={language === "ja" ? "動画ビューア" : "Video viewer"}
+          tabIndex={-1}
           onClick={() => {
-            setActiveVideo(null);
+            closeVideoLightbox();
           }}
         >
           <button
+            ref={videoLightboxCloseButtonRef}
             className="media-lightbox-close"
             type="button"
-            aria-label="Close video viewer"
+            aria-label={language === "ja" ? "動画ビューアを閉じる" : "Close video viewer"}
             onClick={() => {
-              setActiveVideo(null);
+              closeVideoLightbox();
             }}
           >
-            Close
+            {language === "ja" ? "閉じる" : "Close"}
           </button>
           <figure
             className="media-lightbox-panel"
@@ -1586,12 +1955,19 @@ export function ViewerApp() {
             }}
           >
             {activeVideo.status === "loading" && (
-              <div className="post-media-status">Loading video...</div>
+              <div className="post-media-status">
+                {language === "ja" ? "動画を読み込み中..." : "Loading video..."}
+              </div>
             )}
             {activeVideo.status === "error" && (
               <div className="post-media-status post-media-status-error">
-                <strong>Video load failed.</strong>
-                <span>{activeVideo.media.last_error ?? "Unknown media error."}</span>
+                <strong>
+                  {language === "ja" ? "動画の読み込みに失敗しました。" : "Video load failed."}
+                </strong>
+                <span>
+                  {activeVideo.media.last_error ??
+                    (language === "ja" ? "不明なメディアエラーです。" : "Unknown media error.")}
+                </span>
               </div>
             )}
             {activeVideo.status === "ready" && activeVideo.objectUrl !== null && (
@@ -1642,6 +2018,7 @@ function QuotedPostCard({
           {post.media.map((media) => (
             <MediaCard
               key={media.media_id}
+              language={language}
               media={media}
               onOpen={() => {
                 if (media.media_type === "video") {
@@ -1696,10 +2073,12 @@ function ArrowLeftIcon() {
 }
 
 function MediaCard({
+  language,
   media,
   onOpen,
   onOpenVideo
 }: {
+  language: ArchiveLanguage;
   media: MediaRecord;
   onOpen: () => void;
   onOpenVideo: () => void;
@@ -1721,8 +2100,19 @@ function MediaCard({
   if (media.storage_status === "failed") {
     return (
       <div className="post-media-status post-media-status-error" ref={setContainerRef}>
-        <strong>{media.media_type === "video" ? "Video save failed." : "Image save failed."}</strong>
-        <span>{media.last_error ?? "Unknown media error."}</span>
+        <strong>
+          {media.media_type === "video"
+            ? language === "ja"
+              ? "動画の保存に失敗しました。"
+              : "Video save failed."
+            : language === "ja"
+              ? "画像の保存に失敗しました。"
+              : "Image save failed."}
+        </strong>
+        <span>
+          {media.last_error ??
+            (language === "ja" ? "不明なメディアエラーです。" : "Unknown media error.")}
+        </span>
       </div>
     );
   }
@@ -1735,6 +2125,7 @@ function MediaCard({
         <button
           className="post-media-button post-media-video-button"
           type="button"
+          aria-label={language === "ja" ? "動画を再生" : "Play video"}
           onClick={() => {
             onOpenVideo();
           }}
@@ -1750,9 +2141,11 @@ function MediaCard({
               height={media.height ?? undefined}
             />
           ) : (
-            <div className="post-media-video-fallback">Video</div>
+            <div className="post-media-video-fallback">{language === "ja" ? "動画" : "Video"}</div>
           )}
-          <span className="post-media-video-badge">Play video</span>
+          <span className="post-media-video-badge">
+            {language === "ja" ? "動画を再生" : "Play video"}
+          </span>
         </button>
       </figure>
     );
@@ -1761,7 +2154,7 @@ function MediaCard({
   if (media.storage_status === "pending" || imageObjectUrl === null) {
     return (
       <div className="post-media-status" ref={setContainerRef}>
-        Image is still being prepared.
+        {language === "ja" ? "画像を準備中です。" : "Image is still being prepared."}
       </div>
     );
   }
@@ -1771,6 +2164,7 @@ function MediaCard({
       <button
         className="post-media-button"
         type="button"
+        aria-label={language === "ja" ? "画像を拡大表示" : "Open image"}
         onClick={() => {
           onOpen();
         }}
@@ -1814,8 +2208,77 @@ function formatTagFilterLabel(
     : `${tagName} (${formatCount(postCount, language)})`;
 }
 
+function formatUserSummaryLabel(user: UserSummary): string {
+  return `${user.display_name} (@${user.screen_name})`;
+}
+
+function formatAuthorFilterLabel(
+  selectedAuthorFilter: UserSummary | null,
+  activeAuthorFilter: string,
+  postCount: number,
+  language: ArchiveLanguage
+): string {
+  const authorLabel =
+    selectedAuthorFilter === null
+      ? `@${activeAuthorFilter}`
+      : formatUserSummaryLabel(selectedAuthorFilter);
+
+  return language === "ja"
+    ? `${authorLabel} (${formatCount(postCount, language)}件)`
+    : `${authorLabel} (${formatCount(postCount, language)})`;
+}
+
 function normalizeTagSearchQuery(value: string): string {
   return value.trim().toLocaleLowerCase("ja-JP");
+}
+
+function normalizeUserSearchQuery(value: string): string {
+  return value.trim().replace(/^@+/, "").toLocaleLowerCase("ja-JP");
+}
+
+function formatEmptyArchiveMessage(input: {
+  language: ArchiveLanguage;
+  selectedTagFilter: ArchiveTagSummaryRecord | null;
+  activeAuthorFilter: string | null;
+  selectedAuthorFilter: UserSummary | null;
+  getTagDisplayName: (tag: ArchiveTagRecord) => string;
+}): string {
+  const { language, selectedTagFilter, activeAuthorFilter, selectedAuthorFilter, getTagDisplayName } =
+    input;
+
+  if (selectedTagFilter === null && activeAuthorFilter === null) {
+    return language === "ja" ? "保存済み投稿はありません。" : "No saved posts.";
+  }
+
+  if (selectedTagFilter !== null && activeAuthorFilter !== null) {
+    const userLabel =
+      selectedAuthorFilter === null
+        ? `@${activeAuthorFilter}`
+        : formatUserSummaryLabel(selectedAuthorFilter);
+    const tagLabel = getTagDisplayName(selectedTagFilter.tag);
+
+    return language === "ja"
+      ? `${userLabel} と ${tagLabel} の条件に一致する保存済み投稿はありません。`
+      : `No saved posts match ${userLabel} and ${tagLabel}.`;
+  }
+
+  if (selectedTagFilter !== null) {
+    const tagLabel = getTagDisplayName(selectedTagFilter.tag);
+    return language === "ja"
+      ? `${tagLabel} に一致する保存済み投稿はありません。`
+      : `No saved posts match ${tagLabel}.`;
+  }
+
+  const userLabel =
+    selectedAuthorFilter === null && activeAuthorFilter !== null
+      ? `@${activeAuthorFilter}`
+      : selectedAuthorFilter === null
+        ? ""
+        : formatUserSummaryLabel(selectedAuthorFilter);
+
+  return language === "ja"
+    ? `${userLabel} に一致する保存済み投稿はありません。`
+    : `No saved posts match ${userLabel}.`;
 }
 
 function formatArchiveCountLabel(
@@ -1900,11 +2363,21 @@ function moveActiveMedia(activeMedia: ActiveMedia | null, delta: number): Active
   };
 }
 
-function LightboxImage({ media }: { media: MediaRecord | null }) {
+function LightboxImage({
+  media,
+  language
+}: {
+  media: MediaRecord | null;
+  language: ArchiveLanguage;
+}) {
   const objectUrl = useObjectUrl(media?.opfs_path ?? null, media !== null);
 
   if (media === null || objectUrl === null) {
-    return <div className="post-media-status">Loading image...</div>;
+    return (
+      <div className="post-media-status">
+        {language === "ja" ? "画像を読み込み中..." : "Loading image..."}
+      </div>
+    );
   }
 
   return (
@@ -1915,6 +2388,39 @@ function LightboxImage({ media }: { media: MediaRecord | null }) {
       decoding="async"
     />
   );
+}
+
+function getSettingsTabOptions(language: ArchiveLanguage) {
+  return [
+    {
+      tab: "basic" as const,
+      label: language === "ja" ? "基本設定" : "General"
+    },
+    {
+      tab: "tags" as const,
+      label: language === "ja" ? "タグ管理" : "Tags"
+    },
+    {
+      tab: "tag-rules" as const,
+      label: language === "ja" ? "自動タグ変換" : "Redirects"
+    },
+    {
+      tab: "backup" as const,
+      label: language === "ja" ? "バックアップ" : "Backup"
+    },
+    {
+      tab: "log" as const,
+      label: language === "ja" ? "ログ" : "Log"
+    }
+  ];
+}
+
+function getSettingsTabButtonId(tab: SettingsTab): string {
+  return `viewer-settings-tab-${tab}`;
+}
+
+function getSettingsTabPanelId(tab: SettingsTab): string {
+  return `viewer-settings-panel-${tab}`;
 }
 
 function useDeferredVisibility<T extends Element>(): [(node: T | null) => void, boolean] {

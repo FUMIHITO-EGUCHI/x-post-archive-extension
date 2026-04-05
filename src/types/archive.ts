@@ -2,9 +2,19 @@ export type MediaType = "image" | "video";
 
 export type MediaStorageStatus = "pending" | "ready" | "failed";
 export type TagSource = "auto" | "manual";
-export type BuiltInTagKey = "liked" | "image" | "video" | "quoted";
+export type BuiltInTagKey = "liked" | "image" | "video" | "quoted" | "bookmarked";
 
 export type VideoDownloadMode = "direct_mp4" | "hls";
+
+export type ArchiveSettings = {
+  autoArchiveOnLike: boolean;
+  autoArchiveOnBookmark: boolean;
+};
+
+export const defaultArchiveSettings: ArchiveSettings = {
+  autoArchiveOnLike: false,
+  autoArchiveOnBookmark: false
+};
 
 export type PostRecord = {
   x_post_id: string;

@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ArchiveTagSummaryRecord } from "../../../types/viewer";
 import { requestMergeTags, requestRenameTag, requestTagSummaries } from "../../runtime/client";
 import type { ArchiveLanguage } from "../../settings/archive-language";
+import { useDialogA11y } from "./use-dialog-a11y";
 
 type SettingsTagManagementPanelProps = {
   language: ArchiveLanguage;
@@ -33,6 +35,8 @@ export function SettingsTagManagementPanel({
   const [preserveFutureTagUses, setPreserveFutureTagUses] = useState(true);
   const [mergePending, setMergePending] = useState(false);
   const isJapanese = language === "ja";
+  const mergeDialogRef = useRef<HTMLElement | null>(null);
+  const mergeDialogCloseButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const manageableTags = useMemo(
     () =>
@@ -68,6 +72,13 @@ export function SettingsTagManagementPanel({
     .filter((tag): tag is ArchiveTagSummaryRecord => tag !== null);
   const leftSelectedTag = selectedTags[0] ?? null;
   const rightSelectedTag = selectedTags[1] ?? null;
+
+  useDialogA11y({
+    isOpen: isMergeModalOpen,
+    containerRef: mergeDialogRef,
+    initialFocusRef: mergeDialogCloseButtonRef,
+    onClose: closeMergeModal
+  });
 
   useEffect(() => {
     void loadTagList();
@@ -118,7 +129,7 @@ export function SettingsTagManagementPanel({
         const attemptedName = renameDraft.trim();
         setRenameError(
           isJapanese
-            ? `「${attemptedName}」は既に存在します。統合する場合は操作 B を使用してください。`
+            ? `「${attemptedName}」は既に存在します。統合する場合はタグ統合を使ってください。`
             : `"${attemptedName}" already exists. Use merge if you want to combine them.`
         );
         return;
@@ -231,11 +242,11 @@ export function SettingsTagManagementPanel({
     <>
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
-          <h3>{isJapanese ? "タグ管理" : "Tag management"}</h3>
+          <h3>{isJapanese ? "タグを整理" : "Organize tags"}</h3>
           <p>
             {isJapanese
-              ? "ユーザータグの名前変更と統合を settings 画面から行います。ビルトインタグはここでは操作できません。"
-              : "Rename or merge user-visible tags from the settings screen. Built-in tags are excluded here."}
+              ? "自分で付けたタグの名前変更や統合を行います。アプリが自動で付けるタグはここでは変更できません。"
+              : "Rename or merge your own tags. Built-in tags added by the app cannot be changed here."}
           </p>
         </div>
 
@@ -297,9 +308,14 @@ export function SettingsTagManagementPanel({
             disabled={selectedTagIds.length !== 2}
             onClick={openMergeModal}
           >
-            {isJapanese ? "統合" : "Merge"}
+            {isJapanese ? "統合内容を確認" : "Review merge"}
           </button>
         </div>
+        <p className="viewer-settings-inline-note">
+          {isJapanese
+            ? "一覧から 2 つのタグを選ぶと、統合内容を確認できます。"
+            : "Select two tags from the list to review the merge details."}
+        </p>
 
         {notice !== null && <p className={feedbackClassName(noticeTone)}>{notice}</p>}
 
@@ -321,7 +337,6 @@ export function SettingsTagManagementPanel({
               <span role="columnheader">{isJapanese ? "タグ名" : "Tag"}</span>
               <span role="columnheader">{isJapanese ? "投稿数" : "Posts"}</span>
               <span role="columnheader">{isJapanese ? "リネーム" : "Rename"}</span>
-              <span role="columnheader">{isJapanese ? "統合" : "Merge"}</span>
             </div>
 
             {visibleTags.map((summary) => {
@@ -338,8 +353,8 @@ export function SettingsTagManagementPanel({
                     disableUncheckedSelection ? " viewer-tag-management-row-selection-locked" : ""
                   }`}
                   role="row"
+                  tabIndex={isEditing || disableUncheckedSelection ? -1 : 0}
                   aria-selected={isSelected}
-                  tabIndex={isEditing ? -1 : 0}
                   onClick={() => {
                     if (isEditing || disableUncheckedSelection) {
                       return;
@@ -347,7 +362,7 @@ export function SettingsTagManagementPanel({
 
                     toggleSelectedTag(summary.tag.tag_id);
                   }}
-                  onKeyDown={(event) => {
+                  onKeyDown={(event: ReactKeyboardEvent<HTMLDivElement>) => {
                     if (isEditing || disableUncheckedSelection) {
                       return;
                     }
@@ -443,19 +458,6 @@ export function SettingsTagManagementPanel({
                       </button>
                     )}
                   </div>
-                  <div className="viewer-tag-management-cell" role="cell">
-                    <label className="viewer-tag-management-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={selectedTagIds.includes(summary.tag.tag_id)}
-                        disabled={disableUncheckedSelection || isEditing}
-                        onChange={() => {
-                          toggleSelectedTag(summary.tag.tag_id);
-                        }}
-                      />
-                      <span>{isJapanese ? "選択" : "Select"}</span>
-                    </label>
-                  </div>
                 </div>
               );
             })}
@@ -470,10 +472,12 @@ export function SettingsTagManagementPanel({
           onClick={closeMergeModal}
         >
           <section
+            ref={mergeDialogRef}
             className="viewer-modal viewer-tag-management-modal"
             role="dialog"
             aria-modal="true"
             aria-label={isJapanese ? "タグの統合" : "Merge tags"}
+            tabIndex={-1}
             onClick={(event) => {
               event.stopPropagation();
             }}
@@ -488,6 +492,7 @@ export function SettingsTagManagementPanel({
                 </p>
               </div>
               <button
+                ref={mergeDialogCloseButtonRef}
                 className="viewer-secondary-button"
                 type="button"
                 disabled={mergePending}

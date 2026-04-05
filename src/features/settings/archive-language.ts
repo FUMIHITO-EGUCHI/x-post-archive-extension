@@ -8,12 +8,14 @@ const ARCHIVE_LANGUAGE_STORAGE_KEY = "archive.language";
 const DEFAULT_AUTO_TAG_LABELS: Record<ArchiveLanguage, Record<DefaultAutoTagKey, string>> = {
   ja: {
     liked: "いいね",
+    bookmarked: "ブックマーク",
     image: "画像",
     video: "動画",
     quoted: "引用"
   },
   en: {
     liked: "liked",
+    bookmarked: "Bookmarked",
     image: "image",
     video: "video",
     quoted: "quoted"
@@ -73,12 +75,17 @@ export function buildLocalizedDefaultAutoTags(
   post: SavePostInput,
   options: {
     includeLikedTag?: boolean;
+    includeBookmarkedTag?: boolean;
   } = {}
 ): string[] {
   const tags = [...(post.auto_tags ?? [])];
 
   if (options.includeLikedTag) {
     tags.push(getDefaultAutoTagLabel(language, "liked"));
+  }
+
+  if (options.includeBookmarkedTag) {
+    tags.push(getDefaultAutoTagLabel(language, "bookmarked"));
   }
 
   if (post.media.length > 0) {
@@ -112,7 +119,7 @@ function dedupeTagNames(tagNames: string[]): string[] {
   return [...uniqueTags.values()];
 }
 
-function normalizeTagName(tagName: string): string | null {
+export function normalizeTagName(tagName: string): string | null {
   if (typeof tagName !== "string") {
     return null;
   }
@@ -135,6 +142,10 @@ function resolveKnownAutoTagKey(
   for (const candidate of candidates) {
     if (candidate === "liked" || candidate === "いいね") {
       return "liked";
+    }
+
+    if (candidate === "bookmarked" || candidate === "bookmark" || candidate === "ブックマーク") {
+      return "bookmarked";
     }
 
     if (candidate === "image" || candidate === "画像") {

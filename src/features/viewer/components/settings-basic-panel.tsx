@@ -1,17 +1,24 @@
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ArchiveLanguage } from "../../settings/archive-language";
+import type { ArchiveSettings } from "../../../types/archive";
 import type {
   ArchiveSummaryRecord,
   FontSizeOption,
   StorageEstimateState,
-  ViewerSessionRestoreMode
+  ViewerSessionRestoreMode,
+  ViewerTheme
 } from "../../../types/viewer";
 
 type SettingsBasicPanelProps = {
   language: ArchiveLanguage;
+  archiveSettings: ArchiveSettings;
+  currentTheme: ViewerTheme;
   fontSize: FontSizeOption;
   sessionRestoreMode: ViewerSessionRestoreMode;
   storageEstimate: StorageEstimateState;
   archiveSummary: ArchiveSummaryRecord;
+  onArchiveSettingsChange: (settings: ArchiveSettings) => Promise<void>;
+  onThemeChange: (theme: ViewerTheme) => Promise<void>;
   onLanguageChange: (lang: ArchiveLanguage) => Promise<void>;
   onFontSizeChange: (size: FontSizeOption) => Promise<void>;
   onSessionRestoreModeChange: (mode: ViewerSessionRestoreMode) => Promise<void>;
@@ -20,10 +27,14 @@ type SettingsBasicPanelProps = {
 
 export function SettingsBasicPanel({
   language,
+  archiveSettings,
+  currentTheme,
   fontSize,
   sessionRestoreMode,
   storageEstimate,
   archiveSummary,
+  onArchiveSettingsChange,
+  onThemeChange,
   onLanguageChange,
   onFontSizeChange,
   onSessionRestoreModeChange,
@@ -35,14 +46,58 @@ export function SettingsBasicPanel({
     <>
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
+          <h3>{isJapanese ? "テーマ" : "Theme"}</h3>
+          <p>
+            {isJapanese
+              ? "アーカイブ画面の見た目をライトとダークで切り替えます。"
+              : "Choose whether the archive viewer uses a light or dark theme."}
+          </p>
+        </div>
+        <div className="viewer-font-option-list" role="radiogroup" aria-label={isJapanese ? "テーマ" : "Theme"}>
+          {(
+            [
+              ["light", isJapanese ? "ライト" : "Light"],
+              ["dark", isJapanese ? "ダーク" : "Dark"]
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              className={
+                currentTheme === value
+                  ? "viewer-font-option viewer-font-option-active"
+                  : "viewer-font-option"
+              }
+              type="button"
+              role="radio"
+              aria-checked={currentTheme === value}
+              tabIndex={currentTheme === value ? 0 : -1}
+              onClick={() => {
+                void onThemeChange(value);
+              }}
+              onKeyDown={(event) => {
+                handleOptionGroupKeyDown(event, ["light", "dark"], currentTheme, onThemeChange);
+              }}
+            >
+              <strong>{label}</strong>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="viewer-settings-card">
+        <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "表示言語" : "Language"}</h3>
           <p>
             {isJapanese
-              ? "設定画面と一覧画面の文言、保存時のデフォルトタグの言語を切り替えます。"
-              : "Switch the settings and archive copy, plus the default tags assigned when posts are saved."}
+              ? "設定画面やアーカイブ内の表示文言を切り替えます。新しく保存する投稿の初期タグ名もこの言語に合わせます。"
+              : "Change the language used in settings and archive text, including the default tags added to newly saved posts."}
           </p>
         </div>
-        <div className="viewer-font-option-list" role="radiogroup" aria-label="Language">
+        <div
+          className="viewer-font-option-list"
+          role="radiogroup"
+          aria-label={isJapanese ? "表示言語" : "Language"}
+        >
           {(
             [
               ["ja", "日本語"],
@@ -55,8 +110,12 @@ export function SettingsBasicPanel({
               type="button"
               role="radio"
               aria-checked={language === value}
+              tabIndex={language === value ? 0 : -1}
               onClick={() => {
                 void onLanguageChange(value);
+              }}
+              onKeyDown={(event) => {
+                handleOptionGroupKeyDown(event, ["ja", "en"], language, onLanguageChange);
               }}
             >
               <strong>{label}</strong>
@@ -67,9 +126,53 @@ export function SettingsBasicPanel({
 
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
+          <h3>{isJapanese ? "自動保存" : "Automatic saving"}</h3>
+          <p>
+            {isJapanese
+              ? "X でいいねやブックマークを付けた投稿を、自動でアーカイブに追加します。"
+              : "Add posts to your archive automatically when you like or bookmark them on X."}
+          </p>
+        </div>
+        <div className="viewer-settings-toggle-list">
+          {[
+            {
+              key: "autoArchiveOnLike" as const,
+              checked: archiveSettings.autoArchiveOnLike,
+              title: isJapanese ? "いいねした投稿を保存" : "Save liked posts"
+            },
+            {
+              key: "autoArchiveOnBookmark" as const,
+              checked: archiveSettings.autoArchiveOnBookmark,
+              title: isJapanese ? "ブックマークした投稿を保存" : "Save bookmarked posts"
+            }
+          ].map(({ key, checked, title }) => (
+            <label key={key} className="viewer-settings-toggle-item">
+              <input
+                type="checkbox"
+                checked={checked}
+                aria-label={title}
+                onChange={(event) => {
+                  void onArchiveSettingsChange({
+                    ...archiveSettings,
+                    [key]: event.currentTarget.checked
+                  });
+                }}
+              />
+              <span className="viewer-settings-toggle-copy">
+                <strong>{title}</strong>
+              </span>
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section className="viewer-settings-card">
+        <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "文字サイズ" : "Font size"}</h3>
           <p>
-            {isJapanese ? "アーカイブ viewer の文字サイズを調整します。" : "Adjust text size in the archive viewer."}
+            {isJapanese
+              ? "アーカイブ内の文字を読みやすい大きさに調整します。"
+              : "Make text in the archive viewer smaller or larger."}
           </p>
         </div>
         <div
@@ -90,8 +193,17 @@ export function SettingsBasicPanel({
               type="button"
               role="radio"
               aria-checked={fontSize === value}
+              tabIndex={fontSize === value ? 0 : -1}
               onClick={() => {
                 void onFontSizeChange(value);
+              }}
+              onKeyDown={(event) => {
+                handleOptionGroupKeyDown(
+                  event,
+                  ["small", "medium", "large"],
+                  fontSize,
+                  onFontSizeChange
+                );
               }}
             >
               <span>{label}</span>
@@ -103,17 +215,17 @@ export function SettingsBasicPanel({
 
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
-          <h3>{isJapanese ? "アーカイブの復元状態" : "Archive session"}</h3>
+          <h3>{isJapanese ? "前回の表示を復元" : "Reopen where you left off"}</h3>
           <p>
             {isJapanese
-              ? "タブを閉じたあとにフィルタや表示位置を復元するかを選びます。"
-              : "Choose whether the viewer restores filters and your place after the tab closes."}
+              ? "アーカイブを開き直したときに、前回の並び順や絞り込み、スクロール位置をどこまで戻すか選べます。"
+              : "Choose how much of your previous view to restore when you reopen the archive."}
           </p>
         </div>
         <div
           className="viewer-font-option-list"
           role="radiogroup"
-          aria-label={isJapanese ? "アーカイブの復元状態" : "Archive session restore"}
+          aria-label={isJapanese ? "前回の表示を復元" : "Restore previous view"}
         >
           {(
             [
@@ -144,8 +256,17 @@ export function SettingsBasicPanel({
               type="button"
               role="radio"
               aria-checked={sessionRestoreMode === value}
+              tabIndex={sessionRestoreMode === value ? 0 : -1}
               onClick={() => {
                 void onSessionRestoreModeChange(value);
+              }}
+              onKeyDown={(event) => {
+                handleOptionGroupKeyDown(
+                  event,
+                  ["off", "filters", "filters-and-position"],
+                  sessionRestoreMode,
+                  onSessionRestoreModeChange
+                );
               }}
             >
               <strong>{label}</strong>
@@ -161,7 +282,7 @@ export function SettingsBasicPanel({
               void onClearSavedSession();
             }}
           >
-            {isJapanese ? "保存済みセッションを消去" : "Clear saved session"}
+            {isJapanese ? "保存した復元情報を消去" : "Clear saved restore data"}
           </button>
         </div>
       </section>
@@ -171,8 +292,8 @@ export function SettingsBasicPanel({
           <h3>{isJapanese ? "ストレージ使用量" : "Storage usage"}</h3>
           <p>
             {isJapanese
-              ? "この拡張で使っているブラウザ管理ストレージの推定値です。"
-              : "Estimated browser-managed storage for this extension."}
+              ? "この拡張機能がブラウザ内で使っている保存容量の目安です。"
+              : "See roughly how much browser storage this extension is using."}
           </p>
         </div>
         {storageEstimate.status === "unsupported" ? (
@@ -185,19 +306,19 @@ export function SettingsBasicPanel({
           <dl className="viewer-settings-metric-list">
             <div className="viewer-settings-metric">
               <dt>{isJapanese ? "使用中" : "Used"}</dt>
-              <dd>{formatBytes(storageEstimate.usage)}</dd>
+              <dd>{formatBytes(storageEstimate.usage, language)}</dd>
             </div>
             <div className="viewer-settings-metric">
               <dt>{isJapanese ? "空き" : "Available"}</dt>
-              <dd>{formatBytes(storageEstimate.available)}</dd>
+              <dd>{formatBytes(storageEstimate.available, language)}</dd>
             </div>
             <div className="viewer-settings-metric">
               <dt>{isJapanese ? "推定上限" : "Estimated quota"}</dt>
-              <dd>{formatBytes(storageEstimate.quota)}</dd>
+              <dd>{formatBytes(storageEstimate.quota, language)}</dd>
             </div>
             <div className="viewer-settings-metric">
-              <dt>{isJapanese ? "保存済みメディア合計" : "Saved media total"}</dt>
-              <dd>{formatBytes(archiveSummary.mediaBytes)}</dd>
+              <dt>{isJapanese ? "保存済みメディア総量" : "Saved media total"}</dt>
+              <dd>{formatBytes(archiveSummary.mediaBytes, language)}</dd>
             </div>
           </dl>
         )}
@@ -207,7 +328,9 @@ export function SettingsBasicPanel({
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "アーカイブ概要" : "Archive summary"}</h3>
           <p>
-            {isJapanese ? "現在このアーカイブに保存されている内容の件数です。" : "Current counts for saved content in this archive."}
+            {isJapanese
+              ? "このアーカイブに今どれだけ投稿やメディアが保存されているかを確認できます。"
+              : "See how many posts, media items, and accounts are currently saved in this archive."}
           </p>
         </div>
         <dl className="viewer-settings-metric-list">
@@ -252,9 +375,9 @@ function formatFontSizePreview(value: FontSizeOption): string {
   }
 }
 
-function formatBytes(value: number | null): string {
+function formatBytes(value: number | null, language: ArchiveLanguage): string {
   if (value === null || !Number.isFinite(value)) {
-    return "Unknown";
+    return language === "ja" ? "不明" : "Unknown";
   }
 
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -272,4 +395,40 @@ function formatBytes(value: number | null): string {
 
 function formatCount(value: number, language: ArchiveLanguage): string {
   return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
+}
+
+function handleOptionGroupKeyDown<T extends string>(
+  event: ReactKeyboardEvent<HTMLButtonElement>,
+  values: readonly T[],
+  currentValue: T,
+  onSelect: (value: T) => Promise<void>
+) {
+  if (
+    event.key !== "ArrowRight" &&
+    event.key !== "ArrowLeft" &&
+    event.key !== "ArrowDown" &&
+    event.key !== "ArrowUp" &&
+    event.key !== "Home" &&
+    event.key !== "End"
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+
+  if (event.key === "Home") {
+    void onSelect(values[0] ?? currentValue);
+    return;
+  }
+
+  if (event.key === "End") {
+    void onSelect(values[values.length - 1] ?? currentValue);
+    return;
+  }
+
+  const direction = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+  const currentIndex = values.indexOf(currentValue);
+  const nextIndex = (currentIndex + direction + values.length) % values.length;
+
+  void onSelect(values[nextIndex] ?? currentValue);
 }
