@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import type { ArchiveTagRecord } from "../../../types/archive";
 import type { ArchiveTagSummaryRecord } from "../../../types/viewer";
 import { normalizeTagName, type ArchiveLanguage } from "../../settings/archive-language";
+import { useDialogA11y } from "./use-dialog-a11y";
 
 type TagPickerOption =
   | {
@@ -40,7 +41,12 @@ export function TagPickerOverlay({
 }: TagPickerOverlayProps) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const dialogId = useId();
+  const titleId = `${dialogId}-title`;
+  const inputId = `${dialogId}-input`;
+  const listboxId = `${dialogId}-listbox`;
   const normalizedQuery = normalizeTagName(query);
   const trimmedQuery = query.trim();
   const assignedNames = useMemo(
@@ -122,20 +128,6 @@ export function TagPickerOverlay({
   }, [options]);
 
   useEffect(() => {
-    function handleWindowKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-
-    window.addEventListener("keydown", handleWindowKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleWindowKeyDown);
-    };
-  }, [onClose]);
-
-  useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
@@ -143,6 +135,13 @@ export function TagPickerOverlay({
       document.body.style.overflow = previousOverflow;
     };
   }, []);
+
+  useDialogA11y({
+    isOpen: true,
+    containerRef: rootRef,
+    initialFocusRef: inputRef,
+    onClose
+  });
 
   async function handleSelectOption(option: TagPickerOption): Promise<void> {
     if (isPending) {
@@ -212,9 +211,14 @@ export function TagPickerOverlay({
     return null;
   }
 
+  const activeOption = options[activeIndex] ?? null;
+  const activeOptionId =
+    activeOption === null ? undefined : `${listboxId}-${sanitizeForId(activeOption.key)}`;
+
   return createPortal(
     <div
       className="viewer-modal-backdrop tag-picker-modal-backdrop"
+      role="presentation"
       onClick={() => {
         onClose();
       }}
@@ -224,14 +228,15 @@ export function TagPickerOverlay({
         className="viewer-modal tag-picker-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={language === "ja" ? "投稿タグを編集" : "Edit post tags"}
+        aria-labelledby={titleId}
+        tabIndex={-1}
         onClick={(event) => {
           event.stopPropagation();
         }}
       >
         <div className="viewer-modal-header">
           <div className="viewer-modal-copy">
-            <h2>{language === "ja" ? "投稿タグを編集" : "Edit post tags"}</h2>
+            <h2 id={titleId}>{language === "ja" ? "投稿タグを編集" : "Edit post tags"}</h2>
             <p>
               {language === "ja"
                 ? "候補から選ぶか、新しいタグをその場で作成できます。付与済みタグは再度選ぶと外れます。"
@@ -249,12 +254,18 @@ export function TagPickerOverlay({
           </button>
         </div>
 
+        <label className="viewer-visually-hidden" htmlFor={inputId}>
+          {language === "ja" ? "タグを入力" : "Type a tag"}
+        </label>
         <input
+          id={inputId}
+          ref={inputRef}
           className="tag-picker-input"
           type="text"
           value={query}
-          autoFocus
           placeholder={language === "ja" ? "タグを入力..." : "Type a tag..."}
+          aria-controls={listboxId}
+          aria-activedescendant={activeOptionId}
           onChange={(event) => {
             setQuery(event.currentTarget.value);
           }}
@@ -262,7 +273,12 @@ export function TagPickerOverlay({
           disabled={isPending}
         />
 
-        <div className="tag-picker-option-list" role="listbox">
+        <div
+          className="tag-picker-option-list"
+          id={listboxId}
+          role="listbox"
+          aria-label={language === "ja" ? "タグ候補" : "Tag options"}
+        >
           {options.length === 0 ? (
             <p className="tag-picker-empty">
               {language === "ja" ? "候補がありません。" : "No matching tags."}
@@ -273,11 +289,13 @@ export function TagPickerOverlay({
                 index === activeIndex
                   ? "tag-picker-option tag-picker-option-active"
                   : "tag-picker-option";
+              const optionId = `${listboxId}-${sanitizeForId(option.key)}`;
 
               if (option.kind === "create") {
                 return (
                   <button
                     key={option.key}
+                    id={optionId}
                     className={`${className} tag-picker-option-create`}
                     type="button"
                     role="option"
@@ -303,10 +321,9 @@ export function TagPickerOverlay({
               return (
                 <button
                   key={option.key}
+                  id={optionId}
                   className={
-                    option.isAssigned
-                      ? `${className} tag-picker-option-selected`
-                      : className
+                    option.isAssigned ? `${className} tag-picker-option-selected` : className
                   }
                   type="button"
                   role="option"
@@ -319,9 +336,7 @@ export function TagPickerOverlay({
                   }}
                   disabled={isPending}
                 >
-                  <span className="tag-picker-option-check">
-                    {option.isAssigned ? "✓" : ""}
-                  </span>
+                  <span className="tag-picker-option-check">{option.isAssigned ? "✓" : ""}</span>
                   <span className="tag-picker-option-copy">{option.tag.display_name}</span>
                   <span className="tag-picker-option-count">
                     {formatTagCount(option.postCount, language)}
@@ -340,4 +355,8 @@ export function TagPickerOverlay({
 function formatTagCount(postCount: number, language: ArchiveLanguage): string {
   const count = new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(postCount);
   return language === "ja" ? `${count}件` : count;
+}
+
+function sanitizeForId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "-");
 }

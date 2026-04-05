@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { ArchiveBackupSummary } from "../../../types/archive-backup";
 import {
   type ArchiveTransferProgress,
-  clearArchiveData,
   importArchiveBackupZip,
   resetExtensionState
 } from "../../archive/archive-maintenance-service";
@@ -79,7 +78,7 @@ export function SettingsArchiveMaintenancePanel({
     setBackupProgress(null);
 
     try {
-      const fileHandle = await getBackupSaveFileHandle();
+      const fileHandle = await getBackupSaveFileHandle(language);
       const writable = await fileHandle.createWritable();
       const backup = await streamArchiveBackupZip(writable, (progress) => {
         setBackupProgress(progress);
@@ -132,7 +131,7 @@ export function SettingsArchiveMaintenancePanel({
     setRestoreProgress(null);
 
     try {
-      const restoreFile = await readRestoreFileWithRetry(restoreHandle);
+      const restoreFile = await readRestoreFileWithRetry(restoreHandle, language);
       const summary = await importArchiveBackupZip(restoreFile, (progress) => {
         setRestoreProgress(progress);
       });
@@ -165,13 +164,13 @@ export function SettingsArchiveMaintenancePanel({
 
   async function handleSelectRestoreFile() {
     try {
-      const handle = await handleOpenFilePicker();
+      const handle = await handleOpenFilePicker(language);
 
       if (handle === null) {
         return;
       }
 
-      const file = await readRestoreFileWithRetry(handle);
+      const file = await readRestoreFileWithRetry(handle, language);
       setRestoreHandle(handle);
       setRestoreFileName(file.name);
       setRestoreTone("neutral");
@@ -230,11 +229,11 @@ export function SettingsArchiveMaintenancePanel({
     <>
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
-          <h3>Backup archive</h3>
+          <h3>{isJapanese ? "バックアップを書き出す" : "Export backup"}</h3>
           <p>
             {isJapanese
-              ? "保存済みの投稿、タグ、アーカイブ済みメディアを settings 画面から 1 つの ZIP に書き出します。"
-              : "Export saved posts, tags, and archived media files as a single ZIP backup from the settings screen."}
+              ? "今のアーカイブを 1 つの ZIP にまとめて保存します。別の端末への移行や手元保管に使えます。"
+              : "Save your current archive as one ZIP file for safekeeping or moving to another device."}
           </p>
         </div>
         <div className="viewer-settings-action-row">
@@ -258,8 +257,8 @@ export function SettingsArchiveMaintenancePanel({
         {!hasArchive && (
           <p className="viewer-message">
             {isJapanese
-              ? "まだ書き出せる保存済みアーカイブデータはありません。"
-              : "No saved archive data is available to export yet."}
+              ? "まだバックアップできる保存データはありません。"
+              : "There is no saved archive data to back up yet."}
           </p>
         )}
         {backupRunning && backupProgress !== null && (
@@ -270,11 +269,11 @@ export function SettingsArchiveMaintenancePanel({
 
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
-          <h3>{isJapanese ? "アーカイブ復元" : "Restore archive"}</h3>
+          <h3>{isJapanese ? "バックアップから復元" : "Restore from backup"}</h3>
           <p>
             {isJapanese
-              ? "バックアップ ZIP から復元します。現在の保存済みアーカイブはマージではなく置き換えになります。"
-              : "Restore from a backup ZIP file. The current saved archive will be replaced instead of merged."}
+              ? "バックアップ ZIP の内容で今のアーカイブを復元します。現在の保存内容は結合されず、そのまま置き換わります。"
+              : "Replace your current archive with the contents of a backup ZIP. This does not merge data."}
           </p>
         </div>
         <div className="viewer-settings-file-row">
@@ -308,7 +307,7 @@ export function SettingsArchiveMaintenancePanel({
         <p className="viewer-settings-inline-note">
           {restoreFileName === null
             ? isJapanese
-              ? "ファイル未選択です。"
+              ? "まだファイルが選択されていません。"
               : "No file selected."
             : isJapanese
               ? `選択中: ${restoreFileName}`
@@ -324,11 +323,11 @@ export function SettingsArchiveMaintenancePanel({
 
       <section className="viewer-settings-card viewer-settings-card-danger">
         <div className="viewer-settings-card-header">
-          <h3>{isJapanese ? "保存済みアーカイブ削除" : "Delete saved archive"}</h3>
+          <h3>{isJapanese ? "保存済みアーカイブを削除" : "Delete saved archive"}</h3>
           <p>
             {isJapanese
-              ? "この拡張に保存されている投稿、タグ、アーカイブ済みメディアを完全に削除します。"
-              : "Permanently remove saved posts, tags, and archived media files from this extension."}
+              ? "この拡張機能に保存されている投稿やメディアをすべて削除します。元に戻せません。"
+              : "Delete all posts, tags, and media saved in this extension. This cannot be undone."}
           </p>
         </div>
         <p className="viewer-settings-inline-note">
@@ -336,8 +335,8 @@ export function SettingsArchiveMaintenancePanel({
         </p>
         <p className="viewer-settings-inline-note">
           {isJapanese
-            ? "この操作ではアーカイブ本体に加えて、ログと閲覧設定も初期化します。"
-            : "This action also resets logs and viewer settings."}
+            ? "ログと表示設定もあわせて初期化されます。"
+            : "Logs and viewer settings are cleared as well."}
         </p>
         {deleteConfirmStep === 0 && (
           <div className="viewer-settings-action-row">
@@ -506,9 +505,13 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
 }
 
-async function handleOpenFilePicker(): Promise<FileSystemFileHandle | null> {
+async function handleOpenFilePicker(language: ArchiveLanguage): Promise<FileSystemFileHandle | null> {
   if (typeof window.showOpenFilePicker !== "function") {
-    throw new Error("Backup restore file selection is not supported in this environment.");
+    throw new Error(
+      language === "ja"
+        ? "この環境ではバックアップ ZIP を選択できません。"
+        : "Backup restore file selection is not supported in this environment."
+    );
   }
 
   const handles = await window.showOpenFilePicker({
@@ -527,9 +530,13 @@ async function handleOpenFilePicker(): Promise<FileSystemFileHandle | null> {
   return handle ?? null;
 }
 
-async function getBackupSaveFileHandle(): Promise<FileSystemFileHandle> {
+async function getBackupSaveFileHandle(language: ArchiveLanguage): Promise<FileSystemFileHandle> {
   if (typeof window.showSaveFilePicker !== "function") {
-    throw new Error("Streaming backup is not supported in this environment.");
+    throw new Error(
+      language === "ja"
+        ? "この環境ではストリーミングバックアップを書き出せません。"
+        : "Streaming backup is not supported in this environment."
+    );
   }
 
   return window.showSaveFilePicker({
@@ -550,7 +557,10 @@ function createBackupFilename(timestamp: number): string {
   return `x-post-archive-backup-${iso}.zip`;
 }
 
-async function readRestoreFileWithRetry(handle: FileSystemFileHandle): Promise<File> {
+async function readRestoreFileWithRetry(
+  handle: FileSystemFileHandle,
+  language: ArchiveLanguage
+): Promise<File> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -563,7 +573,9 @@ async function readRestoreFileWithRetry(handle: FileSystemFileHandle): Promise<F
   }
 
   throw new Error(
-    "The selected backup ZIP could not be read. It may be locked or unavailable. Wait a moment and try again."
+    language === "ja"
+      ? "選択したバックアップ ZIP を読み込めませんでした。ロックされているか、一時的に利用できない可能性があります。少し待って再試行してください。"
+      : "The selected backup ZIP could not be read. It may be locked or unavailable. Wait a moment and try again."
   );
 }
 
