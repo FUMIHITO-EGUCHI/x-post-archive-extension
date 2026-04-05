@@ -443,42 +443,6 @@ export async function getArchiveSummary(): Promise<ArchiveSummaryRecord> {
   };
 }
 
-export async function addManualTagToArchivePost(
-  xPostId: string,
-  tagName: string
-): Promise<ArchiveTagRecord[]> {
-  const result = await addPostTagByName(xPostId, tagName);
-
-  if (!result.ok) {
-    if (result.error === "post-not-found") {
-      throw new Error("Post not found.");
-    }
-
-    if (result.error === "empty-name") {
-      throw new Error("Invalid tag name.");
-    }
-
-    throw new Error(`Manual tag add failed: ${result.error}`);
-  }
-
-  let tags: ArchiveTagRecord[];
-  try {
-    tags = await listArchiveTagsForPost(xPostId);
-  } catch (error) {
-    throw new Error(`Manual tag add failed while listing post tags: ${formatError(error)}`);
-  }
-
-  logger.info("post.tags.manual_added", {
-    context: {
-      xPostId,
-      tagName,
-      tagCount: tags.length
-    }
-  });
-
-  return tags;
-}
-
 export async function addPostTagByName(
   postId: string,
   displayName: string
@@ -561,49 +525,6 @@ export async function addPostTagByName(
       postTag
     };
   });
-}
-
-export async function removeManualTagFromArchivePost(
-  xPostId: string,
-  normalizedTagName: string
-): Promise<ArchiveTagRecord[]> {
-  const normalizedName = normalizeTagName(normalizedTagName);
-
-  if (normalizedName === null) {
-    throw new Error("Invalid tag name.");
-  }
-
-  const record = await getPostTagByNormalizedName(xPostId, normalizedName);
-
-  if (record === undefined) {
-    return listArchiveTagsForPost(xPostId);
-  }
-
-  if (record.source !== "manual") {
-    throw new Error("Auto tags cannot be removed manually.");
-  }
-
-  await archiveDb.transaction(
-    "rw",
-    archiveDb.tags,
-    archiveDb.post_tags,
-    async () => {
-      await deletePostTag(record.post_tag_id);
-      await deleteOrphanedTag(record.tag_id);
-    }
-  );
-
-  const tags = await listArchiveTagsForPost(xPostId);
-
-  logger.info("post.tags.manual_removed", {
-    context: {
-      xPostId,
-      normalizedTagName,
-      tagCount: tags.length
-    }
-  });
-
-  return tags;
 }
 
 export async function removePostTagByName(
@@ -1040,11 +961,6 @@ export async function resumePendingMediaPersistence(): Promise<void> {
   });
 
   return pendingResumePromise;
-}
-
-async function listArchiveTagsForPost(xPostId: string): Promise<ArchiveTagRecord[]> {
-  const postTags = await listPostTagsByPostId(xPostId);
-  return sortArchiveTags(postTags.map((item) => normalizeArchiveTag(item).tag));
 }
 
 async function hydrateArchivePosts(posts: PostRecord[]): Promise<ArchivePostRecord[]> {
