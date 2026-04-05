@@ -68,21 +68,24 @@ export function SettingsLogPanel({ language }: { language: ArchiveLanguage }) {
   return (
     <section className="viewer-settings-card">
       <div className="viewer-settings-card-header">
-        <h3>{isJapanese ? "アプリログ" : "App logs"}</h3>
+        <h3>{isJapanese ? "動作ログ" : "Activity logs"}</h3>
         <p>
           {isJapanese
-            ? "保存されたログを種類と期間で絞り込みます。最新 200 件まで表示します。"
-            : "Filter persistent logs by type and time range. The latest 200 matching records are shown."}
+            ? "保存やエラーの履歴を、種類と期間で絞り込んで確認できます。新しいものから 200 件まで表示します。"
+            : "Review save activity and errors by type and time range. Up to 200 recent matching entries are shown."}
         </p>
       </div>
 
-      <div className="viewer-log-filters" aria-label="Log filters">
+      <div
+        className="viewer-log-filters"
+        aria-label={isJapanese ? "ログフィルタ" : "Log filters"}
+      >
         <div className="viewer-sort-label">
           <span>{isJapanese ? "種類" : "Type"}</span>
           <div
             className="viewer-log-export-options viewer-log-level-options"
             role="group"
-            aria-label="Log levels"
+            aria-label={isJapanese ? "ログレベル" : "Log levels"}
           >
             {LOG_LEVEL_OPTIONS.map((level) => (
               <label className="viewer-log-export-option" key={level}>
@@ -97,7 +100,7 @@ export function SettingsLogPanel({ language }: { language: ArchiveLanguage }) {
                     );
                   }}
                 />
-                <span>{formatLevelLabel(level)}</span>
+                <span>{formatLevelLabel(level, language)}</span>
               </label>
             ))}
           </div>
@@ -149,7 +152,11 @@ export function SettingsLogPanel({ language }: { language: ArchiveLanguage }) {
               : "Exports the currently filtered logs. Choose which fields to include in the file."}
           </span>
         </div>
-        <div className="viewer-log-export-options" role="group" aria-label="Log export fields">
+        <div
+          className="viewer-log-export-options"
+          role="group"
+          aria-label={isJapanese ? "ログ出力項目" : "Log export fields"}
+        >
           <label className="viewer-log-export-option">
             <input
               type="checkbox"
@@ -158,7 +165,7 @@ export function SettingsLogPanel({ language }: { language: ArchiveLanguage }) {
                 setIncludeMessage(event.currentTarget.checked);
               }}
             />
-            <span>Message</span>
+            <span>{isJapanese ? "メッセージ" : "Message"}</span>
           </label>
           <label className="viewer-log-export-option">
             <input
@@ -168,7 +175,7 @@ export function SettingsLogPanel({ language }: { language: ArchiveLanguage }) {
                 setIncludeContext(event.currentTarget.checked);
               }}
             />
-            <span>Context</span>
+            <span>{isJapanese ? "コンテキスト" : "Context"}</span>
           </label>
           <label className="viewer-log-export-option">
             <input
@@ -178,7 +185,7 @@ export function SettingsLogPanel({ language }: { language: ArchiveLanguage }) {
                 setIncludeRequestId(event.currentTarget.checked);
               }}
             />
-            <span>Request ID</span>
+            <span>{isJapanese ? "リクエスト ID" : "Request ID"}</span>
           </label>
         </div>
         <button
@@ -224,7 +231,11 @@ export function SettingsLogPanel({ language }: { language: ArchiveLanguage }) {
       )}
 
       {logs.length > 0 && (
-        <div className="viewer-log-list" role="list" aria-label="Persistent application logs">
+        <div
+          className="viewer-log-list"
+          role="list"
+          aria-label={isJapanese ? "保存済みアプリログ" : "Persistent application logs"}
+        >
           {logs.map((log) => (
             <article className="viewer-log-item" key={log.log_id} role="listitem">
               <div className="viewer-log-item-header">
@@ -233,11 +244,13 @@ export function SettingsLogPanel({ language }: { language: ArchiveLanguage }) {
                     {log.level.toUpperCase()}
                   </span>
                   <time dateTime={new Date(log.created_at).toISOString()}>
-                    {formatLogDate(log.created_at)}
+                    {formatLogDate(log.created_at, language)}
                   </time>
                 </div>
                 {log.request_id !== null && (
-                  <span className="viewer-log-request-id">req {shortenId(log.request_id)}</span>
+                  <span className="viewer-log-request-id">
+                    {isJapanese ? "req" : "req"} {shortenId(log.request_id)}
+                  </span>
                 )}
               </div>
 
@@ -280,8 +293,8 @@ function parseDateFilterValue(value: string, boundary: "start" | "end" = "start"
   return boundary === "end" ? timestamp + 59_999 : timestamp;
 }
 
-function formatLogDate(value: number): string {
-  return new Intl.DateTimeFormat("ja-JP", {
+function formatLogDate(value: number, language: ArchiveLanguage): string {
+  return new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "en-US", {
     dateStyle: "medium",
     timeStyle: "medium"
   }).format(value);
@@ -299,16 +312,16 @@ function formatContextValue(value: string | number | boolean | null): string {
   return String(value);
 }
 
-function formatLevelLabel(level: LogLevel): string {
+function formatLevelLabel(level: LogLevel, language: ArchiveLanguage): string {
   switch (level) {
     case "debug":
-      return "Debug";
+      return language === "ja" ? "デバッグ" : "Debug";
     case "info":
-      return "Info";
+      return language === "ja" ? "情報" : "Info";
     case "warn":
-      return "Warn";
+      return language === "ja" ? "警告" : "Warn";
     case "error":
-      return "Error";
+      return language === "ja" ? "エラー" : "Error";
   }
 }
 
