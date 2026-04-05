@@ -9,6 +9,7 @@ scripts/results/
 .mcp.json
 .serena/
 .codex-cdp-profile*/
+.shared-cdp-profile/
 .cdp-test-profile*/
 .cdp-verified-profile/
 .claude/*

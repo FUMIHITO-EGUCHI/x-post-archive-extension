@@ -3,7 +3,8 @@ param(
   [int]$Port = 9223,
   [string]$ProfileDirName = ".codex-cdp-profile-2",
   [switch]$ResetProfile,
-  [switch]$SkipExtension
+  [switch]$SkipExtension,
+  [switch]$TakeoverPort
 )
 
 Set-StrictMode -Version Latest
@@ -42,6 +43,114 @@ function Wait-ForCdp {
   throw "CDP endpoint did not respond on port $PortNumber."
 }
 
+function Get-CdpVersionInfo {
+  param(
+    [Parameter(Mandatory = $true)]
+    [int]$PortNumber
+  )
+
+  $versionUrl = "http://127.0.0.1:$PortNumber/json/version"
+
+  try {
+    return Invoke-RestMethod -Uri $versionUrl
+  } catch {
+    return $null
+  }
+}
+
+function Get-PortOwners {
+  param(
+    [Parameter(Mandatory = $true)]
+    [int]$PortNumber
+  )
+
+  $connections = Get-NetTCPConnection -LocalPort $PortNumber -State Listen -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique
+
+  if ($null -eq $connections) {
+    return @()
+  }
+
+  $owners = @()
+
+  foreach ($pid in $connections) {
+    try {
+      $process = Get-Process -Id $pid -ErrorAction Stop
+      $owners += [PSCustomObject]@{
+        Id = $process.Id
+        Name = $process.ProcessName
+      }
+    } catch {
+      # The process may have exited between the TCP query and process lookup.
+    }
+  }
+
+  return @($owners)
+}
+
+function Stop-ChromeForPortTakeover {
+  $taskkillPath = Join-Path $env:SystemRoot "System32\taskkill.exe"
+  & $taskkillPath /F /IM chrome.exe | Out-Null
+  Start-Sleep -Seconds 2
+}
+
+function Get-ExtensionInfo {
+  param(
+    [Parameter(Mandatory = $true)]
+    [int]$PortNumber
+  )
+
+  $targets = Invoke-RestMethod -Uri "http://127.0.0.1:$PortNumber/json/list"
+
+  # Identify our extension by its service_worker URL ending in /background.js.
+  # Built-in Chrome component extensions (Google Network Speech etc.) use /service_worker.js,
+  # so /background.js uniquely identifies the extension defined in this repository.
+  $extensionTarget = $targets | Where-Object { $_.type -eq "service_worker" -and $_.url -like "chrome-extension://*/background.js" } | Select-Object -First 1
+  $extensionId = $null
+
+  if ($null -ne $extensionTarget -and $extensionTarget.url -match "^chrome-extension://([^/]+)/") {
+    $extensionId = $matches[1]
+  }
+
+  return [PSCustomObject]@{
+    Targets = $targets
+    ExtensionId = $extensionId
+  }
+}
+
+function Write-ReadyInfo {
+  param(
+    [Parameter(Mandatory = $true)]
+    $VersionInfo,
+    [Parameter(Mandatory = $true)]
+    [int]$PortNumber,
+    [Parameter(Mandatory = $true)]
+    [string]$ProfilePath,
+    [bool]$ExtensionWasSkipped = $false
+  )
+
+  $extensionInfo = Get-ExtensionInfo -PortNumber $PortNumber
+  $extensionId = $extensionInfo.ExtensionId
+
+  Write-Host ""
+  Write-Host "CDP is ready." -ForegroundColor Green
+  Write-Host "Browser: $($VersionInfo.Browser)"
+  Write-Host "Port: $PortNumber"
+  Write-Host "Profile: $ProfilePath"
+  Write-Host "CDP endpoint: http://127.0.0.1:$PortNumber"
+  Write-Host "Browser WebSocket: $($VersionInfo.webSocketDebuggerUrl)"
+
+  if ($ExtensionWasSkipped) {
+    Write-Host "Extension loading: skipped"
+  } elseif ($null -ne $extensionId) {
+    Write-Host "Extension ID: $extensionId"
+    Write-Host "Viewer URL: chrome-extension://$extensionId/viewer.html"
+  } else {
+    Write-Warning "Chrome is reachable over CDP, but the extension service worker was not detected."
+    Write-Warning "If this profile has not loaded the unpacked extension yet, open chrome://extensions/ and load '.output\chrome-mv3' once."
+  }
+}
+
 $repoRoot = Split-Path -Path $PSScriptRoot -Parent
 $browserPath = Find-BrowserExecutable
 $profileDir = Join-Path $repoRoot $ProfileDirName
@@ -51,8 +160,29 @@ if (-not $SkipExtension -and -not (Test-Path (Join-Path $extensionDir "manifest.
   throw "Built extension was not found at '$extensionDir'. Run 'npm run build' first."
 }
 
-Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Sleep -Seconds 2
+$existingVersionInfo = Get-CdpVersionInfo -PortNumber $Port
+if ($null -ne $existingVersionInfo) {
+  Write-Host "Existing CDP browser detected on port $Port. Reusing it." -ForegroundColor Yellow
+  Write-ReadyInfo -VersionInfo $existingVersionInfo -PortNumber $Port -ProfilePath $profileDir -ExtensionWasSkipped:$SkipExtension
+  return
+}
+
+$portOwners = @(Get-PortOwners -PortNumber $Port)
+if ($portOwners.Count -gt 0) {
+  $ownerSummary = ($portOwners | ForEach-Object { "$($_.Name) (PID $($_.Id))" }) -join ", "
+  $nonChromeOwners = @($portOwners | Where-Object { $_.Name -ne "chrome" })
+
+  if ($nonChromeOwners.Count -gt 0) {
+    throw "Port $Port is already in use by $ownerSummary. Choose another port or stop that process manually."
+  }
+
+  if (-not $TakeoverPort) {
+    throw "Port $Port is already in use by $ownerSummary and no CDP endpoint responded. Close that Chrome manually or rerun with -TakeoverPort after confirming it is safe to terminate."
+  }
+
+  Write-Host "Port $Port is occupied by Chrome without a reachable CDP endpoint. Terminating Chrome via taskkill..." -ForegroundColor Yellow
+  Stop-ChromeForPortTakeover
+}
 
 if ($ResetProfile -and (Test-Path $profileDir)) {
   Remove-Item -LiteralPath $profileDir -Recurse -Force
@@ -108,32 +238,4 @@ if (-not $SkipExtension) {
 Start-Process -FilePath $browserPath -ArgumentList $argumentList | Out-Null
 
 $versionInfo = Wait-ForCdp -PortNumber $Port
-$targets = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/json/list"
-
-# Identify our extension by its service_worker URL ending in /background.js.
-# Built-in Chrome component extensions (Google Network Speech etc.) use /service_worker.js,
-# so /background.js uniquely identifies the extension defined in this repository.
-$extensionTarget = $targets | Where-Object { $_.type -eq "service_worker" -and $_.url -like "chrome-extension://*/background.js" } | Select-Object -First 1
-$extensionId = $null
-
-if ($null -ne $extensionTarget -and $extensionTarget.url -match "^chrome-extension://([^/]+)/") {
-  $extensionId = $matches[1]
-}
-
-Write-Host ""
-Write-Host "CDP is ready." -ForegroundColor Green
-Write-Host "Browser: $($versionInfo.Browser)"
-Write-Host "Port: $Port"
-Write-Host "Profile: $profileDir"
-Write-Host "CDP endpoint: http://127.0.0.1:$Port"
-Write-Host "Browser WebSocket: $($versionInfo.webSocketDebuggerUrl)"
-
-if ($SkipExtension) {
-  Write-Host "Extension loading: skipped"
-} elseif ($null -ne $extensionId) {
-  Write-Host "Extension ID: $extensionId"
-  Write-Host "Viewer URL: chrome-extension://$extensionId/viewer.html"
-} else {
-  Write-Warning "Chrome started, but the extension service worker was not detected."
-  Write-Warning "Try running with -ResetProfile to re-initialize the developer mode setup."
-}
+Write-ReadyInfo -VersionInfo $versionInfo -PortNumber $Port -ProfilePath $profileDir -ExtensionWasSkipped:$SkipExtension
