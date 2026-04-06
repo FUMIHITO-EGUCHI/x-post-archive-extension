@@ -1,5 +1,7 @@
 # Task Packet
 
+- GitHub Issue: `#3`
+
 ## Goal
 
 Codex / Claude 間の handoff 文書や確認ログで発生している文字化けの原因を特定し、再発防止のための対策方針を明確にする。
