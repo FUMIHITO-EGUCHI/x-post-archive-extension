@@ -31,6 +31,8 @@ import {
 
 const SAVE_BUTTON_SELECTOR = "[data-xpa-save-button]";
 const AUTO_ARCHIVE_ERROR_DISPLAY_MS = 3000;
+const AUTO_ARCHIVE_ARTICLE_RETRY_INTERVAL_MS = 500;
+const AUTO_ARCHIVE_ARTICLE_MAX_ATTEMPTS = 10;
 
 const processedArticles = new WeakSet<HTMLElement>();
 let initialized = false;
@@ -39,6 +41,7 @@ let bodyObserver: MutationObserver | null = null;
 let pendingDomReadyListener: (() => void) | null = null;
 let isContentScriptActive = true;
 let autoArchiveActionListenerInstalled = false;
+const pendingAutoArchiveRetryTimers = new Map<string, number>();
 
 export function bootstrapXContentScript(ctx: ContentScriptContext): void {
   isContentScriptActive = true;
@@ -51,6 +54,7 @@ export function bootstrapXContentScript(ctx: ContentScriptContext): void {
     bodyObserver = null;
     pendingDomReadyListener?.();
     pendingDomReadyListener = null;
+    clearPendingAutoArchiveRetries();
     removeAutoArchiveActionListener();
     removeBookmarksImportControls();
     removeLikesImportControls();
@@ -192,6 +196,19 @@ async function autoArchivePost(detail: LikeBookmarkActionEventDetail): Promise<v
   }
 
   if (!autoArchiveEnabled) {
+    clearPendingAutoArchiveRetry(detail);
+    return;
+  }
+
+  await attemptAutoArchive(detail, 0);
+}
+
+async function attemptAutoArchive(
+  detail: LikeBookmarkActionEventDetail,
+  attempt: number
+): Promise<void> {
+  if (!isContentScriptActive) {
+    clearPendingAutoArchiveRetry(detail);
     return;
   }
 
@@ -199,10 +216,21 @@ async function autoArchivePost(detail: LikeBookmarkActionEventDetail): Promise<v
   const article = findArticleByPostId(detail.xPostId);
 
   if (article === null) {
-    console.warn("[auto-archive] auto-archive-article-not-found", { action: detail.action, xPostId: detail.xPostId });
+    if (attempt + 1 < AUTO_ARCHIVE_ARTICLE_MAX_ATTEMPTS) {
+      scheduleAutoArchiveRetry(detail, attempt + 1);
+      return;
+    }
+
+    clearPendingAutoArchiveRetry(detail);
+    console.warn("[auto-archive] auto-archive-article-not-found", {
+      action: detail.action,
+      xPostId: detail.xPostId,
+      attempts: attempt + 1
+    });
     return;
   }
 
+  clearPendingAutoArchiveRetry(detail);
   const button = article.querySelector<HTMLButtonElement>(SAVE_BUTTON_SELECTOR);
 
   if (button !== null) {
@@ -230,6 +258,24 @@ async function autoArchivePost(detail: LikeBookmarkActionEventDetail): Promise<v
       );
     }
   }
+}
+
+function scheduleAutoArchiveRetry(
+  detail: LikeBookmarkActionEventDetail,
+  attempt: number
+): void {
+  const retryKey = getAutoArchiveRetryKey(detail);
+
+  if (pendingAutoArchiveRetryTimers.has(retryKey)) {
+    return;
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    pendingAutoArchiveRetryTimers.delete(retryKey);
+    void attemptAutoArchive(detail, attempt);
+  }, AUTO_ARCHIVE_ARTICLE_RETRY_INTERVAL_MS);
+
+  pendingAutoArchiveRetryTimers.set(retryKey, timeoutId);
 }
 
 async function saveArticleSnapshot(
@@ -311,6 +357,28 @@ function findArticleByPostId(xPostId: string): HTMLElement | null {
   }
 
   return null;
+}
+
+function getAutoArchiveRetryKey(detail: LikeBookmarkActionEventDetail): string {
+  return `${detail.action}:${detail.xPostId}`;
+}
+
+function clearPendingAutoArchiveRetry(detail: LikeBookmarkActionEventDetail): void {
+  const retryKey = getAutoArchiveRetryKey(detail);
+  const timeoutId = pendingAutoArchiveRetryTimers.get(retryKey);
+
+  if (timeoutId !== undefined) {
+    window.clearTimeout(timeoutId);
+    pendingAutoArchiveRetryTimers.delete(retryKey);
+  }
+}
+
+function clearPendingAutoArchiveRetries(): void {
+  for (const timeoutId of pendingAutoArchiveRetryTimers.values()) {
+    window.clearTimeout(timeoutId);
+  }
+
+  pendingAutoArchiveRetryTimers.clear();
 }
 
 function syncLikesImportControls(): void {

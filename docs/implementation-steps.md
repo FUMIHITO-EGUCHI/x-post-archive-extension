@@ -156,6 +156,7 @@
 4. Run `npm run build`.
 5. Run `npm run zip` and prepare the release artifact as `x-post-archive-extension-x.xx.x-chrome.zip`, replacing `x.xx.x` with the release version.
 6. Create the release note in `docs/release-notes/`.
+   Start the release note with a short top section that tells the user what improved for them in this release before the technical details.
 7. After creating the release note, ask the user to review and confirm it before continuing.
 8. If the release includes the active task tracked in `ai-handoff/current-task.md`, only mark it complete after its acceptance criteria are satisfied.
 9. When completing the active task in `ai-handoff/current-task.md`, update the dashboard in a fixed way: change `status` to `completed`, clear or replace `next_action` as needed, and move the task into the completed area if that dashboard format is being used.

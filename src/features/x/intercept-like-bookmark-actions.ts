@@ -54,9 +54,9 @@ function installXhrInterceptor(): void {
     username?: string | null,
     password?: string | null
   ): void {
-    const request = resolveActionRequest(typeof url === "string" ? url : url.toString(), null);
-    xhrActions.set(this, request?.action ?? null);
-    xhrPostIds.set(this, request?.xPostId ?? null);
+    const action = resolveActionByUrl(typeof url === "string" ? url : url.toString());
+    xhrActions.set(this, action);
+    xhrPostIds.set(this, null);
 
     this.addEventListener("loadend", () => {
       const action = xhrActions.get(this) ?? null;
@@ -253,6 +253,12 @@ function isSuccessfulActionPayload(
   if (action === "like") {
     const favoriteTweet = Reflect.get(data, "favorite_tweet");
     return favoriteTweet === "Done";
+  }
+
+  const tweetBookmarkPut = Reflect.get(data, "tweet_bookmark_put");
+
+  if (tweetBookmarkPut === "Done") {
+    return true;
   }
 
   const bookmarkResult = readObjectProperty(data, "bookmark_tweet_result");
