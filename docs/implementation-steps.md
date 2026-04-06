@@ -147,3 +147,15 @@
 3. Route localized default auto tags through the save entry points used by single-save and likes import.
 4. Automatically add image and video default tags when media is attached to the saved post.
 5. Verify language switching, default-tag assignment, `npm run typecheck`, and `npm run build`.
+
+## Release Steps
+
+1. Apply the target fix or feature changes.
+2. Update the version in `package.json` and `package-lock.json`.
+3. Run `npm run typecheck`.
+4. Run `npm run build`.
+5. Run `npm run zip` and prepare the release artifact as `x-post-archive-extension-x.xx.x-chrome.zip`, replacing `x.xx.x` with the release version.
+6. Create the release note in `docs/release-notes/`.
+7. After creating the release note, ask the user to review and confirm it before continuing.
+8. Commit only the intended release changes.
+9. Only when the user explicitly instructs it, create the version tag and push both the branch and the tag.
