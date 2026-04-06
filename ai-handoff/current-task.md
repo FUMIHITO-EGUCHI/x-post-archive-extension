@@ -42,6 +42,8 @@
 ## Waiting Tasks
 - `2026-04-04-auto-archive-triggers`: auto archive trigger implementation
 - `2026-04-04-user-filter`: single-user filter
+- `2026-04-06-investigate-handoff-encoding`: investigate Codex / Claude handoff mojibake cause
+- `2026-04-06-infinite-scroll-settings-lists`: convert heavy viewer settings lists to incremental loading
 
 ## Recently Completed
 - `2026-04-05-viewer-cdp-review-blocker`: resolved, see `ai-handoff/findings/2026-04-05-viewer-cdp-review-blocker.md`
