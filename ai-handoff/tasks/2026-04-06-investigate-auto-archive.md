@@ -71,4 +71,14 @@ article が DOM に存在しない場合のフォールバック案:
 
 ## Result
 
+- `browser.storage.local.archiveSettings` was confirmed writable and readable from the extension viewer page with both `autoArchiveOnLike` and `autoArchiveOnBookmark` set to `true`.
+- Reproduction environment was verified on shared CDP profile `.shared-cdp-profile` with X logged in and the unpacked extension loaded.
+- On `https://x.com/home`, a visible post (`x_post_id = 2041051688484970744`) initially showed the injected save button in `Save` state and `posts/has` returned `false`.
+- Dispatching the same `x-post-archive:like-bookmark-action` detail used by the interceptor changed the visible save button from `Save` to `Saved`, and `posts/has` changed from `false` to `true`.
+- This confirms the settings load, article lookup, and save pipeline all work after adding retry handling around `findArticleByPostId`.
+- A real bookmark click on `https://x.com/azurlane_staff/status/2041108669182476664` was then exercised on the shared CDP profile, and the post `2041110827496067094` changed from `Save` to `Saved` after the bookmark button changed from `bookmark` to `removeBookmark`.
+- The page-level `x-post-archive:like-bookmark-action` listener observed the real bookmark event for `2041110827496067094`, confirming the MAIN-world interceptor path now works end to end.
+- Root cause: the XHR interceptor called `resolveActionRequest(url, null)` from `open()`, so XHR requests never stored the action until after the body existed. Because `send()` only extracted `tweet_id` when an action was already stored, the XHR path never captured bookmark/like actions. The fix was to resolve the action from URL alone in `open()` and defer `tweet_id` extraction to `send()`.
+- Task status: investigation complete and fixed locally; `npm run typecheck`, `npm run build`, and shared-profile CDP verification all passed.
+
 <!-- 完了後に記入 -->
