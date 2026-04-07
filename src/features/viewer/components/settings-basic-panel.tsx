@@ -1,6 +1,11 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ArchiveLanguage } from "../../settings/archive-language";
-import type { ArchiveSettings } from "../../../types/archive";
+import {
+  DEFAULT_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD,
+  MAX_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD,
+  MIN_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD,
+  type ArchiveSettings
+} from "../../../types/archive";
 import type {
   ArchiveSummaryRecord,
   FontSizeOption,
@@ -164,6 +169,44 @@ export function SettingsBasicPanel({
             </label>
           ))}
         </div>
+        <label className="viewer-file-input-label">
+          <span>
+            {isJapanese
+              ? "一括取り込みの duplicate-only batch 自動停止閾値"
+              : "Bulk import duplicate-only batch stop threshold"}
+          </span>
+          <input
+            className="tag-input"
+            type="number"
+            min={MIN_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD}
+            max={MAX_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD}
+            step={1}
+            value={archiveSettings.bulkImportDuplicateBatchThreshold}
+            onChange={(event) => {
+              const parsedValue = event.currentTarget.valueAsNumber;
+              const nextThreshold =
+                Number.isFinite(parsedValue)
+                  ? Math.min(
+                      MAX_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD,
+                      Math.max(
+                        MIN_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD,
+                        Math.trunc(parsedValue)
+                      )
+                    )
+                  : DEFAULT_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD;
+
+              void onArchiveSettingsChange({
+                ...archiveSettings,
+                bulkImportDuplicateBatchThreshold: nextThreshold
+              });
+            }}
+          />
+          <span className="viewer-settings-inline-note">
+            {isJapanese
+              ? "likes / bookmarks の一括取り込みで、duplicate だけの保存バッチが連続した回数です。新規保存か失敗が入ると連続数はリセットされます。"
+              : "Shared by likes and bookmarks bulk import. This counts consecutive duplicate-only save batches and resets when a batch includes a new save or a failure."}
+          </span>
+        </label>
       </section>
 
       <section className="viewer-settings-card">
