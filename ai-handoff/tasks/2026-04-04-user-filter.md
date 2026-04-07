@@ -144,10 +144,32 @@ const [userSearchQuery, setUserSearchQuery] = useState("");
 
 ## Codex Result
 
+- ユーザー絞り込み機能は既存コード上ですでに実装済みで、`authorFilter` の型・runtime message・archive service・viewer UI の配線が揃っていることを確認した。
+- `viewer-app.tsx` ではユーザー絞り込みモーダル、アクティブフィルタ表示、タグフィルタとの併用、および viewer session への復元対応まで入っていた。
+- この確認パスでは追加コード修正は不要で、完了条件は `npm run typecheck` と `npm run build` の通過で満たした。
+
 ## Changed Files
+
+- `src/types/viewer.ts`
+- `src/types/runtime.ts`
+- `src/features/archive/archive-service.ts`
+- `src/features/runtime/client.ts`
+- `src/features/runtime/handle-runtime-message.ts`
+- `src/features/viewer/components/viewer-app.tsx`
+- `src/features/viewer/viewer-session-storage.ts`
 
 ## Verification
 
+- `npm run typecheck`
+- `npm run build`
+- `rg -n "authorFilter|users/summaries|activeAuthorFilter|userSummaries" src`
+- Shared CDP Chrome (`.shared-cdp-profile`, port `9223`) で viewer を開き、user filter modal の初期 40 件表示と `さらに表示` 後の 80 件表示を確認
+- Shared CDP Chrome 上で user filter の先頭候補 `堀出井靖水／新作漫画毎日投稿 (@horideiyasumi)` を選択し、archive list が `50 / 64件` に切り替わり、先頭投稿の handle が `@horideiyasumi` になることを確認
+
 ## Remaining Issues
 
+- タグフィルタとの AND 条件はコード経路上は成立しているが、今回の CDP 自動確認では user filter と tag chip click を連結した UI 操作の安定化までは詰めていない。
+
 ## Suggested Next Action
+
+- `#4` の設定一覧段階表示へ進む。
