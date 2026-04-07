@@ -1677,6 +1677,13 @@ body {
   margin-bottom: 16px;
 }
 
+.viewer-date-modal-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
 .viewer-tag-modal-summary {
   display: flex;
   flex-wrap: wrap;
@@ -1689,6 +1696,24 @@ body {
   background: #f4f8ff;
   color: #314255;
   font-size: calc(14px * var(--viewer-font-scale));
+}
+
+.viewer-modal-inline-error {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #fff1f1;
+  color: #8d1f1f;
+  font-size: calc(14px * var(--viewer-font-scale));
+  line-height: 1.6;
+}
+
+.viewer-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
 }
 
 .viewer-tag-option-list {
@@ -1920,6 +1945,11 @@ body {
   color: var(--color-inverse-text);
 }
 
+:root[data-theme="dark"] .viewer-modal-inline-error {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-text);
+}
+
 :root[data-theme="dark"] .viewer-sort-select,
 :root[data-theme="dark"] .viewer-sort-direction-button {
   border-color: var(--color-accent-soft-strong);
@@ -2112,6 +2142,16 @@ body {
 
   .viewer-tag-modal-controls {
     grid-template-columns: 1fr;
+  }
+
+  .viewer-date-modal-controls,
+  .viewer-modal-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .viewer-modal-actions {
+    display: grid;
+    justify-content: stretch;
   }
 
   .viewer-log-export-options {

@@ -4,8 +4,8 @@
 - id: `2026-04-07-viewer-date-range-filter`
 - title: add date-range filtering to the archive list
 - owner: `Codex`
-- status: `pending`
-- branch: `master`
+- status: `completed`
+- branch: `feature/archive-viewer-improvements`
 - priority: `high`
 - task_file: `ai-handoff/tasks/2026-04-07-viewer-date-range-filter.md`
 
@@ -26,7 +26,7 @@
 - handoff_to_codex: keep the date filter lightweight and coherent with existing tag / user filter behavior
 
 ## Next Action
-- next_action: decide the first date-filter model, implement it in the viewer flow, and document whether it filters `saved_at`, `posted_at`, or both
+- next_action: commit completed `#5` work, then move to the next waiting issue on this branch
 - acceptance_criteria: users can set a date range from the viewer and the archive list updates accordingly
 - acceptance_criteria: the chosen filter target is explicitly documented
 - acceptance_criteria: clearing the date range returns the list to its unfiltered state
@@ -34,6 +34,8 @@
 - acceptance_criteria: `npm run typecheck` and `npm run build` pass
 
 ## Recent Updates
+- `2026-04-07 Codex`: verified on shared CDP Chrome that the date filter works after extension reload; archive list updates for date-range conditions and the issue can be committed.
+- `2026-04-07 Codex`: implemented issue `#5` on `feature/archive-viewer-improvements` with a dedicated date-filter modal, `saved_at` / `posted_at` target toggle, query-level filtering, session persistence, and active filter banners; `npm run typecheck` and `npm run build` passed.
 - `2026-04-07 Codex`: verified on shared CDP Chrome (`.shared-cdp-profile`, port `9223`) that user filter modal and tag filter modal expand from `40 -> 80`, tag management expands from `50 -> 100`, and the redirect list renders normally with 20 items and no `Load more` button.
 - `2026-04-07 Codex`: verified on shared CDP Chrome that selecting `堀出井靖水／新作漫画毎日投稿 (@horideiyasumi)` in the user filter changes the archive list to `50 / 64件` and the first visible handle to `@horideiyasumi`.
 - `2026-04-07 Codex`: completed `2026-04-06-infinite-scroll-settings-lists` by switching tag filter, user filter, tag management, and auto-tag redirect lists to shared `Load more` incremental rendering in the viewer.
@@ -55,6 +57,7 @@
 - `2026-04-07-bulk-import-auto-stop-on-duplicates` (`#6`): stop likes / bookmarks bulk import after repeated duplicates
 
 ## Recently Completed
+- `2026-04-07-viewer-date-range-filter`: archive date-range filtering added with `saved_at` / `posted_at` target toggle and session restore support
 - `2026-04-06-infinite-scroll-settings-lists`: viewer-side incremental `Load more` rendering added for filter and settings lists
 - `2026-04-04-user-filter`: verified implemented and build-clean; user filter works alongside tag filter
 - `2026-04-06-investigate-handoff-encoding`: files were intact UTF-8; main causes were PowerShell default decoding and unsafe Node/stdout Japanese handling
