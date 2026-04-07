@@ -44,4 +44,21 @@
 
 ## Result
 
-<!-- 完了後に記入 -->
+390px-width shared CDP Chrome verification reproduced horizontal overflow in the viewer: `.viewer-list` was creating a single implicit grid column sized to the post card's max-content width, which let `.post-card` expand to about `454px` inside a `317px` list column. The fix constrains the list to `grid-template-columns: minmax(0, 1fr)`, forces post cards to `width: 100%` with `min-width: 0`, and adds shrink/wrap protection to the header, body text, quoted text, and post links.
+
+After rebuilding and reloading the unpacked extension, the same 390px viewer check showed `document.documentElement.scrollWidth === clientWidth`, `.viewer-list` at `317px`, `.post-card` at `317px`, and no remaining overflow offenders.
+
+## Changed Files
+
+- `src/entrypoints/viewer/style.css`
+- `ai-handoff/current-task.md`
+- `ai-handoff/tasks/2026-04-06-fix-post-card-layout.md`
+
+## Verification
+
+- `npm run typecheck`
+- `npm run build`
+- Shared CDP Chrome (`.shared-cdp-profile`, port `9223`)
+  - Reproduced overflow at `390px` before the fix: `documentElement.scrollWidth = 483`, `.viewer-list` implicit column `454px`, `.post-card` width `454px`
+  - Reloaded the unpacked extension after rebuild
+  - Re-checked at `390px` after the fix: `documentElement.scrollWidth = 375`, `.viewer-list` column `317px`, `.post-card` width `317px`, no overflow offenders remained

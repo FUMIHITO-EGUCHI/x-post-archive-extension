@@ -69,12 +69,17 @@ Adjust `normalizePostText` in `src/features/x/extract-post-from-article.ts`.
 
 - `npm run typecheck`
 - `npm run build`
+- Shared CDP Chrome (`.shared-cdp-profile`, port `9223`):
+  - Opened `https://x.com/akshitr08310811/status/2041423342696329258`
+  - Confirmed X/Chrome still drops inline Twemoji from `tweetText.innerText`
+  - Confirmed DOM-walk extraction preserves `😂😂😂`
+  - Saved the post through the extension and verified IndexedDB `posts.post_text` preserved the emoji sequence
 
 ## Remaining Issues
 
 - No automated regression test was added in this task.
-- Browser-side confirmation with an affected X post is still useful.
+- No remaining browser-side issue was reproduced after the CDP verification; the saved `post_text` preserved the inline emoji as intended.
 
 ## Suggested Next Action
 
-- Re-run the affected likes import or save flow on a post that contains inline emoji and confirm `post_text` keeps the emoji in IndexedDB.
+- Mark this task complete and move to the next queued implementation task.

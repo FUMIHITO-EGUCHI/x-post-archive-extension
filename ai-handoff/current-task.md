@@ -1,40 +1,38 @@
 # Current Task
 
 ## Active
-- id: `2026-04-07-bulk-import-auto-stop-on-duplicates`
-- title: stop likes / bookmarks bulk import after repeated duplicates
+- id: `2026-04-06-fix-post-card-layout`
+- title: fix viewer post-card horizontal overflow
 - owner: `Codex`
 - status: `completed`
 - branch: `feature/archive-viewer-improvements`
 - priority: `high`
-- task_file: `ai-handoff/tasks/2026-04-07-bulk-import-auto-stop-on-duplicates.md`
+- task_file: `ai-handoff/tasks/2026-04-06-fix-post-card-layout.md`
 
 ## Scope
-- files_in_scope: `src/features/x/likes-import-controls.ts`
-- files_in_scope: `src/features/x/bookmarks-import-controls.ts`
-- files_in_scope: `src/features/settings/archive-settings.ts`
-- files_in_scope: `src/features/viewer/components/settings-basic-panel.tsx`
-- files_in_scope: `src/types/archive.ts`
-- out_of_scope: full import flow rewrite
-- out_of_scope: new deduplication semantics
-- out_of_scope: single-post save behavior changes
+- files_in_scope: `src/entrypoints/viewer/style.css`
+- files_in_scope: `src/features/viewer/components/viewer-app.tsx`
+- out_of_scope: viewer outside post-card overflow behavior
+- out_of_scope: content script and background changes
+- out_of_scope: broader viewer redesign
 - out_of_scope: commit and push
 
 ## Coordination
 - blocked_by: `none`
 - related_findings: `none`
 - needs_from_claude: `none`
-- handoff_to_codex: keep likes / bookmarks bulk import stop behavior coherent and explainable in the overlay
+- handoff_to_codex: keep the fix minimal and focused on preventing horizontal overflow in viewer post cards
 
 ## Next Action
-- next_action: choose the next active task and update this dashboard before starting implementation
-- acceptance_criteria: likes import stops automatically after the configured repeated-duplicate condition is hit
-- acceptance_criteria: bookmarks import stops automatically under the same rule
-- acceptance_criteria: the overlay explains that the run stopped due to repeated duplicates
-- acceptance_criteria: queued saves still finish and final stats remain visible
+- next_action: decide whether to commit this viewer layout fix or move directly to the next active task
+- acceptance_criteria: `article.post-card[data-post-id]` no longer expands wider than the viewer column
+- acceptance_criteria: narrow viewports do not introduce horizontal scroll from the viewer post list
+- acceptance_criteria: the fix remains limited to viewer layout CSS
 - acceptance_criteria: `npm run typecheck` and `npm run build` pass
 
 ## Recent Updates
+- `2026-04-07 Codex`: completed `2026-04-06-fix-post-card-layout` by constraining `.viewer-list` to a fixed single grid column, forcing `.post-card` to shrink within the column, and adding wrap/min-width protections to post header and text elements; `npm run typecheck` and `npm run build` passed, and shared CDP Chrome confirmed the 390px-width viewer no longer overflows horizontally.
+- `2026-04-07 Codex`: verified `2026-04-02-fix-emoji-text-loss` on shared CDP Chrome with a real Twemoji post; X/Chrome still drops emoji from `innerText`, but the extension now preserves the inline emoji in saved `post_text`, so the task can be treated as complete.
 - `2026-04-07 Codex`: reloaded the unpacked extension on shared CDP Chrome, temporarily set the duplicate threshold to `1`, and verified that likes import and bookmarks import both stop automatically with the duplicate-threshold overlay reason; the verification pass also exposed a pending-media-wait queue bug, which was fixed before the final re-test.
 - `2026-04-07 Codex`: implemented issue `#6` on `feature/archive-viewer-improvements` with a shared bulk-import duplicate-only batch threshold setting, duplicate-stop streak tracking for likes / bookmarks import, and stop-reason-aware overlay messaging; `npm run typecheck` and `npm run build` passed.
 - `2026-04-07 Codex`: verified on shared CDP Chrome that the date filter works after extension reload; archive list updates for date-range conditions and the issue can be committed.
@@ -60,6 +58,8 @@
 - `none`
 
 ## Recently Completed
+- `2026-04-06-fix-post-card-layout`: fixed viewer-side post-card horizontal overflow on narrow widths by constraining the grid column and card shrink behavior
+- `2026-04-02-fix-emoji-text-loss`: browser-side Twemoji loss still reproduces in X/Chrome `innerText`, but saved `post_text` now preserves inline emoji correctly
 - `2026-04-07-bulk-import-auto-stop-on-duplicates`: likes / bookmarks bulk import now auto-stops on repeated duplicate-only batches, with shared threshold settings and verified overlay messaging
 - `2026-04-07-viewer-date-range-filter`: archive date-range filtering added with `saved_at` / `posted_at` target toggle and session restore support
 - `2026-04-06-infinite-scroll-settings-lists`: viewer-side incremental `Load more` rendering added for filter and settings lists
