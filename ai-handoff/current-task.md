@@ -42,7 +42,6 @@
 - `2026-04-05 Claude`: viewer CDP blocker was reduced to extension-loading workflow issues and documented separately.
 
 ## Waiting Tasks
-- `2026-04-04-auto-archive-triggers` (`#1`): auto archive trigger implementation
 - `2026-04-04-user-filter` (`#2`): single-user filter
 - `2026-04-06-investigate-handoff-encoding` (`#3`): investigate Codex / Claude handoff mojibake cause
 - `2026-04-06-infinite-scroll-settings-lists` (`#4`): convert tag filter, user filter, tag management, and auto-tag redirect lists from full render to incremental loading
