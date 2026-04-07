@@ -45,3 +45,5 @@
 - 読むべきファイルを先頭で示す
 - acceptance criteria を書いてから実装を渡す
 - 結論のない調査メモを増やさない
+- Windows PowerShell で handoff Markdown を読むときは `Get-Content -Encoding utf8` を明示する
+- 日本語本文を CLI 引数や標準出力で別コマンドへ渡す運用は避け、UTF-8 ファイルか JSON body を優先する
