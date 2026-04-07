@@ -1,36 +1,41 @@
 # Current Task
 
 ## Active
-- id: `2026-04-06-fix-post-card-layout`
-- title: fix viewer post-card horizontal overflow
+- id: `2026-04-06-random-display`
+- title: add random ordering to the viewer archive list
 - owner: `Codex`
 - status: `completed`
 - branch: `feature/archive-viewer-improvements`
 - priority: `high`
-- task_file: `ai-handoff/tasks/2026-04-06-fix-post-card-layout.md`
+- task_file: `ai-handoff/tasks/2026-04-06-random-display.md`
 
 ## Scope
-- files_in_scope: `src/entrypoints/viewer/style.css`
 - files_in_scope: `src/features/viewer/components/viewer-app.tsx`
-- out_of_scope: viewer outside post-card overflow behavior
-- out_of_scope: content script and background changes
-- out_of_scope: broader viewer redesign
+- files_in_scope: `src/features/archive/archive-service.ts`
+- files_in_scope: `src/db/repositories/posts-repository.ts`
+- files_in_scope: `src/types/viewer.ts`
+- files_in_scope: `src/features/viewer/viewer-session-storage.ts`
+- out_of_scope: cross-session random-order persistence
+- out_of_scope: background / content script changes
+- out_of_scope: database-level true random SQL ordering
 - out_of_scope: commit and push
 
 ## Coordination
 - blocked_by: `none`
 - related_findings: `none`
 - needs_from_claude: `none`
-- handoff_to_codex: keep the fix minimal and focused on preventing horizontal overflow in viewer post cards
+- handoff_to_codex: keep random ordering stable within one viewer session while allowing explicit reshuffle from the archive UI
 
 ## Next Action
-- next_action: decide whether to commit this viewer layout fix or move directly to the next active task
-- acceptance_criteria: `article.post-card[data-post-id]` no longer expands wider than the viewer column
-- acceptance_criteria: narrow viewports do not introduce horizontal scroll from the viewer post list
-- acceptance_criteria: the fix remains limited to viewer layout CSS
+- next_action: choose the next active task and update this dashboard before starting implementation
+- acceptance_criteria: viewer sort options include a random mode
+- acceptance_criteria: random mode remains stable across `Load more` within one viewer session
+- acceptance_criteria: reshuffle changes the visible order without closing the viewer
+- acceptance_criteria: random mode does not persist its shuffled order across viewer reopen
 - acceptance_criteria: `npm run typecheck` and `npm run build` pass
 
 ## Recent Updates
+- `2026-04-07 Codex`: completed `2026-04-06-random-display` by adding a random sort mode backed by a viewer-session seed, deterministic archive-side shuffling, and a `再シャッフル` / `Reshuffle` control; `npm run typecheck` and `npm run build` passed, and shared CDP Chrome confirmed that random ordering stays stable across `Load more` and changes after reshuffle.
 - `2026-04-07 Codex`: completed `2026-04-06-fix-post-card-layout` by constraining `.viewer-list` to a fixed single grid column, forcing `.post-card` to shrink within the column, and adding wrap/min-width protections to post header and text elements; `npm run typecheck` and `npm run build` passed, and shared CDP Chrome confirmed the 390px-width viewer no longer overflows horizontally.
 - `2026-04-07 Codex`: verified `2026-04-02-fix-emoji-text-loss` on shared CDP Chrome with a real Twemoji post; X/Chrome still drops emoji from `innerText`, but the extension now preserves the inline emoji in saved `post_text`, so the task can be treated as complete.
 - `2026-04-07 Codex`: reloaded the unpacked extension on shared CDP Chrome, temporarily set the duplicate threshold to `1`, and verified that likes import and bookmarks import both stop automatically with the duplicate-threshold overlay reason; the verification pass also exposed a pending-media-wait queue bug, which was fixed before the final re-test.
@@ -58,6 +63,7 @@
 - `none`
 
 ## Recently Completed
+- `2026-04-06-random-display`: added viewer-side random ordering with a stable per-session seed and explicit reshuffle control
 - `2026-04-06-fix-post-card-layout`: fixed viewer-side post-card horizontal overflow on narrow widths by constraining the grid column and card shrink behavior
 - `2026-04-02-fix-emoji-text-loss`: browser-side Twemoji loss still reproduces in X/Chrome `innerText`, but saved `post_text` now preserves inline emoji correctly
 - `2026-04-07-bulk-import-auto-stop-on-duplicates`: likes / bookmarks bulk import now auto-stops on repeated duplicate-only batches, with shared threshold settings and verified overlay messaging

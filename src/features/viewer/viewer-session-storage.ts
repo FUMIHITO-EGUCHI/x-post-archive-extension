@@ -84,6 +84,7 @@ function isViewerSessionState(value: unknown): value is ViewerSessionState {
 
 function isPostSortField(value: unknown): value is PostSortField {
   return (
+    value === "random" ||
     value === "posted_at" ||
     value === "saved_at" ||
     value === "reply_count" ||

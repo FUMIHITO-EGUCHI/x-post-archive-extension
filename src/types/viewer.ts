@@ -1,6 +1,7 @@
 import type { ArchiveTagRecord } from "./archive";
 
 export type PostSortField =
+  | "random"
   | "posted_at"
   | "saved_at"
   | "reply_count"
@@ -46,6 +47,7 @@ export type ListPostsPageInput = {
   limit: number;
   sortField: PostSortField;
   sortDirection: SortDirection;
+  randomSeed?: number | null;
   tagFilter: string | null;
   authorFilter: string | null;
   dateFilterTarget: DateFilterTarget | null;

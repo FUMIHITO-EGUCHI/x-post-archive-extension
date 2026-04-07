@@ -31,12 +31,20 @@ export async function countPosts(): Promise<number> {
   return archiveDb.posts.count();
 }
 
+export async function listPostIds(): Promise<string[]> {
+  return archiveDb.posts.toCollection().primaryKeys();
+}
+
 export async function listPostsSliceBySort(
   sortField: PostSortField,
   sortDirection: SortDirection,
   offset: number,
   limit: number
 ): Promise<PostRecord[]> {
+  if (sortField === "random") {
+    throw new Error("Random ordering requires a viewer-provided seed and should be resolved upstream.");
+  }
+
   const ordered =
     sortDirection === "desc"
       ? archiveDb.posts.orderBy(sortField).reverse()
