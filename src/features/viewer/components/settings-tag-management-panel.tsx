@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ArchiveTagSummaryRecord } from "../../../types/viewer";
 import { requestMergeTags, requestRenameTag, requestTagSummaries } from "../../runtime/client";
 import type { ArchiveLanguage } from "../../settings/archive-language";
+import { useIncrementalList } from "./use-incremental-list";
 import { useDialogA11y } from "./use-dialog-a11y";
 
 type SettingsTagManagementPanelProps = {
@@ -12,6 +13,7 @@ type SettingsTagManagementPanelProps = {
 };
 
 type FeedbackTone = "neutral" | "success" | "error";
+const TAG_MANAGEMENT_LIST_SIZE = 50;
 
 export function SettingsTagManagementPanel({
   language,
@@ -66,6 +68,26 @@ export function SettingsTagManagementPanel({
       return displayName.includes(normalizedSearchQuery) || normalizedName.includes(normalizedSearchQuery);
     });
   }, [manageableTags, normalizedSearchQuery]);
+  const requiredVisibleTagCount = useMemo(() => {
+    const selectedIndexes = selectedTagIds
+      .map((tagId) => visibleTags.findIndex(({ tag }) => tag.tag_id === tagId))
+      .filter((index) => index >= 0);
+    const editingIndex =
+      editingTagId === null ? -1 : visibleTags.findIndex(({ tag }) => tag.tag_id === editingTagId);
+    const highestIndex = Math.max(editingIndex, ...selectedIndexes);
+
+    return highestIndex < 0 ? 0 : highestIndex + 1;
+  }, [editingTagId, selectedTagIds, visibleTags]);
+  const {
+    visibleItems: displayedTags,
+    remainingCount: remainingTagCount,
+    hasMore: hasMoreTags,
+    loadMore: loadMoreTags
+  } = useIncrementalList(visibleTags, {
+    initialCount: TAG_MANAGEMENT_LIST_SIZE,
+    step: TAG_MANAGEMENT_LIST_SIZE,
+    requiredCount: requiredVisibleTagCount
+  });
 
   const selectedTags = selectedTagIds
     .map((tagId) => manageableTags.find(({ tag }) => tag.tag_id === tagId) ?? null)
@@ -332,136 +354,160 @@ export function SettingsTagManagementPanel({
             {isJapanese ? "検索条件に一致するタグはありません。" : "No tags match your search."}
           </p>
         ) : (
-          <div className="viewer-tag-management-list" role="table" aria-label={isJapanese ? "タグ管理一覧" : "Tag management list"}>
-            <div className="viewer-tag-management-row viewer-tag-management-row-header" role="row">
-              <span role="columnheader">{isJapanese ? "タグ名" : "Tag"}</span>
-              <span role="columnheader">{isJapanese ? "投稿数" : "Posts"}</span>
-              <span role="columnheader">{isJapanese ? "リネーム" : "Rename"}</span>
-            </div>
+          <>
+            <div
+              className="viewer-tag-management-list"
+              role="table"
+              aria-label={isJapanese ? "タグ管理一覧" : "Tag management list"}
+            >
+              <div className="viewer-tag-management-row viewer-tag-management-row-header" role="row">
+                <span role="columnheader">{isJapanese ? "タグ名" : "Tag"}</span>
+                <span role="columnheader">{isJapanese ? "投稿数" : "Posts"}</span>
+                <span role="columnheader">{isJapanese ? "リネーム" : "Rename"}</span>
+              </div>
 
-            {visibleTags.map((summary) => {
-              const isEditing = editingTagId === summary.tag.tag_id;
-              const isRenamePending = renamePendingTagId === summary.tag.tag_id;
-              const disableUncheckedSelection =
-                selectedTagIds.length >= 2 && !selectedTagIds.includes(summary.tag.tag_id);
-              const isSelected = selectedTagIds.includes(summary.tag.tag_id);
+              {displayedTags.map((summary) => {
+                const isEditing = editingTagId === summary.tag.tag_id;
+                const isRenamePending = renamePendingTagId === summary.tag.tag_id;
+                const disableUncheckedSelection =
+                  selectedTagIds.length >= 2 && !selectedTagIds.includes(summary.tag.tag_id);
+                const isSelected = selectedTagIds.includes(summary.tag.tag_id);
 
-              return (
-                <div
-                  key={summary.tag.tag_id}
-                  className={`viewer-tag-management-row${isSelected ? " viewer-tag-management-row-selected" : ""}${
-                    disableUncheckedSelection ? " viewer-tag-management-row-selection-locked" : ""
-                  }`}
-                  role="row"
-                  tabIndex={isEditing || disableUncheckedSelection ? -1 : 0}
-                  aria-selected={isSelected}
-                  onClick={() => {
-                    if (isEditing || disableUncheckedSelection) {
-                      return;
-                    }
+                return (
+                  <div
+                    key={summary.tag.tag_id}
+                    className={`viewer-tag-management-row${isSelected ? " viewer-tag-management-row-selected" : ""}${
+                      disableUncheckedSelection ? " viewer-tag-management-row-selection-locked" : ""
+                    }`}
+                    role="row"
+                    tabIndex={isEditing || disableUncheckedSelection ? -1 : 0}
+                    aria-selected={isSelected}
+                    onClick={() => {
+                      if (isEditing || disableUncheckedSelection) {
+                        return;
+                      }
 
-                    toggleSelectedTag(summary.tag.tag_id);
-                  }}
-                  onKeyDown={(event: ReactKeyboardEvent<HTMLDivElement>) => {
-                    if (isEditing || disableUncheckedSelection) {
-                      return;
-                    }
-
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
                       toggleSelectedTag(summary.tag.tag_id);
-                    }
-                  }}
-                >
-                  <div className="viewer-tag-management-cell" role="cell">
-                    <strong>{summary.tag.display_name}</strong>
-                  </div>
-                  <div className="viewer-tag-management-cell" role="cell">
-                    {formatCount(summary.postCount, language)}
-                  </div>
-                  <div className="viewer-tag-management-cell" role="cell">
-                    {isEditing ? (
-                      <div
-                        className="viewer-tag-management-inline"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                        }}
-                      >
-                        <input
-                          className="viewer-file-input"
-                          type="text"
-                          value={renameDraft}
-                          disabled={isRenamePending}
+                    }}
+                    onKeyDown={(event: ReactKeyboardEvent<HTMLDivElement>) => {
+                      if (isEditing || disableUncheckedSelection) {
+                        return;
+                      }
+
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        toggleSelectedTag(summary.tag.tag_id);
+                      }
+                    }}
+                  >
+                    <div className="viewer-tag-management-cell" role="cell">
+                      <strong>{summary.tag.display_name}</strong>
+                    </div>
+                    <div className="viewer-tag-management-cell" role="cell">
+                      {formatCount(summary.postCount, language)}
+                    </div>
+                    <div className="viewer-tag-management-cell" role="cell">
+                      {isEditing ? (
+                        <div
+                          className="viewer-tag-management-inline"
                           onClick={(event) => {
                             event.stopPropagation();
                           }}
-                          onChange={(event) => {
-                            setRenameDraft(event.currentTarget.value);
-                            setRenameError(null);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              void handleRename(summary);
-                            }
+                        >
+                          <input
+                            className="viewer-file-input"
+                            type="text"
+                            value={renameDraft}
+                            disabled={isRenamePending}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                            }}
+                            onChange={(event) => {
+                              setRenameDraft(event.currentTarget.value);
+                              setRenameError(null);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                void handleRename(summary);
+                              }
 
-                            if (event.key === "Escape") {
-                              event.preventDefault();
-                              cancelRename();
-                            }
-                          }}
-                        />
-                        <div className="viewer-settings-action-row">
-                          <button
-                            className="viewer-action-button"
-                            type="button"
-                            disabled={isRenamePending}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void handleRename(summary);
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                cancelRename();
+                              }
                             }}
-                          >
-                            {isRenamePending
-                              ? isJapanese
-                                ? "保存中..."
-                                : "Saving..."
-                              : isJapanese
-                                ? "保存"
-                                : "Save"}
-                          </button>
-                          <button
-                            className="viewer-secondary-button"
-                            type="button"
-                            disabled={isRenamePending}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              cancelRename();
-                            }}
-                          >
-                            {isJapanese ? "キャンセル" : "Cancel"}
-                          </button>
+                          />
+                          <div className="viewer-settings-action-row">
+                            <button
+                              className="viewer-action-button"
+                              type="button"
+                              disabled={isRenamePending}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleRename(summary);
+                              }}
+                            >
+                              {isRenamePending
+                                ? isJapanese
+                                  ? "保存中..."
+                                  : "Saving..."
+                                : isJapanese
+                                  ? "保存"
+                                  : "Save"}
+                            </button>
+                            <button
+                              className="viewer-secondary-button"
+                              type="button"
+                              disabled={isRenamePending}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                cancelRename();
+                              }}
+                            >
+                              {isJapanese ? "キャンセル" : "Cancel"}
+                            </button>
+                          </div>
+                          {renameError !== null && (
+                            <p className="viewer-message viewer-message-error">{renameError}</p>
+                          )}
                         </div>
-                        {renameError !== null && (
-                          <p className="viewer-message viewer-message-error">{renameError}</p>
-                        )}
-                      </div>
-                    ) : (
-                      <button
-                        className="viewer-secondary-button"
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          startRename(summary.tag.tag_id, summary.tag.display_name);
-                        }}
-                      >
-                        {isJapanese ? "リネーム" : "Rename"}
-                      </button>
-                    )}
+                      ) : (
+                        <button
+                          className="viewer-secondary-button"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            startRename(summary.tag.tag_id, summary.tag.display_name);
+                          }}
+                        >
+                          {isJapanese ? "リネーム" : "Rename"}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+            {hasMoreTags && (
+              <div className="viewer-incremental-list-footer">
+                <p className="viewer-incremental-list-meta">
+                  {isJapanese
+                    ? `残り ${formatCount(remainingTagCount, language)} 件のタグがあります。`
+                    : `${formatCount(remainingTagCount, language)} more tags available.`}
+                </p>
+                <button
+                  className="viewer-secondary-button"
+                  type="button"
+                  onClick={() => {
+                    loadMoreTags();
+                  }}
+                >
+                  {isJapanese ? "さらに表示" : "Load more"}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
 

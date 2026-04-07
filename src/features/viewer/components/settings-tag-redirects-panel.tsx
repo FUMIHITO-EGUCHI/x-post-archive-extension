@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import type { ArchiveTagRedirectSummaryRecord } from "../../../types/viewer";
 import { requestDeleteTagRedirect, requestTagRedirects } from "../../runtime/client";
 import type { ArchiveLanguage } from "../../settings/archive-language";
+import { useIncrementalList } from "./use-incremental-list";
 
 type SettingsTagRedirectsPanelProps = {
   language: ArchiveLanguage;
 };
+const TAG_REDIRECT_LIST_SIZE = 50;
 
 export function SettingsTagRedirectsPanel({ language }: SettingsTagRedirectsPanelProps) {
   const [redirects, setRedirects] = useState<ArchiveTagRedirectSummaryRecord[]>([]);
@@ -15,6 +17,15 @@ export function SettingsTagRedirectsPanel({ language }: SettingsTagRedirectsPane
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteConfirmationId, setDeleteConfirmationId] = useState<string | null>(null);
   const isJapanese = language === "ja";
+  const {
+    visibleItems: displayedRedirects,
+    remainingCount: remainingRedirectCount,
+    hasMore: hasMoreRedirects,
+    loadMore: loadMoreRedirects
+  } = useIncrementalList(redirects, {
+    initialCount: TAG_REDIRECT_LIST_SIZE,
+    step: TAG_REDIRECT_LIST_SIZE
+  });
 
   useEffect(() => {
     void loadRedirects();
@@ -113,57 +124,81 @@ export function SettingsTagRedirectsPanel({ language }: SettingsTagRedirectsPane
           {isJapanese ? "まだ自動タグ変換はありません。" : "No automatic tag redirects yet."}
         </p>
       ) : (
-        <div className="viewer-tag-management-redirect-list">
-          {redirects.map((redirect) => {
-            const isPendingDelete = pendingDeleteId === redirect.tag_redirect_id;
-            const isDeleteConfirmationActive = deleteConfirmationId === redirect.tag_redirect_id;
+        <>
+          <div className="viewer-tag-management-redirect-list">
+            {displayedRedirects.map((redirect) => {
+              const isPendingDelete = pendingDeleteId === redirect.tag_redirect_id;
+              const isDeleteConfirmationActive = deleteConfirmationId === redirect.tag_redirect_id;
 
-            return (
-              <div key={redirect.tag_redirect_id} className="viewer-tag-management-redirect-item">
-                <div className="viewer-tag-management-redirect-row">
-                  <div className="viewer-tag-management-redirect-copy">
-                    <strong>{redirect.source_display_name}</strong>
-                    <span aria-hidden="true">→</span>
-                    <strong>{redirect.target_display_name}</strong>
-                  </div>
-                  <button
-                    className={
-                      isDeleteConfirmationActive
-                        ? "viewer-danger-button viewer-tag-management-redirect-delete"
-                        : "viewer-secondary-button viewer-tag-management-redirect-delete viewer-tag-management-redirect-delete-soft"
-                    }
-                    type="button"
-                    disabled={isPendingDelete}
-                    onClick={() => {
-                      handleDeleteClick(redirect.tag_redirect_id);
-                    }}
-                  >
-                    {isPendingDelete
-                      ? isJapanese
-                        ? "削除中..."
-                        : "Deleting..."
-                      : isDeleteConfirmationActive
+              return (
+                <div key={redirect.tag_redirect_id} className="viewer-tag-management-redirect-item">
+                  <div className="viewer-tag-management-redirect-row">
+                    <div className="viewer-tag-management-redirect-copy">
+                      <strong>{redirect.source_display_name}</strong>
+                      <span aria-hidden="true">→</span>
+                      <strong>{redirect.target_display_name}</strong>
+                    </div>
+                    <button
+                      className={
+                        isDeleteConfirmationActive
+                          ? "viewer-danger-button viewer-tag-management-redirect-delete"
+                          : "viewer-secondary-button viewer-tag-management-redirect-delete viewer-tag-management-redirect-delete-soft"
+                      }
+                      type="button"
+                      disabled={isPendingDelete}
+                      onClick={() => {
+                        handleDeleteClick(redirect.tag_redirect_id);
+                      }}
+                    >
+                      {isPendingDelete
                         ? isJapanese
-                          ? "削除する"
-                          : "Delete"
-                        : isJapanese
-                          ? "削除"
-                          : "Delete"}
-                  </button>
-                </div>
+                          ? "削除中..."
+                          : "Deleting..."
+                        : isDeleteConfirmationActive
+                          ? isJapanese
+                            ? "削除する"
+                            : "Delete"
+                          : isJapanese
+                            ? "削除"
+                            : "Delete"}
+                    </button>
+                  </div>
 
-                {isDeleteConfirmationActive && !isPendingDelete && (
-                  <p className="viewer-settings-inline-note">
-                    {isJapanese
-                      ? "もう一度押すと、この自動タグ変換を削除します。"
-                      : "Press the button again to delete this automatic tag redirect."}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                  {isDeleteConfirmationActive && !isPendingDelete && (
+                    <p className="viewer-settings-inline-note">
+                      {isJapanese
+                        ? "もう一度押すと、この自動タグ変換を削除します。"
+                        : "Press the button again to delete this automatic tag redirect."}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {hasMoreRedirects && (
+            <div className="viewer-incremental-list-footer">
+              <p className="viewer-incremental-list-meta">
+                {isJapanese
+                  ? `残り ${formatCount(remainingRedirectCount, language)} 件の自動タグ変換があります。`
+                  : `${formatCount(remainingRedirectCount, language)} more redirects available.`}
+              </p>
+              <button
+                className="viewer-secondary-button"
+                type="button"
+                onClick={() => {
+                  loadMoreRedirects();
+                }}
+              >
+                {isJapanese ? "さらに表示" : "Load more"}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </section>
   );
+}
+
+function formatCount(value: number, language: ArchiveLanguage): string {
+  return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
 }

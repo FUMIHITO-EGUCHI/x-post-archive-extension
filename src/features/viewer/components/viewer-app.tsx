@@ -54,6 +54,7 @@ import {
   persistViewerSessionRestoreMode
 } from "../viewer-session-storage";
 import { TagPickerOverlay } from "./tag-picker-overlay";
+import { useIncrementalList } from "./use-incremental-list";
 import { useDialogA11y } from "./use-dialog-a11y";
 
 type ViewerStatus = "idle" | "loading" | "ready";
@@ -76,6 +77,7 @@ const FONT_SIZE_SCALE: Record<FontSizeOption, number> = {
   medium: 1,
   large: 1.12
 };
+const FILTER_MODAL_LIST_SIZE = 40;
 const logger = createLogger("viewer");
 
 export function ViewerApp() {
@@ -278,6 +280,44 @@ export function ViewerApp() {
       );
     });
   }, [userSearchQuery, userSummaries]);
+  const requiredVisibleTagOptionCount = useMemo(() => {
+    if (activeTagFilter === null) {
+      return 0;
+    }
+
+    const index = visibleTagOptions.findIndex(
+      ({ tag }) => tag.normalized_name === activeTagFilter
+    );
+    return index < 0 ? 0 : index + 1;
+  }, [activeTagFilter, visibleTagOptions]);
+  const {
+    visibleItems: displayedTagOptions,
+    remainingCount: remainingTagOptionCount,
+    hasMore: hasMoreTagOptions,
+    loadMore: loadMoreTagOptions
+  } = useIncrementalList(visibleTagOptions, {
+    initialCount: FILTER_MODAL_LIST_SIZE,
+    step: FILTER_MODAL_LIST_SIZE,
+    requiredCount: requiredVisibleTagOptionCount
+  });
+  const requiredVisibleUserOptionCount = useMemo(() => {
+    if (activeAuthorFilter === null) {
+      return 0;
+    }
+
+    const index = visibleUserOptions.findIndex((user) => user.screen_name === activeAuthorFilter);
+    return index < 0 ? 0 : index + 1;
+  }, [activeAuthorFilter, visibleUserOptions]);
+  const {
+    visibleItems: displayedUserOptions,
+    remainingCount: remainingUserOptionCount,
+    hasMore: hasMoreUserOptions,
+    loadMore: loadMoreUserOptions
+  } = useIncrementalList(visibleUserOptions, {
+    initialCount: FILTER_MODAL_LIST_SIZE,
+    step: FILTER_MODAL_LIST_SIZE,
+    requiredCount: requiredVisibleUserOptionCount
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -1716,27 +1756,47 @@ export function ViewerApp() {
                   : "No tags match the current search."}
               </p>
             ) : (
-              <div className="viewer-tag-option-list">
-                {visibleTagOptions.map(({ tag, postCount }) => (
-                  <button
-                    key={tag.tag_id}
-                    className={
-                      tag.normalized_name === activeTagFilter
-                        ? "viewer-tag-option viewer-tag-option-active"
-                        : "viewer-tag-option"
-                    }
-                    type="button"
-                    onClick={() => {
-                      void handleToggleTagFilter(tag.normalized_name);
-                    }}
-                  >
-                    <strong>{getTagDisplayName(tag)}</strong>
-                    <span>
-                      {formatCount(postCount, language)} {language === "ja" ? "件" : "posts"}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              <>
+                <div className="viewer-tag-option-list">
+                  {displayedTagOptions.map(({ tag, postCount }) => (
+                    <button
+                      key={tag.tag_id}
+                      className={
+                        tag.normalized_name === activeTagFilter
+                          ? "viewer-tag-option viewer-tag-option-active"
+                          : "viewer-tag-option"
+                      }
+                      type="button"
+                      onClick={() => {
+                        void handleToggleTagFilter(tag.normalized_name);
+                      }}
+                    >
+                      <strong>{getTagDisplayName(tag)}</strong>
+                      <span>
+                        {formatCount(postCount, language)} {language === "ja" ? "件" : "posts"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {hasMoreTagOptions && (
+                  <div className="viewer-incremental-list-footer">
+                    <p className="viewer-incremental-list-meta">
+                      {language === "ja"
+                        ? `残り ${formatCount(remainingTagOptionCount, language)} 件のタグがあります。`
+                        : `${formatCount(remainingTagOptionCount, language)} more tags available.`}
+                    </p>
+                    <button
+                      className="viewer-secondary-button"
+                      type="button"
+                      onClick={() => {
+                        loadMoreTagOptions();
+                      }}
+                    >
+                      {language === "ja" ? "さらに表示" : "Load more"}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </section>
         </div>
@@ -1828,28 +1888,48 @@ export function ViewerApp() {
                   : "No users match the current search."}
               </p>
             ) : (
-              <div className="viewer-tag-option-list">
-                {visibleUserOptions.map((user) => (
-                  <button
-                    key={user.screen_name}
-                    className={
-                      user.screen_name === activeAuthorFilter
-                        ? "viewer-tag-option viewer-tag-option-active"
-                        : "viewer-tag-option"
-                    }
-                    type="button"
-                    onClick={() => {
-                      void handleToggleAuthorFilter(user.screen_name);
-                    }}
-                  >
-                    <strong>{formatUserSummaryLabel(user)}</strong>
-                    <span>
-                      {formatCount(user.post_count, language)}{" "}
-                      {language === "ja" ? "件" : "posts"}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              <>
+                <div className="viewer-tag-option-list">
+                  {displayedUserOptions.map((user) => (
+                    <button
+                      key={user.screen_name}
+                      className={
+                        user.screen_name === activeAuthorFilter
+                          ? "viewer-tag-option viewer-tag-option-active"
+                          : "viewer-tag-option"
+                      }
+                      type="button"
+                      onClick={() => {
+                        void handleToggleAuthorFilter(user.screen_name);
+                      }}
+                    >
+                      <strong>{formatUserSummaryLabel(user)}</strong>
+                      <span>
+                        {formatCount(user.post_count, language)}{" "}
+                        {language === "ja" ? "件" : "posts"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {hasMoreUserOptions && (
+                  <div className="viewer-incremental-list-footer">
+                    <p className="viewer-incremental-list-meta">
+                      {language === "ja"
+                        ? `残り ${formatCount(remainingUserOptionCount, language)} 人のユーザーがいます。`
+                        : `${formatCount(remainingUserOptionCount, language)} more users available.`}
+                    </p>
+                    <button
+                      className="viewer-secondary-button"
+                      type="button"
+                      onClick={() => {
+                        loadMoreUserOptions();
+                      }}
+                    >
+                      {language === "ja" ? "さらに表示" : "Load more"}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </section>
         </div>
