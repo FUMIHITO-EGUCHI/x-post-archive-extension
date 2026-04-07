@@ -64,6 +64,7 @@ import type {
   ArchiveTagRedirectSummaryRecord,
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
+  DateFilterTarget,
   ListPostsPageInput,
   UserSummary
 } from "../../types/viewer";
@@ -1089,27 +1090,38 @@ async function resolveFilteredPostIds(input: ListPostsPageInput): Promise<Set<st
   const tagFilterPostIds =
     input.tagFilter === null ? null : new Set(await listPostIdsByNormalizedName(input.tagFilter));
   const authorFilter = normalizeAuthorFilter(input.authorFilter);
+  const dateFilterTarget = normalizeDateFilterTarget(input.dateFilterTarget);
+  const dateFrom = normalizeDateFilterTimestamp(input.dateFrom);
+  const dateTo = normalizeDateFilterTimestamp(input.dateTo);
+  const dateFilterPostIds =
+    dateFilterTarget === null || (dateFrom === null && dateTo === null)
+      ? null
+      : new Set(await listPostIdsByDateFilter(dateFilterTarget, dateFrom, dateTo));
 
-  if (tagFilterPostIds === null && authorFilter === null) {
+  if (tagFilterPostIds === null && authorFilter === null && dateFilterPostIds === null) {
     return null;
   }
 
   const authorFilterPostIds =
     authorFilter === null ? null : new Set(await listPostIdsByAuthorFilter(authorFilter));
+  const filterSets = [tagFilterPostIds, authorFilterPostIds, dateFilterPostIds].filter(
+    (value): value is Set<string> => value !== null
+  );
 
-  if (tagFilterPostIds === null) {
-    return authorFilterPostIds;
+  if (filterSets.length === 0) {
+    return null;
   }
 
-  if (authorFilterPostIds === null) {
-    return tagFilterPostIds;
-  }
+  const intersection = new Set<string>(filterSets[0]);
 
-  const intersection = new Set<string>();
+  for (const postId of intersection) {
+    for (let index = 1; index < filterSets.length; index += 1) {
+      const currentSet = filterSets[index];
 
-  for (const postId of tagFilterPostIds) {
-    if (authorFilterPostIds.has(postId)) {
-      intersection.add(postId);
+      if (currentSet !== undefined && !currentSet.has(postId)) {
+        intersection.delete(postId);
+        break;
+      }
     }
   }
 
@@ -1133,6 +1145,30 @@ async function listPostIdsByAuthorFilter(authorFilter: string): Promise<string[]
 
   return posts
     .filter((post) => normalizeAuthorFilter(post.x_username) === authorFilter)
+    .map((post) => post.x_post_id);
+}
+
+async function listPostIdsByDateFilter(
+  target: DateFilterTarget,
+  dateFrom: number | null,
+  dateTo: number | null
+): Promise<string[]> {
+  const posts = await listPosts();
+
+  return posts
+    .filter((post) => {
+      const timestamp = target === "saved_at" ? post.saved_at : post.posted_at;
+
+      if (dateFrom !== null && timestamp < dateFrom) {
+        return false;
+      }
+
+      if (dateTo !== null && timestamp > dateTo) {
+        return false;
+      }
+
+      return true;
+    })
     .map((post) => post.x_post_id);
 }
 
@@ -1634,6 +1670,18 @@ function normalizeAuthorFilter(value: string | null): string | null {
 
   const cleaned = value.trim().replace(/^@+/, "").toLocaleLowerCase("en-US");
   return cleaned === "" ? null : cleaned;
+}
+
+function normalizeDateFilterTarget(value: DateFilterTarget | null): DateFilterTarget | null {
+  return value === "saved_at" || value === "posted_at" ? value : null;
+}
+
+function normalizeDateFilterTimestamp(value: number | null): number | null {
+  if (!Number.isFinite(value) || value === null || value < 0) {
+    return null;
+  }
+
+  return Math.floor(value);
 }
 
 function getMediaSourceKey(mediaType: MediaRecord["media_type"], sourceUrl: string): string {

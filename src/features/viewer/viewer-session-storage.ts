@@ -1,4 +1,5 @@
 import type {
+  DateFilterTarget,
   PostSortField,
   SortDirection,
   ViewerSessionRestoreMode,
@@ -59,6 +60,15 @@ function isViewerSessionState(value: unknown): value is ViewerSessionState {
     (candidate.activeAuthorFilter === undefined ||
       candidate.activeAuthorFilter === null ||
       typeof candidate.activeAuthorFilter === "string") &&
+    (candidate.activeDateFilterTarget === undefined ||
+      candidate.activeDateFilterTarget === null ||
+      isDateFilterTarget(candidate.activeDateFilterTarget)) &&
+    (candidate.activeDateFrom === undefined ||
+      candidate.activeDateFrom === null ||
+      typeof candidate.activeDateFrom === "string") &&
+    (candidate.activeDateTo === undefined ||
+      candidate.activeDateTo === null ||
+      typeof candidate.activeDateTo === "string") &&
     typeof candidate.loadedCount === "number" &&
     Number.isFinite(candidate.loadedCount) &&
     candidate.loadedCount >= 0 &&
@@ -84,4 +94,8 @@ function isPostSortField(value: unknown): value is PostSortField {
 
 function isSortDirection(value: unknown): value is SortDirection {
   return value === "asc" || value === "desc";
+}
+
+function isDateFilterTarget(value: unknown): value is DateFilterTarget {
+  return value === "saved_at" || value === "posted_at";
 }

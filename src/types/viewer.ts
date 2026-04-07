@@ -8,6 +8,7 @@ export type PostSortField =
   | "like_count";
 
 export type SortDirection = "desc" | "asc";
+export type DateFilterTarget = "saved_at" | "posted_at";
 
 export type ArchiveTagSummaryRecord = {
   tag: ArchiveTagRecord;
@@ -47,6 +48,9 @@ export type ListPostsPageInput = {
   sortDirection: SortDirection;
   tagFilter: string | null;
   authorFilter: string | null;
+  dateFilterTarget: DateFilterTarget | null;
+  dateFrom: number | null;
+  dateTo: number | null;
 };
 
 export type ViewerSessionRestoreMode = "off" | "filters" | "filters-and-position";
@@ -67,6 +71,9 @@ export type ViewerSessionState = {
   sortDirection: SortDirection;
   activeTagFilter: string | null;
   activeAuthorFilter?: string | null;
+  activeDateFilterTarget?: DateFilterTarget | null;
+  activeDateFrom?: string | null;
+  activeDateTo?: string | null;
   loadedCount: number;
   anchorPostId: string | null;
   scrollTop: number;
