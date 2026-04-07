@@ -1120,6 +1120,7 @@ body {
 
 .viewer-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -1146,6 +1147,9 @@ body {
 }
 
 .post-card {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 20px;
   border: 1px solid rgba(16, 32, 51, 0.08);
   border-radius: 20px;
@@ -1162,14 +1166,21 @@ body {
   gap: 16px;
 }
 
+.post-card-header > :first-child {
+  min-width: 0;
+  flex: 1;
+}
+
 .post-username {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
   margin: 0;
   font-size: calc(18px * var(--viewer-font-scale));
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .post-handle {
@@ -1182,6 +1193,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   margin: 6px 0 0;
   font-size: calc(13px * var(--viewer-font-scale));
   color: #5e7389;
@@ -1192,6 +1204,7 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .post-date-label {
@@ -1202,14 +1215,18 @@ body {
 
 .post-text {
   margin: 16px 0;
+  min-width: 0;
   font-size: calc(24px * var(--viewer-font-scale));
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   line-height: 1.7;
 }
 
 .quoted-post-card {
   display: grid;
   gap: 12px;
+  min-width: 0;
   margin: 16px 0;
   padding: 14px 16px;
   border: 1px solid rgba(16, 32, 51, 0.1);
@@ -1224,14 +1241,20 @@ body {
   gap: 12px;
 }
 
+.quoted-post-header > :first-child {
+  min-width: 0;
+}
+
 .quoted-post-username {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
   margin: 0;
   font-size: calc(15px * var(--viewer-font-scale));
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .quoted-post-date {
@@ -1242,9 +1265,12 @@ body {
 
 .quoted-post-text {
   margin: 0;
+  min-width: 0;
   font-size: calc(16px * var(--viewer-font-scale));
   line-height: 1.6;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .quoted-post-media-grid {
@@ -1258,6 +1284,7 @@ body {
   font-weight: 700;
   color: #1d4ed8;
   text-decoration: none;
+  overflow-wrap: anywhere;
 }
 
 .quoted-post-link:hover {
@@ -1580,9 +1607,12 @@ body {
 }
 
 .post-link {
+  display: inline-block;
+  max-width: 100%;
   color: #1d4ed8;
   text-decoration: none;
   word-break: break-all;
+  overflow-wrap: anywhere;
   font-size: calc(14px * var(--viewer-font-scale));
 }
 
