@@ -108,6 +108,7 @@ export function ViewerApp() {
   const [hasMorePosts, setHasMorePosts] = useState(false);
   const [sortField, setSortField] = useState<PostSortField>("saved_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [randomSeed, setRandomSeed] = useState(() => createRandomSeed());
   const [status, setStatus] = useState<ViewerStatus>("idle");
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -394,6 +395,7 @@ export function ViewerApp() {
 
         let nextSortField: PostSortField = "saved_at";
         let nextSortDirection: SortDirection = "desc";
+        let nextRandomSeed = createRandomSeed();
         let nextTagFilter: string | null = null;
         let nextAuthorFilter: string | null = null;
         let nextDateFilterTarget: DateFilterTarget | null = null;
@@ -410,7 +412,7 @@ export function ViewerApp() {
           nextDateFrom = savedSession.activeDateFrom ?? null;
           nextDateTo = savedSession.activeDateTo ?? null;
 
-          if (nextSessionRestoreMode === "filters-and-position") {
+          if (nextSessionRestoreMode === "filters-and-position" && nextSortField !== "random") {
             initialLimit = Math.max(DEFAULT_PAGE_SIZE, savedSession.loadedCount);
             restoreScrollTopRef.current = savedSession.scrollTop;
             setRestoreTargetPostId(savedSession.anchorPostId);
@@ -419,6 +421,7 @@ export function ViewerApp() {
 
         setSortField(nextSortField);
         setSortDirection(nextSortDirection);
+        setRandomSeed(nextRandomSeed);
         setActiveTagFilter(nextTagFilter);
         setActiveAuthorFilter(nextAuthorFilter);
         setActiveDateFilterTarget(nextDateFilterTarget);
@@ -435,6 +438,7 @@ export function ViewerApp() {
             limit: initialLimit,
             sortField: nextSortField,
             sortDirection: nextSortDirection,
+            randomSeed: nextSortField === "random" ? nextRandomSeed : null,
             tagFilter: nextTagFilter,
             authorFilter: nextAuthorFilter,
             dateFilterTarget: nextDateFilterTarget,
@@ -746,11 +750,19 @@ export function ViewerApp() {
     };
   }
 
+  function getRandomSeedInput(nextSortField = sortField, seedOverride?: number | null) {
+    return {
+      randomSeed:
+        nextSortField === "random" ? seedOverride ?? randomSeed : null
+    };
+  }
+
   async function loadArchivePage(input: {
     offset: number;
     limit: number;
     sortField: PostSortField;
     sortDirection: SortDirection;
+    randomSeed: number | null;
     tagFilter: string | null;
     authorFilter: string | null;
     dateFilterTarget: DateFilterTarget | null;
@@ -772,6 +784,7 @@ export function ViewerApp() {
         limit: input.limit,
         sortField: input.sortField,
         sortDirection: input.sortDirection,
+        randomSeed: input.randomSeed,
         tagFilter: input.tagFilter,
         authorFilter: input.authorFilter,
         ...buildDateFilterRequest(input.dateFilterTarget, input.dateFrom, input.dateTo)
@@ -824,6 +837,7 @@ export function ViewerApp() {
         limit,
         sortField,
         sortDirection,
+        ...getRandomSeedInput(),
         tagFilter: activeTagFilter,
         authorFilter: activeAuthorFilter,
         ...getCurrentDateFilterInput(),
@@ -854,6 +868,7 @@ export function ViewerApp() {
         limit: Math.max(posts.length, DEFAULT_PAGE_SIZE),
         sortField,
         sortDirection,
+        ...getRandomSeedInput(),
         tagFilter: nextTagFilter,
         authorFilter: activeAuthorFilter,
         ...getCurrentDateFilterInput(),
@@ -880,6 +895,7 @@ export function ViewerApp() {
         limit: Math.max(posts.length, DEFAULT_PAGE_SIZE),
         sortField,
         sortDirection,
+        ...getRandomSeedInput(),
         tagFilter: nextTagFilter,
         authorFilter: activeAuthorFilter,
         ...getCurrentDateFilterInput(),
@@ -1060,7 +1076,11 @@ export function ViewerApp() {
   }
 
   async function handleSortFieldChange(nextValue: PostSortField) {
+    const nextRandomSeed = nextValue === "random" ? createRandomSeed() : randomSeed;
     setSortField(nextValue);
+    if (nextValue === "random") {
+      setRandomSeed(nextRandomSeed);
+    }
     window.scrollTo({
       top: 0
     });
@@ -1069,6 +1089,7 @@ export function ViewerApp() {
       limit: DEFAULT_PAGE_SIZE,
       sortField: nextValue,
       sortDirection,
+      ...getRandomSeedInput(nextValue, nextRandomSeed),
       tagFilter: activeTagFilter,
       authorFilter: activeAuthorFilter,
       ...getCurrentDateFilterInput(),
@@ -1077,6 +1098,10 @@ export function ViewerApp() {
   }
 
   async function handleSortDirectionToggle() {
+    if (sortField === "random") {
+      return;
+    }
+
     const nextValue = sortDirection === "desc" ? "asc" : "desc";
     setSortDirection(nextValue);
     window.scrollTo({
@@ -1087,6 +1112,26 @@ export function ViewerApp() {
       limit: DEFAULT_PAGE_SIZE,
       sortField,
       sortDirection: nextValue,
+      ...getRandomSeedInput(),
+      tagFilter: activeTagFilter,
+      authorFilter: activeAuthorFilter,
+      ...getCurrentDateFilterInput(),
+      append: false
+    });
+  }
+
+  async function handleReshuffle() {
+    const nextRandomSeed = createRandomSeed();
+    setRandomSeed(nextRandomSeed);
+    window.scrollTo({
+      top: 0
+    });
+    await loadArchivePage({
+      offset: 0,
+      limit: DEFAULT_PAGE_SIZE,
+      sortField: "random",
+      sortDirection,
+      ...getRandomSeedInput("random", nextRandomSeed),
       tagFilter: activeTagFilter,
       authorFilter: activeAuthorFilter,
       ...getCurrentDateFilterInput(),
@@ -1107,6 +1152,7 @@ export function ViewerApp() {
       limit: DEFAULT_PAGE_SIZE,
       sortField,
       sortDirection,
+      ...getRandomSeedInput(),
       tagFilter: nextValue,
       authorFilter: activeAuthorFilter,
       ...getCurrentDateFilterInput(),
@@ -1127,6 +1173,7 @@ export function ViewerApp() {
       limit: DEFAULT_PAGE_SIZE,
       sortField,
       sortDirection,
+      ...getRandomSeedInput(),
       tagFilter: activeTagFilter,
       authorFilter: nextValue,
       ...getCurrentDateFilterInput(),
@@ -1158,6 +1205,7 @@ export function ViewerApp() {
       limit: DEFAULT_PAGE_SIZE,
       sortField,
       sortDirection,
+      ...getRandomSeedInput(),
       tagFilter: activeTagFilter,
       authorFilter: activeAuthorFilter,
       dateFilterTarget: nextDateFilterTarget,
@@ -1183,6 +1231,7 @@ export function ViewerApp() {
       limit: DEFAULT_PAGE_SIZE,
       sortField,
       sortDirection,
+      ...getRandomSeedInput(),
       tagFilter: activeTagFilter,
       authorFilter: activeAuthorFilter,
       dateFilterTarget: null,
@@ -1198,6 +1247,7 @@ export function ViewerApp() {
       limit: DEFAULT_PAGE_SIZE,
       sortField,
       sortDirection,
+      ...getRandomSeedInput(),
       tagFilter: activeTagFilter,
       authorFilter: activeAuthorFilter,
       ...getCurrentDateFilterInput(),
@@ -1352,6 +1402,7 @@ export function ViewerApp() {
                       void handleSortFieldChange(event.currentTarget.value as PostSortField);
                     }}
                   >
+                    <option value="random">{language === "ja" ? "ランダム" : "Random"}</option>
                     <option value="posted_at">{language === "ja" ? "投稿日時" : "Posted at"}</option>
                     <option value="saved_at">{language === "ja" ? "保存日時" : "Saved at"}</option>
                     <option value="reply_count">{language === "ja" ? "返信数" : "Replies"}</option>
@@ -1359,30 +1410,42 @@ export function ViewerApp() {
                     <option value="like_count">{language === "ja" ? "いいね数" : "Likes"}</option>
                   </select>
                 </label>
-                <button
-                  className="viewer-sort-direction-button"
-                  type="button"
-                  aria-label={
-                    sortDirection === "desc"
+                {sortField === "random" ? (
+                  <button
+                    className="viewer-secondary-button"
+                    type="button"
+                    onClick={() => {
+                      void handleReshuffle();
+                    }}
+                  >
+                    {language === "ja" ? "再シャッフル" : "Reshuffle"}
+                  </button>
+                ) : (
+                  <button
+                    className="viewer-sort-direction-button"
+                    type="button"
+                    aria-label={
+                      sortDirection === "desc"
+                        ? language === "ja"
+                          ? "降順で並び替え中。昇順へ切り替える"
+                          : "Sorting descending. Switch to ascending"
+                        : language === "ja"
+                          ? "昇順で並び替え中。降順へ切り替える"
+                          : "Sorting ascending. Switch to descending"
+                    }
+                    onClick={() => {
+                      void handleSortDirectionToggle();
+                    }}
+                  >
+                    {sortDirection === "desc"
                       ? language === "ja"
-                        ? "降順で並び替え中。昇順へ切り替える"
-                        : "Sorting descending. Switch to ascending"
+                        ? "降順"
+                        : "Desc"
                       : language === "ja"
-                        ? "昇順で並び替え中。降順へ切り替える"
-                        : "Sorting ascending. Switch to descending"
-                  }
-                  onClick={() => {
-                    void handleSortDirectionToggle();
-                  }}
-                >
-                  {sortDirection === "desc"
-                    ? language === "ja"
-                      ? "降順"
-                      : "Desc"
-                    : language === "ja"
-                      ? "昇順"
-                      : "Asc"}
-                </button>
+                        ? "昇順"
+                        : "Asc"}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -2438,6 +2501,13 @@ function isFontSizeOption(value: unknown): value is FontSizeOption {
 
 function formatCount(value: number, language: ArchiveLanguage = "en"): string {
   return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
+}
+
+function createRandomSeed(): number {
+  const seed = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(seed);
+  const nextSeed = seed[0];
+  return nextSeed === undefined || nextSeed === 0 ? 1 : nextSeed;
 }
 
 function GearIcon() {

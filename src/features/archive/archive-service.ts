@@ -14,6 +14,7 @@ import {
   countPosts,
   deletePostRecord,
   getPost,
+  listPostIds,
   getPostsByIds,
   hasPost,
   listPosts,
@@ -251,7 +252,14 @@ export async function listArchivePostsPage(
   }
 
   const pagePosts =
-    matchingPostIds === null
+    input.sortField === "random"
+      ? await listRandomPostsPage(
+          matchingPostIds,
+          normalizedOffset,
+          normalizedLimit,
+          normalizeRandomSeed(input.randomSeed)
+        )
+      : matchingPostIds === null
       ? await listPostsSliceBySort(
           input.sortField,
           input.sortDirection,
@@ -1086,6 +1094,22 @@ async function listFilteredPostsPage(
   return results;
 }
 
+async function listRandomPostsPage(
+  matchingPostIds: Set<string> | null,
+  offset: number,
+  limit: number,
+  randomSeed: number
+): Promise<PostRecord[]> {
+  const orderedIds = matchingPostIds === null ? await listPostIds() : [...matchingPostIds];
+
+  if (orderedIds.length === 0) {
+    return [];
+  }
+
+  shuffleIdsInPlace(orderedIds, randomSeed);
+  return getPostsByIds(orderedIds.slice(offset, offset + limit));
+}
+
 async function resolveFilteredPostIds(input: ListPostsPageInput): Promise<Set<string> | null> {
   const tagFilterPostIds =
     input.tagFilter === null ? null : new Set(await listPostIdsByNormalizedName(input.tagFilter));
@@ -1138,6 +1162,43 @@ function normalizePageLimit(value: number): number {
   }
 
   return Math.min(Math.floor(value), 250);
+}
+
+function normalizeRandomSeed(value: number | null | undefined): number {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+
+  const normalized = Math.floor(Math.abs(value ?? 1)) >>> 0;
+  return normalized === 0 ? 1 : normalized;
+}
+
+function shuffleIdsInPlace(ids: string[], randomSeed: number): void {
+  const random = createSeededRandom(randomSeed);
+
+  for (let index = ids.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    const current = ids[index];
+    const target = ids[swapIndex];
+
+    if (current === undefined || target === undefined) {
+      continue;
+    }
+
+    ids[index] = target;
+    ids[swapIndex] = current;
+  }
+}
+
+function createSeededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let next = Math.imul(state ^ (state >>> 15), state | 1);
+    next ^= next + Math.imul(next ^ (next >>> 7), next | 61);
+    return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 async function listPostIdsByAuthorFilter(authorFilter: string): Promise<string[]> {
