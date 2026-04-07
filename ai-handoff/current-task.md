@@ -1,39 +1,42 @@
 # Current Task
 
 ## Active
-- id: `2026-04-07-viewer-date-range-filter`
-- title: add date-range filtering to the archive list
+- id: `2026-04-07-bulk-import-auto-stop-on-duplicates`
+- title: stop likes / bookmarks bulk import after repeated duplicates
 - owner: `Codex`
 - status: `completed`
 - branch: `feature/archive-viewer-improvements`
 - priority: `high`
-- task_file: `ai-handoff/tasks/2026-04-07-viewer-date-range-filter.md`
+- task_file: `ai-handoff/tasks/2026-04-07-bulk-import-auto-stop-on-duplicates.md`
 
 ## Scope
-- files_in_scope: `src/features/viewer/components/viewer-app.tsx`
-- files_in_scope: `src/features/viewer/viewer-session-storage.ts`
-- files_in_scope: `src/types/viewer.ts`
-- files_in_scope: `src/features/runtime/handle-runtime-message.ts`
-- out_of_scope: advanced query syntax
-- out_of_scope: calendar-heavy UI
-- out_of_scope: archived timestamp rewrites
+- files_in_scope: `src/features/x/likes-import-controls.ts`
+- files_in_scope: `src/features/x/bookmarks-import-controls.ts`
+- files_in_scope: `src/features/settings/archive-settings.ts`
+- files_in_scope: `src/features/viewer/components/settings-basic-panel.tsx`
+- files_in_scope: `src/types/archive.ts`
+- out_of_scope: full import flow rewrite
+- out_of_scope: new deduplication semantics
+- out_of_scope: single-post save behavior changes
 - out_of_scope: commit and push
 
 ## Coordination
 - blocked_by: `none`
 - related_findings: `none`
 - needs_from_claude: `none`
-- handoff_to_codex: keep the date filter lightweight and coherent with existing tag / user filter behavior
+- handoff_to_codex: keep likes / bookmarks bulk import stop behavior coherent and explainable in the overlay
 
 ## Next Action
-- next_action: commit completed `#5` work, then move to the next waiting issue on this branch
-- acceptance_criteria: users can set a date range from the viewer and the archive list updates accordingly
-- acceptance_criteria: the chosen filter target is explicitly documented
-- acceptance_criteria: clearing the date range returns the list to its unfiltered state
-- acceptance_criteria: session restore and existing list loading remain coherent
+- next_action: choose the next active task and update this dashboard before starting implementation
+- acceptance_criteria: likes import stops automatically after the configured repeated-duplicate condition is hit
+- acceptance_criteria: bookmarks import stops automatically under the same rule
+- acceptance_criteria: the overlay explains that the run stopped due to repeated duplicates
+- acceptance_criteria: queued saves still finish and final stats remain visible
 - acceptance_criteria: `npm run typecheck` and `npm run build` pass
 
 ## Recent Updates
+- `2026-04-07 Codex`: reloaded the unpacked extension on shared CDP Chrome, temporarily set the duplicate threshold to `1`, and verified that likes import and bookmarks import both stop automatically with the duplicate-threshold overlay reason; the verification pass also exposed a pending-media-wait queue bug, which was fixed before the final re-test.
+- `2026-04-07 Codex`: implemented issue `#6` on `feature/archive-viewer-improvements` with a shared bulk-import duplicate-only batch threshold setting, duplicate-stop streak tracking for likes / bookmarks import, and stop-reason-aware overlay messaging; `npm run typecheck` and `npm run build` passed.
 - `2026-04-07 Codex`: verified on shared CDP Chrome that the date filter works after extension reload; archive list updates for date-range conditions and the issue can be committed.
 - `2026-04-07 Codex`: implemented issue `#5` on `feature/archive-viewer-improvements` with a dedicated date-filter modal, `saved_at` / `posted_at` target toggle, query-level filtering, session persistence, and active filter banners; `npm run typecheck` and `npm run build` passed.
 - `2026-04-07 Codex`: verified on shared CDP Chrome (`.shared-cdp-profile`, port `9223`) that user filter modal and tag filter modal expand from `40 -> 80`, tag management expands from `50 -> 100`, and the redirect list renders normally with 20 items and no `Load more` button.
@@ -54,9 +57,10 @@
 - `2026-04-05 Claude`: viewer CDP blocker was reduced to extension-loading workflow issues and documented separately.
 
 ## Waiting Tasks
-- `2026-04-07-bulk-import-auto-stop-on-duplicates` (`#6`): stop likes / bookmarks bulk import after repeated duplicates
+- `none`
 
 ## Recently Completed
+- `2026-04-07-bulk-import-auto-stop-on-duplicates`: likes / bookmarks bulk import now auto-stops on repeated duplicate-only batches, with shared threshold settings and verified overlay messaging
 - `2026-04-07-viewer-date-range-filter`: archive date-range filtering added with `saved_at` / `posted_at` target toggle and session restore support
 - `2026-04-06-infinite-scroll-settings-lists`: viewer-side incremental `Load more` rendering added for filter and settings lists
 - `2026-04-04-user-filter`: verified implemented and build-clean; user filter works alongside tag filter
