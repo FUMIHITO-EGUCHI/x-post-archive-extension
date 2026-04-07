@@ -1,37 +1,43 @@
 # Current Task
 
 ## Active
-- id: `2026-04-06-investigate-handoff-encoding`
-- title: investigate Codex / Claude handoff mojibake cause
+- id: `2026-04-07-viewer-date-range-filter`
+- title: add date-range filtering to the archive list
 - owner: `Codex`
-- status: `completed`
+- status: `pending`
 - branch: `master`
 - priority: `high`
-- task_file: `ai-handoff/tasks/2026-04-06-investigate-handoff-encoding.md`
+- task_file: `ai-handoff/tasks/2026-04-07-viewer-date-range-filter.md`
 
 ## Scope
-- files_in_scope: `ai-handoff/README.md`
-- files_in_scope: `ai-handoff/current-task.md`
-- files_in_scope: `ai-handoff/tasks/2026-04-06-investigate-handoff-encoding.md`
-- files_in_scope: `ai-handoff/findings/2026-04-07-handoff-encoding.md`
-- out_of_scope: broad handoff workflow redesign
-- out_of_scope: mass conversion of existing Markdown files
+- files_in_scope: `src/features/viewer/components/viewer-app.tsx`
+- files_in_scope: `src/features/viewer/viewer-session-storage.ts`
+- files_in_scope: `src/types/viewer.ts`
+- files_in_scope: `src/features/runtime/handle-runtime-message.ts`
+- out_of_scope: advanced query syntax
+- out_of_scope: calendar-heavy UI
+- out_of_scope: archived timestamp rewrites
 - out_of_scope: commit and push
 
 ## Coordination
 - blocked_by: `none`
-- related_findings: `ai-handoff/findings/2026-04-07-handoff-encoding.md`
-- needs_from_claude: provide any additional mojibake examples outside PowerShell / CLI if they appear again
-- handoff_to_codex: keep the distinction between file corruption and display-path mojibake explicit
+- related_findings: `none`
+- needs_from_claude: `none`
+- handoff_to_codex: keep the date filter lightweight and coherent with existing tag / user filter behavior
 
 ## Next Action
-- next_action: await user direction for commit/push or selection of the next active task
-- acceptance_criteria: identify whether the mojibake is in stored files or only in CLI / handoff display paths
-- acceptance_criteria: reproduce the main failure conditions with concrete commands
-- acceptance_criteria: document the likely causes in priority order and propose safe operational mitigations
-- acceptance_criteria: leave the investigation in a handoff-ready state under `ai-handoff/findings/`
+- next_action: decide the first date-filter model, implement it in the viewer flow, and document whether it filters `saved_at`, `posted_at`, or both
+- acceptance_criteria: users can set a date range from the viewer and the archive list updates accordingly
+- acceptance_criteria: the chosen filter target is explicitly documented
+- acceptance_criteria: clearing the date range returns the list to its unfiltered state
+- acceptance_criteria: session restore and existing list loading remain coherent
+- acceptance_criteria: `npm run typecheck` and `npm run build` pass
 
 ## Recent Updates
+- `2026-04-07 Codex`: verified on shared CDP Chrome (`.shared-cdp-profile`, port `9223`) that user filter modal and tag filter modal expand from `40 -> 80`, tag management expands from `50 -> 100`, and the redirect list renders normally with 20 items and no `Load more` button.
+- `2026-04-07 Codex`: verified on shared CDP Chrome that selecting `堀出井靖水／新作漫画毎日投稿 (@horideiyasumi)` in the user filter changes the archive list to `50 / 64件` and the first visible handle to `@horideiyasumi`.
+- `2026-04-07 Codex`: completed `2026-04-06-infinite-scroll-settings-lists` by switching tag filter, user filter, tag management, and auto-tag redirect lists to shared `Load more` incremental rendering in the viewer.
+- `2026-04-07 Codex`: verified `2026-04-04-user-filter` is already implemented in code and passes `npm run typecheck` / `npm run build`; no additional code changes were required for that task.
 - `2026-04-07 Codex`: documented the confirmed cause and mitigations in the handoff note, then prepared GitHub issue `#3` for closure.
 - `2026-04-07 Codex`: confirmed the handoff Markdown files themselves are stored as valid UTF-8 Japanese text; raw bytes decode correctly when forced through UTF-8.
 - `2026-04-07 Codex`: reproduced mojibake from Windows PowerShell `Get-Content` without `-Encoding utf8`, which reads UTF-8 no-BOM handoff files as the local ANSI code page and garbles Japanese.
@@ -46,12 +52,11 @@
 - `2026-04-05 Claude`: viewer CDP blocker was reduced to extension-loading workflow issues and documented separately.
 
 ## Waiting Tasks
-- `2026-04-04-user-filter` (`#2`): single-user filter
-- `2026-04-06-infinite-scroll-settings-lists` (`#4`): convert tag filter, user filter, tag management, and auto-tag redirect lists from full render to incremental loading
-- `2026-04-07-viewer-date-range-filter` (`#5`): add date-range filtering to the archive list
 - `2026-04-07-bulk-import-auto-stop-on-duplicates` (`#6`): stop likes / bookmarks bulk import after repeated duplicates
 
 ## Recently Completed
+- `2026-04-06-infinite-scroll-settings-lists`: viewer-side incremental `Load more` rendering added for filter and settings lists
+- `2026-04-04-user-filter`: verified implemented and build-clean; user filter works alongside tag filter
 - `2026-04-06-investigate-handoff-encoding`: files were intact UTF-8; main causes were PowerShell default decoding and unsafe Node/stdout Japanese handling
 - `2026-04-06-investigate-auto-archive`: fixed in `v0.16.2` and verified from a real bookmark click path
 - `2026-04-04-bookmarks-import`: feature shipped in `v0.16.0`; follow-up `v0.16.1` was a restore compatibility fix for `bookmarked`

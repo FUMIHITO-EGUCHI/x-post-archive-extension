@@ -70,20 +70,31 @@
 
 ## Codex Result
 
-<!-- 完了後に記入 -->
+- 完全な無限スクロールではなく、viewer 側だけで完結する `Load more` 方式を採用した。操作の予測可能性が高く、runtime / DB にページングを増やさずに初期描画負荷を下げられるため。
+- `useIncrementalList` 共通フックを追加し、タグ絞り込み、ユーザー絞り込み、タグ管理、自動タグ変換の 4 画面を段階表示へ切り替えた。
+- アクティブなタグ / ユーザーや、タグ管理で選択中・編集中の項目が初期表示件数の外に落ちても見えなくならないよう、必要件数を自動で広げるようにした。
 
 ## Changed Files
 
-<!-- 完了後に記入 -->
+- `src/features/viewer/components/use-incremental-list.ts`
+- `src/features/viewer/components/viewer-app.tsx`
+- `src/features/viewer/components/settings-tag-management-panel.tsx`
+- `src/features/viewer/components/settings-tag-redirects-panel.tsx`
+- `src/entrypoints/viewer/style.css`
 
 ## Verification
 
-<!-- 完了後に記入 -->
+- `npm run typecheck`
+- `npm run build`
+- Shared CDP Chrome (`.shared-cdp-profile`, port `9223`) で user filter modal の候補数が `40 -> 80` に増え、残件数表示が更新されることを確認
+- Shared CDP Chrome 上で tag filter modal の候補数が `40 -> 80` に増え、残件数表示が更新されることを確認
+- Shared CDP Chrome 上で settings の `タグ管理` タブを開き、一覧行数が `50 -> 100` に増え、残件数表示が更新されることを確認
+- Shared CDP Chrome 上で settings の `自動タグ変換` タブを開き、共有 profile では 20 件のため `Load more` が出ず通常一覧表示になることを確認
 
 ## Remaining Issues
 
-<!-- 完了後に記入 -->
+- 自動タグ変換一覧の `Load more` 経路自体は、この shared profile では件数が 20 件しかなく未踏。しきい値超過データでの追試余地はある。
 
 ## Suggested Next Action
 
-<!-- 完了後に記入 -->
+- `#5` の archive date-range filter を設計し、既存の tag / user filter と整合する形で追加する。
