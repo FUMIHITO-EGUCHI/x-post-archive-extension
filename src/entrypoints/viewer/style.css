@@ -1171,6 +1171,13 @@ body {
   flex: 1;
 }
 
+.post-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .post-username {
   display: flex;
   flex-wrap: wrap;
@@ -1631,6 +1638,18 @@ body {
   cursor: pointer;
 }
 
+.post-refetch-button {
+  border: 0;
+  border-radius: 999px;
+  background: #e3eefc;
+  color: #1e4ea8;
+  padding: 10px 14px;
+  font-size: calc(13px * var(--viewer-font-scale));
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.post-refetch-button:disabled,
 .post-delete-button:disabled {
   opacity: 0.7;
   cursor: default;
@@ -1894,6 +1913,11 @@ body {
 :root[data-theme="dark"] .post-delete-button {
   background: var(--color-danger-soft);
   color: var(--color-danger-text);
+}
+
+:root[data-theme="dark"] .post-refetch-button {
+  background: rgba(45, 95, 194, 0.24);
+  color: #c8dcff;
 }
 
 :root[data-theme="dark"] .viewer-tag-management-row {

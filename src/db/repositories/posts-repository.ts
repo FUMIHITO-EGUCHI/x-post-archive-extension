@@ -23,6 +23,13 @@ export async function addPost(post: PostRecord): Promise<void> {
   await archiveDb.posts.add(post);
 }
 
+export async function updatePostFields(
+  xPostId: string,
+  update: Partial<PostRecord>
+): Promise<void> {
+  await archiveDb.posts.update(xPostId, update);
+}
+
 export async function listPosts(): Promise<PostRecord[]> {
   return archiveDb.posts.orderBy("saved_at").reverse().toArray();
 }

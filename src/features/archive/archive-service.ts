@@ -18,7 +18,8 @@ import {
   getPostsByIds,
   hasPost,
   listPosts,
-  listPostsSliceBySort
+  listPostsSliceBySort,
+  updatePostFields
 } from "../../db/repositories/posts-repository";
 import {
   addPostTag,
@@ -1094,6 +1095,98 @@ async function listFilteredPostsPage(
   return results;
 }
 
+export async function refetchArchivePost(
+  xPostId: string,
+  input: SavePostInput,
+  options: {
+    traceId?: string;
+  } = {}
+): Promise<PostRecord> {
+  validateSavePostInput(input);
+
+  if (xPostId !== input.x_post_id) {
+    throw new Error("Refetch target does not match extracted post.");
+  }
+
+  const existingPost = await getPost(xPostId);
+
+  if (existingPost === undefined) {
+    throw new Error("Post not found.");
+  }
+
+  const existingMedia = await listMediaByPostId(xPostId);
+  const preparedMediaUpdate = prepareRefetchedMediaUpdate(xPostId, input, existingMedia);
+  const removedMediaPaths = preparedMediaUpdate.removedRecords.flatMap((record) =>
+    [record.opfs_path, record.preview_image_opfs_path].filter(
+      (path): path is string => typeof path === "string" && path.trim() !== ""
+    )
+  );
+
+  const updatedPost: PostRecord = {
+    ...existingPost,
+    display_name: input.display_name.trim(),
+    x_username: input.x_username.trim(),
+    post_text: input.post_text.trim(),
+    post_url: input.post_url.trim(),
+    posted_at: input.posted_at,
+    reply_count: input.reply_count,
+    repost_count: input.repost_count,
+    like_count: input.like_count
+  };
+
+  await archiveDb.transaction("rw", archiveDb.posts, archiveDb.media, async () => {
+    await updatePostFields(xPostId, {
+      display_name: updatedPost.display_name,
+      x_username: updatedPost.x_username,
+      post_text: updatedPost.post_text,
+      post_url: updatedPost.post_url,
+      posted_at: updatedPost.posted_at,
+      reply_count: updatedPost.reply_count,
+      repost_count: updatedPost.repost_count,
+      like_count: updatedPost.like_count
+    });
+
+    if (preparedMediaUpdate.removedRecords.length > 0) {
+      for (const record of preparedMediaUpdate.removedRecords) {
+        await archiveDb.media.delete(record.media_id);
+      }
+    }
+
+    for (const record of preparedMediaUpdate.reusedRecords) {
+      await archiveDb.media.put(record);
+    }
+
+    if (preparedMediaUpdate.newRecords.length > 0) {
+      await addMediaRecords(preparedMediaUpdate.newRecords);
+    }
+  });
+
+  for (const opfsPath of removedMediaPaths) {
+    try {
+      await deleteBlobFromOpfs(opfsPath);
+    } catch {
+      // Best-effort cleanup only; stale files should not block refetch completion.
+    }
+  }
+
+  if (preparedMediaUpdate.persistRecords.length > 0) {
+    enqueueMediaPersistence(preparedMediaUpdate.persistRecords, options.traceId);
+  }
+
+  logger.info("post.refetch.persisted", {
+    context: {
+      xPostId,
+      removedMediaCount: preparedMediaUpdate.removedRecords.length,
+      reusedMediaCount: preparedMediaUpdate.reusedRecords.length,
+      newMediaCount: preparedMediaUpdate.newRecords.length,
+      persistMediaCount: preparedMediaUpdate.persistRecords.length,
+      traceId: options.traceId ?? null
+    }
+  });
+
+  return updatedPost;
+}
+
 async function listRandomPostsPage(
   matchingPostIds: Set<string> | null,
   offset: number,
@@ -1731,6 +1824,113 @@ function normalizeAuthorFilter(value: string | null): string | null {
 
   const cleaned = value.trim().replace(/^@+/, "").toLocaleLowerCase("en-US");
   return cleaned === "" ? null : cleaned;
+}
+
+function prepareRefetchedMediaUpdate(
+  xPostId: string,
+  input: SavePostInput,
+  existingMedia: MediaRecord[]
+): {
+  reusedRecords: MediaRecord[];
+  newRecords: MediaRecord[];
+  removedRecords: MediaRecord[];
+  persistRecords: MediaRecord[];
+} {
+  const savedAt = Date.now();
+  const existingBySourceKey = new Map<string, MediaRecord>();
+
+  for (const media of existingMedia) {
+    existingBySourceKey.set(getMediaSourceKey(media.media_type, media.source_url), media);
+  }
+
+  const nextRecords: MediaRecord[] = [];
+  const persistRecords: MediaRecord[] = [];
+  const seenSourceKeys = new Set<string>();
+
+  for (const image of input.media) {
+    const sourceKey = getMediaSourceKey("image", image.source_url);
+    const existing = existingBySourceKey.get(sourceKey);
+
+    seenSourceKeys.add(sourceKey);
+
+    if (existing === undefined) {
+      const nextRecord = createPendingImageRecord(xPostId, image, savedAt);
+      nextRecords.push(nextRecord);
+      persistRecords.push(nextRecord);
+      continue;
+    }
+
+    const reusedRecord: MediaRecord = {
+      ...existing,
+      source_url: image.source_url,
+      position: image.position,
+      alt_text: image.alt_text,
+      width: image.width,
+      height: image.height
+    };
+
+    if (existing.storage_status !== "ready") {
+      reusedRecord.storage_status = "pending";
+      reusedRecord.last_error = null;
+      reusedRecord.byte_size = null;
+      reusedRecord.mime_type = null;
+      persistRecords.push(reusedRecord);
+    }
+
+    nextRecords.push(reusedRecord);
+  }
+
+  for (const [index, candidate] of (input.video_candidates ?? [])
+    .filter((video) => video.download_mode === "direct_mp4")
+    .entries()) {
+    const sourceKey = getMediaSourceKey("video", candidate.source_url);
+    const existing = existingBySourceKey.get(sourceKey);
+
+    seenSourceKeys.add(sourceKey);
+
+    if (existing === undefined) {
+      const nextRecord = createPendingVideoRecord(xPostId, candidate, savedAt, input.media.length + index);
+      nextRecords.push(nextRecord);
+      persistRecords.push(nextRecord);
+      continue;
+    }
+
+    const reusedRecord: MediaRecord = {
+      ...existing,
+      source_url: candidate.source_url,
+      preview_image_url: candidate.thumbnail_url ?? candidate.poster_url,
+      position: input.media.length + index,
+      width: candidate.width,
+      height: candidate.height,
+      mime_type: candidate.mime_type
+    };
+
+    if (existing.storage_status !== "ready") {
+      reusedRecord.storage_status = "pending";
+      reusedRecord.last_error = null;
+      reusedRecord.byte_size = null;
+      persistRecords.push(reusedRecord);
+    }
+
+    nextRecords.push(reusedRecord);
+  }
+
+  const removedRecords = existingMedia.filter(
+    (media) => !seenSourceKeys.has(getMediaSourceKey(media.media_type, media.source_url))
+  );
+  const reusedRecords = nextRecords.filter((record) =>
+    existingBySourceKey.has(getMediaSourceKey(record.media_type, record.source_url))
+  );
+  const newRecords = nextRecords.filter(
+    (record) => !existingBySourceKey.has(getMediaSourceKey(record.media_type, record.source_url))
+  );
+
+  return {
+    reusedRecords: dedupeMediaRecordsById(reusedRecords),
+    newRecords: dedupeMediaRecordsById(newRecords),
+    removedRecords: dedupeMediaRecordsById(removedRecords),
+    persistRecords: dedupeMediaRecordsById(persistRecords)
+  };
 }
 
 function normalizeDateFilterTarget(value: DateFilterTarget | null): DateFilterTarget | null {

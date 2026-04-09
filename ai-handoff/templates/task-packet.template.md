@@ -1,5 +1,7 @@
 # Task Packet
 
+<!-- Keep task packets directly under ai-handoff/tasks/. Track state in current-task.md and this note; do not move files between status folders. -->
+
 ## Goal
 
 ## Requested Action

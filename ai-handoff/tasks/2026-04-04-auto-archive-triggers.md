@@ -188,10 +188,28 @@ installLikeBookmarkInterceptor();
 
 ## Codex Result
 
+- auto-archive settings for like / bookmark triggers are implemented in the codebase and wired through viewer settings, content script interception, and the save flow
+- browser-side verification confirmed the feature works, so this task can be treated as complete without additional code changes
+
 ## Changed Files
+
+- `src/types/archive.ts`
+- `src/types/viewer.ts`
+- `src/features/settings/archive-settings.ts`
+- `src/features/x/intercept-like-bookmark-actions.ts`
+- `src/features/x/bootstrap-x-content-script.ts`
+- `src/features/viewer/components/settings-basic-panel.tsx`
+- `src/features/x/inject-save-button.ts`
+- `src/features/logging/logger.ts`
 
 ## Verification
 
+- browser-side manual verification completed on 2026-04-08
+
 ## Remaining Issues
 
+- none for this task; follow-up work moved to later auto-archive investigation / fix tasks that are already completed separately
+
 ## Suggested Next Action
+
+- keep this task closed and choose the next unfinished task from `ai-handoff/current-task.md`

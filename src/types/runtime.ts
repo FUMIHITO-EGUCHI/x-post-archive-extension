@@ -7,6 +7,10 @@ import type {
 } from "./archive";
 import type { LogLevel } from "./logger";
 import type {
+  RefetchQueuePriority,
+  RefetchStatusRecord
+} from "./refetch";
+import type {
   ArchiveSummaryRecord,
   ArchiveTagRedirectSummaryRecord,
   ArchiveTagSummaryRecord,
@@ -91,6 +95,32 @@ export type DeleteTagRedirectMessage = {
   tagRedirectId: string;
 };
 
+export type RefetchEnqueueMessage = {
+  type: "refetch.enqueue";
+  priority: RefetchQueuePriority;
+  xPostIds?: string[];
+  enqueueAll?: boolean;
+};
+
+export type RefetchStatusMessage = {
+  type: "refetch.status";
+};
+
+export type RefetchCancelMessage = {
+  type: "refetch.cancel";
+};
+
+export type RefetchClearMessage = {
+  type: "refetch.clear";
+};
+
+export type RefetchCompleteMessage = {
+  type: "refetch.complete";
+  xPostId: string;
+  post: SavePostInput | null;
+  error?: string | null;
+};
+
 export type ClearLogsMessage = {
   type: "logs/clear";
 };
@@ -120,6 +150,11 @@ export type RuntimeMessage =
   | MergeTagsMessage
   | ListTagRedirectsMessage
   | DeleteTagRedirectMessage
+  | RefetchEnqueueMessage
+  | RefetchStatusMessage
+  | RefetchCancelMessage
+  | RefetchClearMessage
+  | RefetchCompleteMessage
   | ClearLogsMessage
   | DebugLogMessage;
 
@@ -226,6 +261,33 @@ export type DeleteTagRedirectResponse = {
   deleted: boolean;
 };
 
+export type RefetchEnqueueResponse = {
+  type: "refetch.enqueue";
+  enqueuedCount: number;
+  status: RefetchStatusRecord;
+};
+
+export type RefetchStatusResponse = {
+  type: "refetch.status";
+  status: RefetchStatusRecord;
+};
+
+export type RefetchCancelResponse = {
+  type: "refetch.cancel";
+  status: RefetchStatusRecord;
+};
+
+export type RefetchClearResponse = {
+  type: "refetch.clear";
+  cleared: boolean;
+  status: RefetchStatusRecord;
+};
+
+export type RefetchCompleteResponse = {
+  type: "refetch.complete";
+  accepted: boolean;
+};
+
 export type ClearLogsResponse = {
   type: "logs/clear-result";
   deleted: boolean;
@@ -252,5 +314,10 @@ export type RuntimeResponse =
   | MergeTagsResponse
   | ListTagRedirectsResponse
   | DeleteTagRedirectResponse
+  | RefetchEnqueueResponse
+  | RefetchStatusResponse
+  | RefetchCancelResponse
+  | RefetchClearResponse
+  | RefetchCompleteResponse
   | ClearLogsResponse
   | RuntimeErrorResponse;
