@@ -23,11 +23,13 @@ import {
 } from "../../db/repositories/posts-repository";
 import {
   addPostTag,
+  bulkAddPostTagRecords,
   countPostTagLinksByTagId,
   deletePostTag,
   deletePostTagsByPostId,
   getPostTagByNormalizedName,
   listAllPostTags,
+  listPostIdsByTagId,
   listPostIdsByNormalizedName,
   listPostTagsByTagId,
   listPostTagsByPostId,
@@ -68,6 +70,7 @@ import type {
   ArchiveTagSummaryRecord,
   DateFilterTarget,
   ListPostsPageInput,
+  PostFilterInput,
   UserSummary
 } from "../../types/viewer";
 import {
@@ -758,6 +761,98 @@ export async function mergeTags(
   return {
     mergedPostCount,
     removedDuplicateCount
+  };
+}
+
+export async function bulkAssignTagPreview(
+  filter: PostFilterInput,
+  targetTagName: string
+): Promise<{
+  candidatePostIds: string[];
+  targetTagId: string;
+  targetNormalizedName: string;
+  targetDisplayName: string;
+  totalMatchCount: number;
+  skipCount: number;
+}> {
+  const normalizedName = normalizeTagName(targetTagName);
+
+  if (normalizedName === null) {
+    throw new Error("Invalid tag name.");
+  }
+
+  const cleanedDisplayName = cleanupTagName(targetTagName);
+  const pageInput: ListPostsPageInput = {
+    offset: 0,
+    limit: 1,
+    sortField: "saved_at",
+    sortDirection: "desc",
+    randomSeed: null,
+    tagFilter: filter.tagFilter,
+    authorFilter: filter.authorFilter,
+    dateFilterTarget: filter.dateFilterTarget,
+    dateFrom: filter.dateFrom,
+    dateTo: filter.dateTo
+  };
+  const matchingPostIds = await resolveFilteredPostIds(pageInput);
+  const resolvedPostIds = matchingPostIds === null ? await listPostIds() : [...matchingPostIds];
+  const totalMatchCount = resolvedPostIds.length;
+
+  let tag = await getTagByNormalizedName(normalizedName);
+
+  if (tag === undefined) {
+    tag = {
+      tag_id: crypto.randomUUID(),
+      normalized_name: normalizedName,
+      display_name: cleanedDisplayName,
+      system_key: null,
+      created_at: Date.now()
+    };
+    await addTag(tag);
+  }
+
+  const alreadyTaggedIds = new Set(await listPostIdsByTagId(tag.tag_id));
+  const candidatePostIds = resolvedPostIds.filter((postId) => !alreadyTaggedIds.has(postId));
+
+  return {
+    candidatePostIds,
+    targetTagId: tag.tag_id,
+    targetNormalizedName: tag.normalized_name,
+    targetDisplayName: tag.display_name,
+    totalMatchCount,
+    skipCount: totalMatchCount - candidatePostIds.length
+  };
+}
+
+export async function bulkAssignTagApplyBatch(
+  postIds: string[],
+  targetTagId: string,
+  targetNormalizedName: string,
+  targetDisplayName: string
+): Promise<{
+  tagged: number;
+}> {
+  if (postIds.length === 0) {
+    return {
+      tagged: 0
+    };
+  }
+
+  const now = Date.now();
+  const records: PostTagRecord[] = postIds.map((postId) => ({
+    post_tag_id: crypto.randomUUID(),
+    x_post_id: postId,
+    tag_id: targetTagId,
+    normalized_name: targetNormalizedName,
+    display_name: targetDisplayName,
+    system_key: null,
+    source: "manual",
+    assigned_at: now
+  }));
+
+  const tagged = await bulkAddPostTagRecords(records);
+  return {
+    tagged
   };
 }
 

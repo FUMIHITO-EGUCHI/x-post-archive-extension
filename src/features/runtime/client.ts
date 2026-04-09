@@ -2,6 +2,8 @@ import type { SavePostInput } from "../../types/archive";
 import type {
   AddPostTagByNameMessage,
   AddPostTagByNameResponse,
+  BulkAssignTagApplyBatchResponse,
+  BulkAssignTagPreviewResponse,
   ClearLogsResponse,
   DeleteTagRedirectResponse,
   DeletePostResponse,
@@ -29,7 +31,7 @@ import type {
   SavePostsBatchResponse
 } from "../../types/runtime";
 import type { RefetchQueuePriority } from "../../types/refetch";
-import type { ListPostsPageInput } from "../../types/viewer";
+import type { ListPostsPageInput, PostFilterInput } from "../../types/viewer";
 
 const DEFAULT_RUNTIME_TIMEOUT_MS = 30000;
 const SAVE_RUNTIME_TIMEOUT_MS = 180000;
@@ -255,6 +257,50 @@ export async function requestDeleteTagRedirect(
 
   if (response.type !== "tag.redirects.delete") {
     throw new Error("Unexpected runtime response for tag redirect delete request.");
+  }
+
+  return response;
+}
+
+export async function requestBulkAssignTagPreview(
+  filter: PostFilterInput,
+  targetTagName: string
+): Promise<BulkAssignTagPreviewResponse> {
+  const response = await sendMessage(
+    {
+      type: "tag.bulk-assign.preview",
+      filter,
+      targetTagName
+    },
+    DEFAULT_RUNTIME_TIMEOUT_MS
+  );
+
+  if (response.type !== "tag.bulk-assign.preview") {
+    throw new Error("Unexpected runtime response for bulk assign preview.");
+  }
+
+  return response;
+}
+
+export async function requestBulkAssignTagApplyBatch(
+  postIds: string[],
+  targetTagId: string,
+  targetNormalizedName: string,
+  targetDisplayName: string
+): Promise<BulkAssignTagApplyBatchResponse> {
+  const response = await sendMessage(
+    {
+      type: "tag.bulk-assign.apply-batch",
+      postIds,
+      targetTagId,
+      targetNormalizedName,
+      targetDisplayName
+    },
+    DEFAULT_RUNTIME_TIMEOUT_MS
+  );
+
+  if (response.type !== "tag.bulk-assign.apply-batch") {
+    throw new Error("Unexpected runtime response for bulk assign apply batch.");
   }
 
   return response;

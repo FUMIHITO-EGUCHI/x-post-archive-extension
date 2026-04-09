@@ -1,5 +1,7 @@
 import {
   addPostTagByName,
+  bulkAssignTagApplyBatch,
+  bulkAssignTagPreview,
   deleteArchiveTagRedirect,
   deleteArchivePost,
   getArchiveSummary,
@@ -26,6 +28,8 @@ import {
 import { clearLogRecords } from "../../db/repositories/logs-repository";
 import type {
   AddPostTagByNameResponse,
+  BulkAssignTagApplyBatchResponse,
+  BulkAssignTagPreviewResponse,
   ClearLogsResponse,
   DeleteTagRedirectResponse,
   DeletePostMessage,
@@ -416,6 +420,29 @@ export async function handleRuntimeMessage(
       return response;
     }
 
+    case "tag.bulk-assign.preview": {
+      const result = await bulkAssignTagPreview(message.filter, message.targetTagName);
+      const response: BulkAssignTagPreviewResponse = {
+        type: "tag.bulk-assign.preview",
+        ...result
+      };
+      return response;
+    }
+
+    case "tag.bulk-assign.apply-batch": {
+      const result = await bulkAssignTagApplyBatch(
+        message.postIds,
+        message.targetTagId,
+        message.targetNormalizedName,
+        message.targetDisplayName
+      );
+      const response: BulkAssignTagApplyBatchResponse = {
+        type: "tag.bulk-assign.apply-batch",
+        tagged: result.tagged
+      };
+      return response;
+    }
+
     case "refetch.enqueue": {
       const result = await enqueueRefetchPosts({
         priority: message.priority,
@@ -508,6 +535,8 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "tag.merge" ||
     candidate.type === "tag.redirects.list" ||
     candidate.type === "tag.redirects.delete" ||
+    candidate.type === "tag.bulk-assign.preview" ||
+    candidate.type === "tag.bulk-assign.apply-batch" ||
     candidate.type === "refetch.enqueue" ||
     candidate.type === "refetch.status" ||
     candidate.type === "refetch.cancel" ||

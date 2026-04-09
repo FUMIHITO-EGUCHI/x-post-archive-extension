@@ -32,6 +32,16 @@ export type RefetchCheckMessage = {
   xPostId: string;
 };
 
+export type RefetchCheckResponse = {
+  found: boolean;
+  extracted: boolean;
+  waitingForMedia: boolean;
+  imageHintCount: number;
+  videoHintCount: number;
+  savableMediaCount: number;
+  warmupApplied: boolean;
+};
+
 export type RefetchCompletePayload = {
   xPostId: string;
   post: SavePostInput | null;

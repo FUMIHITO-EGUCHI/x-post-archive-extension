@@ -8,6 +8,7 @@ import {
 } from "../../db/repositories/refetch-queue-repository";
 import type {
   RefetchCheckMessage,
+  RefetchCheckResponse,
   RefetchCompletePayload,
   RefetchQueuePriority,
   RefetchStatusRecord
@@ -17,7 +18,8 @@ import { refetchArchivePost } from "../archive/archive-service";
 import { createLogger } from "../logging/logger";
 
 const REFETCH_TAB_TRIGGER_INTERVAL_MS = 500;
-const REFETCH_WAIT_TIMEOUT_MS = 30_000;
+const REFETCH_WAIT_NO_PROGRESS_TIMEOUT_MS = 15_000;
+const REFETCH_WAIT_HARD_TIMEOUT_MS = 90_000;
 const REFETCH_NAVIGATION_TIMEOUT_MS = 30_000;
 const REFETCH_TAB_URL = "https://x.com/home";
 
@@ -314,19 +316,38 @@ async function extractPostFromRefetchTab(
       resolve
     });
   });
-  const deadline = Date.now() + REFETCH_WAIT_TIMEOUT_MS;
+  const hardDeadline = Date.now() + REFETCH_WAIT_HARD_TIMEOUT_MS;
+  let lastProgressAt = Date.now();
+  let previousResponse: RefetchCheckResponse | null = null;
 
-  while (Date.now() < deadline) {
+  while (
+    Date.now() < hardDeadline &&
+    Date.now() - lastProgressAt < REFETCH_WAIT_NO_PROGRESS_TIMEOUT_MS
+  ) {
+    let checkResponse: RefetchCheckResponse | null = null;
+
     try {
-      await browser.tabs.sendMessage(tabId, {
+      const response = await browser.tabs.sendMessage(tabId, {
         type: "refetch.check",
         xPostId
       } satisfies RefetchCheckMessage);
+
+      if (isRefetchCheckResponse(response)) {
+        checkResponse = response;
+      }
     } catch {
       // The content script may not be ready yet; keep polling until timeout.
     }
 
-    const remainingMs = deadline - Date.now();
+    if (hasRefetchProgress(previousResponse, checkResponse)) {
+      lastProgressAt = Date.now();
+    }
+
+    if (checkResponse !== null) {
+      previousResponse = checkResponse;
+    }
+
+    const remainingMs = hardDeadline - Date.now();
     const result = await Promise.race([
       completionPromise,
       wait(Math.min(REFETCH_TAB_TRIGGER_INTERVAL_MS, remainingMs)).then(() => null)
@@ -339,6 +360,11 @@ async function extractPostFromRefetchTab(
   }
 
   pendingResults.delete(xPostId);
+
+  if (previousResponse?.waitingForMedia === true) {
+    throw new Error("Media did not materialize in the inactive refetch tab before timeout.");
+  }
+
   throw new Error("Timed out while waiting for the X page to expose the target post.");
 }
 
@@ -346,4 +372,39 @@ function wait(durationMs: number): Promise<void> {
   return new Promise((resolve) => {
     globalThis.setTimeout(resolve, durationMs);
   });
+}
+
+function isRefetchCheckResponse(value: unknown): value is RefetchCheckResponse {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof Reflect.get(value, "found") === "boolean" &&
+    typeof Reflect.get(value, "extracted") === "boolean" &&
+    typeof Reflect.get(value, "waitingForMedia") === "boolean" &&
+    typeof Reflect.get(value, "imageHintCount") === "number" &&
+    typeof Reflect.get(value, "videoHintCount") === "number" &&
+    typeof Reflect.get(value, "savableMediaCount") === "number" &&
+    typeof Reflect.get(value, "warmupApplied") === "boolean"
+  );
+}
+
+function hasRefetchProgress(
+  previousResponse: RefetchCheckResponse | null,
+  nextResponse: RefetchCheckResponse | null
+): boolean {
+  if (nextResponse === null) {
+    return false;
+  }
+
+  if (previousResponse === null) {
+    return nextResponse.found || nextResponse.extracted || nextResponse.warmupApplied;
+  }
+
+  return (
+    (previousResponse.found === false && nextResponse.found === true) ||
+    nextResponse.savableMediaCount > previousResponse.savableMediaCount ||
+    nextResponse.imageHintCount !== previousResponse.imageHintCount ||
+    nextResponse.videoHintCount !== previousResponse.videoHintCount ||
+    (previousResponse.warmupApplied === false && nextResponse.warmupApplied === true)
+  );
 }
