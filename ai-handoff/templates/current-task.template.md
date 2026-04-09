@@ -1,18 +1,41 @@
 # Current Task
 
-## Active Task
+## Active
 - id:
 - title:
 - owner:
 - status:
-- task file: `ai-handoff/tasks/...`
-- related findings:
+- branch:
+- priority:
+- task_file:
 
-## Goal
+## Scope
+- files_in_scope:
+- out_of_scope:
+
+## Coordination
+- blocked_by:
+- related_findings:
+- needs_from_claude:
+- handoff_to_codex:
 
 ## Next Action
+- next_action:
+- acceptance_criteria:
 
-## Blockers
+## Completion Checklist
+- [ ] implementation finished
+- [ ] `npm run typecheck`
+- [ ] `npm run build`
+- [ ] task packet updated
+- [ ] `current-task.md` updated
+- [ ] `npm run handoff:check`
 
-## Related Docs
-- `docs/tech-index.md`
+## Recent Updates
+- 
+
+## Waiting Tasks
+- 
+
+## Recently Completed
+- 

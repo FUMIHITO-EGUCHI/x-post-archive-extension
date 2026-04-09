@@ -6,55 +6,61 @@ Long-term specs and decisions belong in `docs/`.
 ## Structure
 
 - `current-task.md`
-  - Dashboard for exactly one active task
-  - Tracks the current owner, scope, next action, and recently completed work
+  - dashboard for exactly one active task
+  - the source of truth for what is currently active
 - `tasks/`
-  - One task packet per file
-  - Keep this directory flat
-  - Do not split into `todo/`, `in-progress/`, or `done/`
+  - one markdown file per task packet
+  - kept flat; do not split into `todo/`, `in-progress/`, or `done/`
 - `findings/`
-  - Investigation notes and compressed debugging results
+  - compressed investigation notes
 - `templates/`
-  - Templates for `current-task`, task packets, and finding notes
+  - templates for `current-task.md` and task packets
 - `archive/`
-  - Old handoff files that are no longer active
-
-## Task State Policy
-
-- Task state is tracked in `current-task.md` and inside each task note
-- Do not move task files to represent status changes
-- Keep task packets at `ai-handoff/tasks/*.md`
-- This avoids breaking:
-  - `task_file:` links in `current-task.md`
-  - direct references inside task notes and findings
-  - grep/search workflows and git history continuity
+  - older handoff files that no longer need to stay active
 
 ## Workflow
 
-1. Create or update a task packet in `ai-handoff/tasks/`
-2. Record investigation details in `ai-handoff/findings/` when needed
-3. Point `current-task.md` at the active task and related findings
-4. During implementation, update the task note with `Codex Result`, `Changed Files`, `Verification`, and `Remaining Issues`
-5. When the task is done, update `current-task.md` instead of moving the task file
-6. Archive only when the handoff document itself is no longer useful in `tasks/` or `findings/`
+1. Create or update the task packet in `ai-handoff/tasks/`
+2. Point `ai-handoff/current-task.md` at that packet
+3. Implement the work
+4. Before marking the task completed, update both:
+   - the task packet
+   - `current-task.md`
+5. Leave task packets in `tasks/`; do not move files just to reflect status
+
+## Definition Of Done
+
+A task is not complete until all of the following are true:
+
+- code changes are finished
+- `npm run typecheck` passed
+- `npm run build` passed
+- the task packet has a non-empty `Codex Result` or `Result` section
+- the task packet has a non-empty `Verification` section
+- `current-task.md` was updated
+  - `Recent Updates`
+  - `Recently Completed`
+  - `Next Action`
+- `npm run handoff:check` passed
+
+If code is done but handoff is not updated, the task is still incomplete.
+
+## Operational Rules
+
+- Keep `ai-handoff/tasks/` flat
+- Prefer UTF-8 reads and writes when touching handoff markdown on Windows
+- Do not move task files just to reflect status
+- Use `current-task.md` and the task packet body as the status source of truth
+- When a task is already implemented in code but its packet is stale, update the packet before closing it
 
 ## Boundary With `docs/`
 
-- Keep in `ai-handoff/`:
-  - short-term implementation coordination
-  - compressed findings for current work
-  - temporary handoff context
-- Keep in `docs/`:
-  - durable requirements
-  - MVP scope decisions
-  - data model and architecture decisions
+- `ai-handoff/`
+  - short-term coordination
+  - investigation notes
+  - active implementation context
+- `docs/`
+  - requirements
+  - MVP planning
+  - stable design and architecture
   - long-lived implementation guidance
-
-## Writing Rules
-
-- Keep logs compressed, not raw
-- Separate scope and non-scope clearly
-- List concrete files to read first
-- Write explicit acceptance criteria
-- Fill in `Codex Result / Verification / Remaining Issues` when closing a task
-- Read Markdown with explicit UTF-8 handling on Windows when needed

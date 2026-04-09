@@ -186,10 +186,34 @@ interface TagPickerOverlayProps {
 
 ## Codex Result
 
+- Inline tag editing is already implemented in the codebase.
+- Added runtime messages `post_tag.add` and `post_tag.remove` in [src/types/runtime.ts](/c:/Users/kurah/Documents/Git/x-post-archive-extension/src/types/runtime.ts).
+- Added archive-service handlers `addPostTagByName()` and `removePostTagByName()` in [src/features/archive/archive-service.ts](/c:/Users/kurah/Documents/Git/x-post-archive-extension/src/features/archive/archive-service.ts).
+- Wired the runtime handlers in [src/features/runtime/handle-runtime-message.ts](/c:/Users/kurah/Documents/Git/x-post-archive-extension/src/features/runtime/handle-runtime-message.ts) and the viewer-side client calls in [src/features/runtime/client.ts](/c:/Users/kurah/Documents/Git/x-post-archive-extension/src/features/runtime/client.ts).
+- Added the inline editor UI in [src/features/viewer/components/tag-picker-overlay.tsx](/c:/Users/kurah/Documents/Git/x-post-archive-extension/src/features/viewer/components/tag-picker-overlay.tsx) and connected it from [src/features/viewer/components/viewer-app.tsx](/c:/Users/kurah/Documents/Git/x-post-archive-extension/src/features/viewer/components/viewer-app.tsx).
+- The repository layer already supports the required post-tag add/remove lookups in [src/db/repositories/post-tags-repository.ts](/c:/Users/kurah/Documents/Git/x-post-archive-extension/src/db/repositories/post-tags-repository.ts).
+
 ## Changed Files
+
+- `src/types/runtime.ts`
+- `src/features/archive/archive-service.ts`
+- `src/features/runtime/handle-runtime-message.ts`
+- `src/features/runtime/client.ts`
+- `src/features/viewer/components/tag-picker-overlay.tsx`
+- `src/features/viewer/components/viewer-app.tsx`
+- `src/db/repositories/post-tags-repository.ts`
 
 ## Verification
 
+- `npm run typecheck`
+- `npm run build`
+- Code inspection confirmed the viewer can open the inline tag picker, add manual tags, remove existing manual tags, exclude built-in tags from editable suggestions, and refresh `availableTags` after mutations.
+
 ## Remaining Issues
 
+- No active blocker is recorded for this task.
+- If a future task expands inline editing UX, use a new task rather than reopening this packet as unfinished MVP scope.
+
 ## Suggested Next Action
+
+- Keep this task closed. Any future enhancements should be handled as a follow-up task.

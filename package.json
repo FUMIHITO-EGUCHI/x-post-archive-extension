@@ -8,6 +8,7 @@
     "build": "wxt build",
     "zip": "wxt zip",
     "typecheck": "tsc --noEmit",
+    "handoff:check": "node scripts/check-handoff-consistency.mjs",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
