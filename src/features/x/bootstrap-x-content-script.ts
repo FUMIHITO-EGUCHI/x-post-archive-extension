@@ -1,5 +1,6 @@
 import type { ContentScriptContext } from "#imports";
 import { requestHasPost, requestSavePost } from "../runtime/client";
+import type { RefetchCheckMessage } from "../../types/refetch";
 import {
   buildLocalizedDefaultAutoTags,
   loadArchiveLanguage
@@ -41,11 +42,13 @@ let bodyObserver: MutationObserver | null = null;
 let pendingDomReadyListener: (() => void) | null = null;
 let isContentScriptActive = true;
 let autoArchiveActionListenerInstalled = false;
+let refetchMessageListenerInstalled = false;
 const pendingAutoArchiveRetryTimers = new Map<string, number>();
 
 export function bootstrapXContentScript(ctx: ContentScriptContext): void {
   isContentScriptActive = true;
   installAutoArchiveActionListener();
+  installRefetchMessageListener();
   ctx.onInvalidated(() => {
     isContentScriptActive = false;
     initialized = false;
@@ -56,6 +59,7 @@ export function bootstrapXContentScript(ctx: ContentScriptContext): void {
     pendingDomReadyListener = null;
     clearPendingAutoArchiveRetries();
     removeAutoArchiveActionListener();
+    removeRefetchMessageListener();
     removeBookmarksImportControls();
     removeLikesImportControls();
   });
@@ -85,6 +89,24 @@ function removeAutoArchiveActionListener(): void {
     handleLikeBookmarkAction as EventListener
   );
   autoArchiveActionListenerInstalled = false;
+}
+
+function installRefetchMessageListener(): void {
+  if (refetchMessageListenerInstalled) {
+    return;
+  }
+
+  browser.runtime.onMessage.addListener(handleRefetchMessage);
+  refetchMessageListenerInstalled = true;
+}
+
+function removeRefetchMessageListener(): void {
+  if (!refetchMessageListenerInstalled) {
+    return;
+  }
+
+  browser.runtime.onMessage.removeListener(handleRefetchMessage);
+  refetchMessageListenerInstalled = false;
 }
 
 function startWhenBodyReady(ctx: ContentScriptContext): void {
@@ -373,6 +395,50 @@ function clearPendingAutoArchiveRetry(detail: LikeBookmarkActionEventDetail): vo
   }
 }
 
+function handleRefetchMessage(
+  message: unknown,
+  _sender: unknown,
+  sendResponse: (response?: unknown) => void
+): boolean {
+  if (!isRefetchCheckMessage(message)) {
+    return false;
+  }
+
+  void handleRefetchCheck(message)
+    .then((found) => {
+      sendResponse({
+        found
+      });
+    })
+    .catch(() => {
+      sendResponse({
+        found: false
+      });
+    });
+
+  return true;
+}
+
+async function handleRefetchCheck(message: RefetchCheckMessage): Promise<boolean> {
+  scanTweetArticles();
+  const article = findArticleByPostId(message.xPostId);
+
+  if (article === null) {
+    return false;
+  }
+
+  const extracted = extractPostFromArticle(article);
+
+  await chrome.runtime.sendMessage({
+    type: "refetch.complete",
+    xPostId: message.xPostId,
+    post: extracted?.post ?? null,
+    error: extracted === null ? "Post extraction failed." : null
+  });
+
+  return true;
+}
+
 function clearPendingAutoArchiveRetries(): void {
   for (const timeoutId of pendingAutoArchiveRetryTimers.values()) {
     window.clearTimeout(timeoutId);
@@ -408,4 +474,13 @@ function isLikeBookmarkActionDetail(value: unknown): value is LikeBookmarkAction
 
 function isExtensionContextInvalidatedError(error: unknown): boolean {
   return error instanceof Error && error.message.includes("Extension context invalidated");
+}
+
+function isRefetchCheckMessage(value: unknown): value is RefetchCheckMessage {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    Reflect.get(value, "type") === "refetch.check" &&
+    typeof Reflect.get(value, "xPostId") === "string"
+  );
 }

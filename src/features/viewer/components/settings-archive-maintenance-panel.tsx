@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ArchiveBackupSummary } from "../../../types/archive-backup";
+import type { RefetchStatusRecord } from "../../../types/refetch";
 import {
   type ArchiveTransferProgress,
   importArchiveBackupZip,
@@ -16,6 +17,10 @@ type ArchiveMaintenancePanelProps = {
     mediaCount: number;
     tagCount: number;
   };
+  refetchStatus: RefetchStatusRecord;
+  onRefetchAll: () => Promise<void>;
+  onRefetchCancel: () => Promise<void>;
+  onRefetchClear: () => Promise<void>;
   onArchiveChanged: () => Promise<void>;
 };
 
@@ -26,6 +31,10 @@ const logger = createLogger("viewer-settings-archive");
 export function SettingsArchiveMaintenancePanel({
   language,
   archiveSummary,
+  refetchStatus,
+  onRefetchAll,
+  onRefetchCancel,
+  onRefetchClear,
   onArchiveChanged
 }: ArchiveMaintenancePanelProps) {
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
@@ -46,6 +55,11 @@ export function SettingsArchiveMaintenancePanel({
   const hasArchive = archiveSummary.postCount > 0 || archiveSummary.mediaCount > 0;
   const isJapanese = language === "ja";
   const isTransferRunning = backupRunning || restoreRunning;
+  const refetchProcessedCount = refetchStatus.completedCount + refetchStatus.failedCount;
+  const refetchPercent =
+    refetchStatus.totalCount === 0
+      ? 0
+      : Math.round((refetchProcessedCount / refetchStatus.totalCount) * 100);
   const deleteSummary = useMemo(
     () =>
       isJapanese
@@ -227,6 +241,86 @@ export function SettingsArchiveMaintenancePanel({
 
   return (
     <>
+      <section className="viewer-settings-card">
+        <div className="viewer-settings-card-header">
+          <h3>{isJapanese ? "投稿の再取得" : "Refetch saved posts"}</h3>
+          <p>
+            {isJapanese
+              ? "保存済み投稿を X.com から再取得して、本文・表示名・反応数・メディア情報を更新します。"
+              : "Re-open saved posts on X.com and refresh text, display name, engagement, and media metadata."}
+          </p>
+        </div>
+        <div className="viewer-settings-action-row">
+          <button
+            className="viewer-action-button"
+            type="button"
+            onClick={() => {
+              void onRefetchAll();
+            }}
+            disabled={archiveSummary.postCount === 0}
+          >
+            {isJapanese ? "保存済み投稿を一括再取得" : "Refetch all saved posts"}
+          </button>
+          <button
+            className="viewer-secondary-button"
+            type="button"
+            onClick={() => {
+              void onRefetchCancel();
+            }}
+            disabled={refetchStatus.phase !== "running"}
+          >
+            {isJapanese ? "現在の件で停止" : "Stop after current post"}
+          </button>
+          <button
+            className="viewer-secondary-button"
+            type="button"
+            onClick={() => {
+              void onRefetchClear();
+            }}
+            disabled={refetchStatus.phase === "running" || refetchStatus.totalCount === 0}
+          >
+            {isJapanese ? "キューをクリア" : "Clear queue"}
+          </button>
+        </div>
+        {refetchStatus.totalCount === 0 ? (
+          <p className="viewer-message">
+            {isJapanese ? "再取得キューは空です。" : "The refetch queue is empty."}
+          </p>
+        ) : (
+          <div className="viewer-progress-card" role="status" aria-live="polite">
+            <div className="viewer-progress-header">
+              <strong>{formatRefetchPhaseLabel(refetchStatus, language)}</strong>
+              <span>{refetchPercent}%</span>
+            </div>
+            <div className="viewer-progress-bar" aria-hidden="true">
+              <span
+                className="viewer-progress-bar-fill"
+                style={{
+                  width: `${Math.max(0, Math.min(100, refetchPercent))}%`
+                }}
+              />
+            </div>
+            <p className="viewer-settings-inline-note">
+              {formatRefetchCounts(refetchStatus, language)}
+            </p>
+            {refetchStatus.currentPostId !== null && (
+              <p className="viewer-settings-inline-note">
+                {isJapanese
+                  ? `処理中: ${refetchStatus.currentPostId}`
+                  : `Current: ${refetchStatus.currentPostId}`}
+              </p>
+            )}
+            {refetchStatus.estimatedRemainingMs !== null && (
+              <p className="viewer-settings-inline-note">
+                {isJapanese
+                  ? `残り目安: ${formatDurationLabel(refetchStatus.estimatedRemainingMs, language)}`
+                  : `Estimated remaining: ${formatDurationLabel(refetchStatus.estimatedRemainingMs, language)}`}
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "バックアップを書き出す" : "Export backup"}</h3>
@@ -499,6 +593,55 @@ function formatProgressPercent(progress: ArchiveTransferProgress): number {
   }
 
   return Math.round((progress.completed / progress.total) * 100);
+}
+
+function formatRefetchPhaseLabel(
+  refetchStatus: RefetchStatusRecord,
+  language: ArchiveLanguage
+): string {
+  if (refetchStatus.phase === "running") {
+    return language === "ja" ? "再取得を実行中" : "Refetch is running";
+  }
+
+  if (refetchStatus.phase === "stopped") {
+    return language === "ja" ? "停止中" : "Stopped";
+  }
+
+  return language === "ja" ? "完了または待機中" : "Completed or idle";
+}
+
+function formatRefetchCounts(
+  refetchStatus: RefetchStatusRecord,
+  language: ArchiveLanguage
+): string {
+  return [
+    language === "ja"
+      ? `完了 ${formatCount(refetchStatus.completedCount, language)}`
+      : `Done ${formatCount(refetchStatus.completedCount, language)}`,
+    language === "ja"
+      ? `失敗 ${formatCount(refetchStatus.failedCount, language)}`
+      : `Failed ${formatCount(refetchStatus.failedCount, language)}`,
+    language === "ja"
+      ? `保留 ${formatCount(refetchStatus.pendingCount, language)}`
+      : `Pending ${formatCount(refetchStatus.pendingCount, language)}`
+  ].join(" / ");
+}
+
+function formatDurationLabel(valueMs: number, language: ArchiveLanguage): string {
+  const roundedSeconds = Math.max(1, Math.round(valueMs / 1000));
+
+  if (roundedSeconds < 60) {
+    return language === "ja" ? `${roundedSeconds}秒` : `${roundedSeconds}s`;
+  }
+
+  const minutes = Math.floor(roundedSeconds / 60);
+  const seconds = roundedSeconds % 60;
+
+  if (seconds === 0) {
+    return language === "ja" ? `${minutes}分` : `${minutes}m`;
+  }
+
+  return language === "ja" ? `${minutes}分${seconds}秒` : `${minutes}m ${seconds}s`;
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
