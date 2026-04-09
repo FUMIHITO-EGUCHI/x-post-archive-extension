@@ -32,3 +32,12 @@
 ## Remaining Issues
 
 ## Suggested Next Action
+
+## Completion Checklist
+- [ ] implementation finished
+- [ ] `npm run typecheck`
+- [ ] `npm run build`
+- [ ] task packet `Codex Result` or `Result` updated
+- [ ] task packet `Verification` updated
+- [ ] `ai-handoff/current-task.md` updated
+- [ ] `npm run handoff:check`

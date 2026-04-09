@@ -153,10 +153,32 @@ onThemeChange: (theme: ViewerTheme) => void;
 
 ## Codex Result
 
+- Viewer theme support is already implemented in the codebase.
+- Added `ViewerTheme = "light" | "dark"` to [src/types/viewer.ts](/c:/Users/kurah/Documents/Git/x-post-archive-extension/src/types/viewer.ts).
+- Added persisted load/save helpers in [src/features/settings/viewer-theme.ts](/c:/Users/kurah/Documents/Git/x-post-archive-extension/src/features/settings/viewer-theme.ts).
+- Wired theme state into [src/features/viewer/components/viewer-app.tsx](/c:/Users/kurah/Documents/Git/x-post-archive-extension/src/features/viewer/components/viewer-app.tsx) so the viewer applies `data-theme` to the document root and persists user changes.
+- Added the light / dark selector to [src/features/viewer/components/settings-basic-panel.tsx](/c:/Users/kurah/Documents/Git/x-post-archive-extension/src/features/viewer/components/settings-basic-panel.tsx).
+- Added light and dark CSS variables plus dark-theme component styling in [src/entrypoints/viewer/style.css](/c:/Users/kurah/Documents/Git/x-post-archive-extension/src/entrypoints/viewer/style.css).
+
 ## Changed Files
+
+- `src/types/viewer.ts`
+- `src/features/settings/viewer-theme.ts`
+- `src/features/viewer/components/viewer-app.tsx`
+- `src/features/viewer/components/settings-basic-panel.tsx`
+- `src/entrypoints/viewer/style.css`
 
 ## Verification
 
+- `npm run typecheck`
+- `npm run build`
+- Code inspection confirmed the settings UI exposes the theme selector, the viewer persists the selected theme, and the root `data-theme` attribute drives the CSS theme tokens.
+
 ## Remaining Issues
 
+- No active blocker is recorded for this task.
+- Browser-side visual regression verification can be repeated later if theme styling is expanded again, but the feature itself is implemented.
+
 ## Suggested Next Action
+
+- Keep this task closed unless theme scope expands beyond the current light / dark selector.
