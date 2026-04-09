@@ -68,20 +68,28 @@ Design and implement a lightweight date filter for the main archive list, define
 
 ## Codex Result
 
-<!-- Fill after implementation -->
+Implemented a dedicated archive date filter modal with explicit `Apply` / `Clear` actions. The filter supports both `saved_at` and `posted_at` via a target selector, persists in viewer session restore state, and applies at query time so pagination stays coherent for large archives.
 
 ## Changed Files
 
-<!-- Fill after implementation -->
+- `src/features/viewer/components/viewer-app.tsx`
+- `src/features/archive/archive-service.ts`
+- `src/features/viewer/viewer-session-storage.ts`
+- `src/types/viewer.ts`
+- `src/entrypoints/viewer/style.css`
+- `ai-handoff/current-task.md`
+- `ai-handoff/tasks/2026-04-07-viewer-date-range-filter.md`
 
 ## Verification
 
-<!-- Fill after implementation -->
+- `npm run typecheck`
+- `npm run build`
+- shared CDP Chrome verification after extension reload confirmed that date-range filtering updates the archive list as expected
 
 ## Remaining Issues
 
-<!-- Fill after implementation -->
+- none for this issue
 
 ## Suggested Next Action
 
-<!-- Fill after implementation -->
+Commit this issue, then continue to the next waiting viewer/archive task on `feature/archive-viewer-improvements`.

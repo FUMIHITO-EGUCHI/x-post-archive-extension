@@ -1,4 +1,6 @@
 import {
+  MAX_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD,
+  MIN_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD,
   defaultArchiveSettings,
   type ArchiveSettings
 } from "../../types/archive";
@@ -31,6 +33,20 @@ function normalizeArchiveSettings(value: unknown): ArchiveSettings {
     autoArchiveOnBookmark:
       Reflect.get(value, "autoArchiveOnBookmark") === true
         ? true
-        : defaultArchiveSettings.autoArchiveOnBookmark
+        : defaultArchiveSettings.autoArchiveOnBookmark,
+    bulkImportDuplicateBatchThreshold: normalizeBulkImportDuplicateBatchThreshold(
+      Reflect.get(value, "bulkImportDuplicateBatchThreshold")
+    )
   };
+}
+
+function normalizeBulkImportDuplicateBatchThreshold(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultArchiveSettings.bulkImportDuplicateBatchThreshold;
+  }
+
+  return Math.min(
+    MAX_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD,
+    Math.max(MIN_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD, Math.trunc(value))
+  );
 }

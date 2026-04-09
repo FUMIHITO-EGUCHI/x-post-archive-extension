@@ -14,18 +14,22 @@ import {
   countPosts,
   deletePostRecord,
   getPost,
+  listPostIds,
   getPostsByIds,
   hasPost,
   listPosts,
-  listPostsSliceBySort
+  listPostsSliceBySort,
+  updatePostFields
 } from "../../db/repositories/posts-repository";
 import {
   addPostTag,
+  bulkAddPostTagRecords,
   countPostTagLinksByTagId,
   deletePostTag,
   deletePostTagsByPostId,
   getPostTagByNormalizedName,
   listAllPostTags,
+  listPostIdsByTagId,
   listPostIdsByNormalizedName,
   listPostTagsByTagId,
   listPostTagsByPostId,
@@ -64,7 +68,9 @@ import type {
   ArchiveTagRedirectSummaryRecord,
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
+  DateFilterTarget,
   ListPostsPageInput,
+  PostFilterInput,
   UserSummary
 } from "../../types/viewer";
 import {
@@ -250,7 +256,14 @@ export async function listArchivePostsPage(
   }
 
   const pagePosts =
-    matchingPostIds === null
+    input.sortField === "random"
+      ? await listRandomPostsPage(
+          matchingPostIds,
+          normalizedOffset,
+          normalizedLimit,
+          normalizeRandomSeed(input.randomSeed)
+        )
+      : matchingPostIds === null
       ? await listPostsSliceBySort(
           input.sortField,
           input.sortDirection,
@@ -751,6 +764,98 @@ export async function mergeTags(
   };
 }
 
+export async function bulkAssignTagPreview(
+  filter: PostFilterInput,
+  targetTagName: string
+): Promise<{
+  candidatePostIds: string[];
+  targetTagId: string;
+  targetNormalizedName: string;
+  targetDisplayName: string;
+  totalMatchCount: number;
+  skipCount: number;
+}> {
+  const normalizedName = normalizeTagName(targetTagName);
+
+  if (normalizedName === null) {
+    throw new Error("Invalid tag name.");
+  }
+
+  const cleanedDisplayName = cleanupTagName(targetTagName);
+  const pageInput: ListPostsPageInput = {
+    offset: 0,
+    limit: 1,
+    sortField: "saved_at",
+    sortDirection: "desc",
+    randomSeed: null,
+    tagFilter: filter.tagFilter,
+    authorFilter: filter.authorFilter,
+    dateFilterTarget: filter.dateFilterTarget,
+    dateFrom: filter.dateFrom,
+    dateTo: filter.dateTo
+  };
+  const matchingPostIds = await resolveFilteredPostIds(pageInput);
+  const resolvedPostIds = matchingPostIds === null ? await listPostIds() : [...matchingPostIds];
+  const totalMatchCount = resolvedPostIds.length;
+
+  let tag = await getTagByNormalizedName(normalizedName);
+
+  if (tag === undefined) {
+    tag = {
+      tag_id: crypto.randomUUID(),
+      normalized_name: normalizedName,
+      display_name: cleanedDisplayName,
+      system_key: null,
+      created_at: Date.now()
+    };
+    await addTag(tag);
+  }
+
+  const alreadyTaggedIds = new Set(await listPostIdsByTagId(tag.tag_id));
+  const candidatePostIds = resolvedPostIds.filter((postId) => !alreadyTaggedIds.has(postId));
+
+  return {
+    candidatePostIds,
+    targetTagId: tag.tag_id,
+    targetNormalizedName: tag.normalized_name,
+    targetDisplayName: tag.display_name,
+    totalMatchCount,
+    skipCount: totalMatchCount - candidatePostIds.length
+  };
+}
+
+export async function bulkAssignTagApplyBatch(
+  postIds: string[],
+  targetTagId: string,
+  targetNormalizedName: string,
+  targetDisplayName: string
+): Promise<{
+  tagged: number;
+}> {
+  if (postIds.length === 0) {
+    return {
+      tagged: 0
+    };
+  }
+
+  const now = Date.now();
+  const records: PostTagRecord[] = postIds.map((postId) => ({
+    post_tag_id: crypto.randomUUID(),
+    x_post_id: postId,
+    tag_id: targetTagId,
+    normalized_name: targetNormalizedName,
+    display_name: targetDisplayName,
+    system_key: null,
+    source: "manual",
+    assigned_at: now
+  }));
+
+  const tagged = await bulkAddPostTagRecords(records);
+  return {
+    tagged
+  };
+}
+
 export async function persistVideoThumbnailPreview(
   media: Pick<MediaRecord, "media_id" | "x_post_id">,
   thumbnailBlob: Blob
@@ -1085,31 +1190,150 @@ async function listFilteredPostsPage(
   return results;
 }
 
+export async function refetchArchivePost(
+  xPostId: string,
+  input: SavePostInput,
+  options: {
+    traceId?: string;
+  } = {}
+): Promise<PostRecord> {
+  validateSavePostInput(input);
+
+  if (xPostId !== input.x_post_id) {
+    throw new Error("Refetch target does not match extracted post.");
+  }
+
+  const existingPost = await getPost(xPostId);
+
+  if (existingPost === undefined) {
+    throw new Error("Post not found.");
+  }
+
+  const existingMedia = await listMediaByPostId(xPostId);
+  const preparedMediaUpdate = prepareRefetchedMediaUpdate(xPostId, input, existingMedia);
+  const removedMediaPaths = preparedMediaUpdate.removedRecords.flatMap((record) =>
+    [record.opfs_path, record.preview_image_opfs_path].filter(
+      (path): path is string => typeof path === "string" && path.trim() !== ""
+    )
+  );
+
+  const updatedPost: PostRecord = {
+    ...existingPost,
+    display_name: input.display_name.trim(),
+    x_username: input.x_username.trim(),
+    post_text: input.post_text.trim(),
+    post_url: input.post_url.trim(),
+    posted_at: input.posted_at,
+    reply_count: input.reply_count,
+    repost_count: input.repost_count,
+    like_count: input.like_count
+  };
+
+  await archiveDb.transaction("rw", archiveDb.posts, archiveDb.media, async () => {
+    await updatePostFields(xPostId, {
+      display_name: updatedPost.display_name,
+      x_username: updatedPost.x_username,
+      post_text: updatedPost.post_text,
+      post_url: updatedPost.post_url,
+      posted_at: updatedPost.posted_at,
+      reply_count: updatedPost.reply_count,
+      repost_count: updatedPost.repost_count,
+      like_count: updatedPost.like_count
+    });
+
+    if (preparedMediaUpdate.removedRecords.length > 0) {
+      for (const record of preparedMediaUpdate.removedRecords) {
+        await archiveDb.media.delete(record.media_id);
+      }
+    }
+
+    for (const record of preparedMediaUpdate.reusedRecords) {
+      await archiveDb.media.put(record);
+    }
+
+    if (preparedMediaUpdate.newRecords.length > 0) {
+      await addMediaRecords(preparedMediaUpdate.newRecords);
+    }
+  });
+
+  for (const opfsPath of removedMediaPaths) {
+    try {
+      await deleteBlobFromOpfs(opfsPath);
+    } catch {
+      // Best-effort cleanup only; stale files should not block refetch completion.
+    }
+  }
+
+  if (preparedMediaUpdate.persistRecords.length > 0) {
+    enqueueMediaPersistence(preparedMediaUpdate.persistRecords, options.traceId);
+  }
+
+  logger.info("post.refetch.persisted", {
+    context: {
+      xPostId,
+      removedMediaCount: preparedMediaUpdate.removedRecords.length,
+      reusedMediaCount: preparedMediaUpdate.reusedRecords.length,
+      newMediaCount: preparedMediaUpdate.newRecords.length,
+      persistMediaCount: preparedMediaUpdate.persistRecords.length,
+      traceId: options.traceId ?? null
+    }
+  });
+
+  return updatedPost;
+}
+
+async function listRandomPostsPage(
+  matchingPostIds: Set<string> | null,
+  offset: number,
+  limit: number,
+  randomSeed: number
+): Promise<PostRecord[]> {
+  const orderedIds = matchingPostIds === null ? await listPostIds() : [...matchingPostIds];
+
+  if (orderedIds.length === 0) {
+    return [];
+  }
+
+  shuffleIdsInPlace(orderedIds, randomSeed);
+  return getPostsByIds(orderedIds.slice(offset, offset + limit));
+}
+
 async function resolveFilteredPostIds(input: ListPostsPageInput): Promise<Set<string> | null> {
   const tagFilterPostIds =
     input.tagFilter === null ? null : new Set(await listPostIdsByNormalizedName(input.tagFilter));
   const authorFilter = normalizeAuthorFilter(input.authorFilter);
+  const dateFilterTarget = normalizeDateFilterTarget(input.dateFilterTarget);
+  const dateFrom = normalizeDateFilterTimestamp(input.dateFrom);
+  const dateTo = normalizeDateFilterTimestamp(input.dateTo);
+  const dateFilterPostIds =
+    dateFilterTarget === null || (dateFrom === null && dateTo === null)
+      ? null
+      : new Set(await listPostIdsByDateFilter(dateFilterTarget, dateFrom, dateTo));
 
-  if (tagFilterPostIds === null && authorFilter === null) {
+  if (tagFilterPostIds === null && authorFilter === null && dateFilterPostIds === null) {
     return null;
   }
 
   const authorFilterPostIds =
     authorFilter === null ? null : new Set(await listPostIdsByAuthorFilter(authorFilter));
+  const filterSets = [tagFilterPostIds, authorFilterPostIds, dateFilterPostIds].filter(
+    (value): value is Set<string> => value !== null
+  );
 
-  if (tagFilterPostIds === null) {
-    return authorFilterPostIds;
+  if (filterSets.length === 0) {
+    return null;
   }
 
-  if (authorFilterPostIds === null) {
-    return tagFilterPostIds;
-  }
+  const intersection = new Set<string>(filterSets[0]);
 
-  const intersection = new Set<string>();
+  for (const postId of intersection) {
+    for (let index = 1; index < filterSets.length; index += 1) {
+      const currentSet = filterSets[index];
 
-  for (const postId of tagFilterPostIds) {
-    if (authorFilterPostIds.has(postId)) {
-      intersection.add(postId);
+      if (currentSet !== undefined && !currentSet.has(postId)) {
+        intersection.delete(postId);
+        break;
+      }
     }
   }
 
@@ -1128,11 +1352,72 @@ function normalizePageLimit(value: number): number {
   return Math.min(Math.floor(value), 250);
 }
 
+function normalizeRandomSeed(value: number | null | undefined): number {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+
+  const normalized = Math.floor(Math.abs(value ?? 1)) >>> 0;
+  return normalized === 0 ? 1 : normalized;
+}
+
+function shuffleIdsInPlace(ids: string[], randomSeed: number): void {
+  const random = createSeededRandom(randomSeed);
+
+  for (let index = ids.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    const current = ids[index];
+    const target = ids[swapIndex];
+
+    if (current === undefined || target === undefined) {
+      continue;
+    }
+
+    ids[index] = target;
+    ids[swapIndex] = current;
+  }
+}
+
+function createSeededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let next = Math.imul(state ^ (state >>> 15), state | 1);
+    next ^= next + Math.imul(next ^ (next >>> 7), next | 61);
+    return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 async function listPostIdsByAuthorFilter(authorFilter: string): Promise<string[]> {
   const posts = await listPosts();
 
   return posts
     .filter((post) => normalizeAuthorFilter(post.x_username) === authorFilter)
+    .map((post) => post.x_post_id);
+}
+
+async function listPostIdsByDateFilter(
+  target: DateFilterTarget,
+  dateFrom: number | null,
+  dateTo: number | null
+): Promise<string[]> {
+  const posts = await listPosts();
+
+  return posts
+    .filter((post) => {
+      const timestamp = target === "saved_at" ? post.saved_at : post.posted_at;
+
+      if (dateFrom !== null && timestamp < dateFrom) {
+        return false;
+      }
+
+      if (dateTo !== null && timestamp > dateTo) {
+        return false;
+      }
+
+      return true;
+    })
     .map((post) => post.x_post_id);
 }
 
@@ -1634,6 +1919,125 @@ function normalizeAuthorFilter(value: string | null): string | null {
 
   const cleaned = value.trim().replace(/^@+/, "").toLocaleLowerCase("en-US");
   return cleaned === "" ? null : cleaned;
+}
+
+function prepareRefetchedMediaUpdate(
+  xPostId: string,
+  input: SavePostInput,
+  existingMedia: MediaRecord[]
+): {
+  reusedRecords: MediaRecord[];
+  newRecords: MediaRecord[];
+  removedRecords: MediaRecord[];
+  persistRecords: MediaRecord[];
+} {
+  const savedAt = Date.now();
+  const existingBySourceKey = new Map<string, MediaRecord>();
+
+  for (const media of existingMedia) {
+    existingBySourceKey.set(getMediaSourceKey(media.media_type, media.source_url), media);
+  }
+
+  const nextRecords: MediaRecord[] = [];
+  const persistRecords: MediaRecord[] = [];
+  const seenSourceKeys = new Set<string>();
+
+  for (const image of input.media) {
+    const sourceKey = getMediaSourceKey("image", image.source_url);
+    const existing = existingBySourceKey.get(sourceKey);
+
+    seenSourceKeys.add(sourceKey);
+
+    if (existing === undefined) {
+      const nextRecord = createPendingImageRecord(xPostId, image, savedAt);
+      nextRecords.push(nextRecord);
+      persistRecords.push(nextRecord);
+      continue;
+    }
+
+    const reusedRecord: MediaRecord = {
+      ...existing,
+      source_url: image.source_url,
+      position: image.position,
+      alt_text: image.alt_text,
+      width: image.width,
+      height: image.height
+    };
+
+    if (existing.storage_status !== "ready") {
+      reusedRecord.storage_status = "pending";
+      reusedRecord.last_error = null;
+      reusedRecord.byte_size = null;
+      reusedRecord.mime_type = null;
+      persistRecords.push(reusedRecord);
+    }
+
+    nextRecords.push(reusedRecord);
+  }
+
+  for (const [index, candidate] of (input.video_candidates ?? [])
+    .filter((video) => video.download_mode === "direct_mp4")
+    .entries()) {
+    const sourceKey = getMediaSourceKey("video", candidate.source_url);
+    const existing = existingBySourceKey.get(sourceKey);
+
+    seenSourceKeys.add(sourceKey);
+
+    if (existing === undefined) {
+      const nextRecord = createPendingVideoRecord(xPostId, candidate, savedAt, input.media.length + index);
+      nextRecords.push(nextRecord);
+      persistRecords.push(nextRecord);
+      continue;
+    }
+
+    const reusedRecord: MediaRecord = {
+      ...existing,
+      source_url: candidate.source_url,
+      preview_image_url: candidate.thumbnail_url ?? candidate.poster_url,
+      position: input.media.length + index,
+      width: candidate.width,
+      height: candidate.height,
+      mime_type: candidate.mime_type
+    };
+
+    if (existing.storage_status !== "ready") {
+      reusedRecord.storage_status = "pending";
+      reusedRecord.last_error = null;
+      reusedRecord.byte_size = null;
+      persistRecords.push(reusedRecord);
+    }
+
+    nextRecords.push(reusedRecord);
+  }
+
+  const removedRecords = existingMedia.filter(
+    (media) => !seenSourceKeys.has(getMediaSourceKey(media.media_type, media.source_url))
+  );
+  const reusedRecords = nextRecords.filter((record) =>
+    existingBySourceKey.has(getMediaSourceKey(record.media_type, record.source_url))
+  );
+  const newRecords = nextRecords.filter(
+    (record) => !existingBySourceKey.has(getMediaSourceKey(record.media_type, record.source_url))
+  );
+
+  return {
+    reusedRecords: dedupeMediaRecordsById(reusedRecords),
+    newRecords: dedupeMediaRecordsById(newRecords),
+    removedRecords: dedupeMediaRecordsById(removedRecords),
+    persistRecords: dedupeMediaRecordsById(persistRecords)
+  };
+}
+
+function normalizeDateFilterTarget(value: DateFilterTarget | null): DateFilterTarget | null {
+  return value === "saved_at" || value === "posted_at" ? value : null;
+}
+
+function normalizeDateFilterTimestamp(value: number | null): number | null {
+  if (!Number.isFinite(value) || value === null || value < 0) {
+    return null;
+  }
+
+  return Math.floor(value);
 }
 
 function getMediaSourceKey(mediaType: MediaRecord["media_type"], sourceUrl: string): string {

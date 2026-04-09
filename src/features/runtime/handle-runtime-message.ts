@@ -1,5 +1,7 @@
 import {
   addPostTagByName,
+  bulkAssignTagApplyBatch,
+  bulkAssignTagPreview,
   deleteArchiveTagRedirect,
   deleteArchivePost,
   getArchiveSummary,
@@ -15,9 +17,19 @@ import {
   resumePendingMediaPersistence,
   saveArchivePost
 } from "../archive/archive-service";
+import {
+  cancelRefetch,
+  clearRefetchQueue,
+  completeRefetchFromContentScript,
+  enqueueRefetchPosts,
+  getRefetchStatus,
+  resumeRefetchProcessing
+} from "../refetch/refetch-coordinator";
 import { clearLogRecords } from "../../db/repositories/logs-repository";
 import type {
   AddPostTagByNameResponse,
+  BulkAssignTagApplyBatchResponse,
+  BulkAssignTagPreviewResponse,
   ClearLogsResponse,
   DeleteTagRedirectResponse,
   DeletePostMessage,
@@ -33,6 +45,11 @@ import type {
   MergeTagsResponse,
   RenameTagResponse,
   RemovePostTagByNameResponse,
+  RefetchCancelResponse,
+  RefetchClearResponse,
+  RefetchCompleteResponse,
+  RefetchEnqueueResponse,
+  RefetchStatusResponse,
   RuntimeErrorResponse,
   RuntimeMessage,
   RuntimeResponse,
@@ -44,13 +61,24 @@ import { createLogger, createRequestId } from "../logging/logger";
 const logger = createLogger("runtime");
 
 export async function handleRuntimeMessage(
-  message: unknown
+  message: unknown,
+  sender:
+    | {
+        tab?: {
+          id?: number;
+        };
+      }
+    | undefined = undefined
 ): Promise<RuntimeResponse | undefined> {
   await resumePendingMediaPersistence();
 
   if (!isRuntimeMessage(message)) {
     logger.warn("runtime.message.invalid");
     return undefined;
+  }
+
+  if (message.type !== "refetch.cancel" && message.type !== "refetch.clear") {
+    void resumeRefetchProcessing();
   }
 
   const requestId = createRequestId();
@@ -392,6 +420,83 @@ export async function handleRuntimeMessage(
       return response;
     }
 
+    case "tag.bulk-assign.preview": {
+      const result = await bulkAssignTagPreview(message.filter, message.targetTagName);
+      const response: BulkAssignTagPreviewResponse = {
+        type: "tag.bulk-assign.preview",
+        ...result
+      };
+      return response;
+    }
+
+    case "tag.bulk-assign.apply-batch": {
+      const result = await bulkAssignTagApplyBatch(
+        message.postIds,
+        message.targetTagId,
+        message.targetNormalizedName,
+        message.targetDisplayName
+      );
+      const response: BulkAssignTagApplyBatchResponse = {
+        type: "tag.bulk-assign.apply-batch",
+        tagged: result.tagged
+      };
+      return response;
+    }
+
+    case "refetch.enqueue": {
+      const result = await enqueueRefetchPosts({
+        priority: message.priority,
+        ...(message.xPostIds === undefined ? {} : { xPostIds: message.xPostIds }),
+        ...(message.enqueueAll === undefined ? {} : { enqueueAll: message.enqueueAll })
+      });
+      const response: RefetchEnqueueResponse = {
+        type: "refetch.enqueue",
+        enqueuedCount: result.enqueuedCount,
+        status: result.status
+      };
+      return response;
+    }
+
+    case "refetch.status": {
+      const response: RefetchStatusResponse = {
+        type: "refetch.status",
+        status: await getRefetchStatus()
+      };
+      return response;
+    }
+
+    case "refetch.cancel": {
+      const response: RefetchCancelResponse = {
+        type: "refetch.cancel",
+        status: await cancelRefetch()
+      };
+      return response;
+    }
+
+    case "refetch.clear": {
+      const response: RefetchClearResponse = {
+        type: "refetch.clear",
+        cleared: true,
+        status: await clearRefetchQueue()
+      };
+      return response;
+    }
+
+    case "refetch.complete": {
+      const response: RefetchCompleteResponse = {
+        type: "refetch.complete",
+        accepted: completeRefetchFromContentScript(
+          {
+            xPostId: message.xPostId,
+            post: message.post,
+            error: message.error ?? null
+          },
+          sender?.tab?.id ?? null
+        )
+      };
+      return response;
+    }
+
     case "logs/clear": {
       await clearLogRecords();
       const response: ClearLogsResponse = {
@@ -430,6 +535,13 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "tag.merge" ||
     candidate.type === "tag.redirects.list" ||
     candidate.type === "tag.redirects.delete" ||
+    candidate.type === "tag.bulk-assign.preview" ||
+    candidate.type === "tag.bulk-assign.apply-batch" ||
+    candidate.type === "refetch.enqueue" ||
+    candidate.type === "refetch.status" ||
+    candidate.type === "refetch.cancel" ||
+    candidate.type === "refetch.clear" ||
+    candidate.type === "refetch.complete" ||
     candidate.type === "logs/clear" ||
     candidate.type === "debug/log"
   );

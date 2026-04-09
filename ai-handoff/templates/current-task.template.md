@@ -5,7 +5,7 @@
 - title:
 - owner:
 - status:
-- task file:
+- task file: `ai-handoff/tasks/...`
 - related findings:
 
 ## Goal

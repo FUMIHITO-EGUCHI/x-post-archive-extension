@@ -10,6 +10,7 @@ import {
   loadArchiveLanguage,
   type ArchiveLanguage
 } from "../settings/archive-language";
+import { loadArchiveSettings } from "../settings/archive-settings";
 import {
   type ExtractedPostBundle,
   extractPostFromArticle,
@@ -17,7 +18,10 @@ import {
   inspectArticleMediaSignals
 } from "./extract-post-from-article";
 import { findTweetArticles } from "./find-tweet-articles";
-import type { SavePostInput } from "../../types/archive";
+import {
+  DEFAULT_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD,
+  type SavePostInput
+} from "../../types/archive";
 
 const ROOT_ID = "xpa-likes-import-root";
 const OVERLAY_ID = "xpa-likes-import-overlay";
@@ -48,6 +52,8 @@ type OverlayStatus =
   | "completed"
   | "failed";
 
+type ImportStopReason = "none" | "manual" | "left-page" | "duplicate-threshold";
+
 type OverlayStats = {
   status: OverlayStatus;
   collected: number;
@@ -56,12 +62,18 @@ type OverlayStats = {
   failed: number;
   scanned: number;
   waiting: number;
+  stopReason: ImportStopReason;
+  duplicateBatchStreak: number;
+  duplicateBatchThreshold: number;
   message: string;
 };
 
 type LikesImportRun = {
   stopRequested: boolean;
   collectingFinished: boolean;
+  stopReason: ImportStopReason;
+  duplicateBatchStreak: number;
+  duplicateBatchThreshold: number;
   traceId: string;
   inspectPostIds: Set<string>;
   inspectSignatures: Map<string, string>;
@@ -108,7 +120,9 @@ export function ensureLikesImportControls(): void {
 export function removeLikesImportControls(): void {
   if (currentRun !== null) {
     currentRun.stopRequested = true;
+    currentRun.stopReason = "left-page";
     currentRun.stats.status = "stopped";
+    currentRun.stats.stopReason = "left-page";
     currentRun.stats.message = getOverlayMessage("leftPageSaving");
   }
 
@@ -201,7 +215,9 @@ function createRootElement(): HTMLDivElement {
     }
 
     currentRun.stopRequested = true;
+    currentRun.stopReason = "manual";
     currentRun.stats.status = "stopping";
+    currentRun.stats.stopReason = "manual";
     currentRun.stats.message = getOverlayMessage("stopping");
     updateOverlay(currentRun.stats);
   });
@@ -215,156 +231,180 @@ function createRootElement(): HTMLDivElement {
 
 async function startLikesImport(): Promise<void> {
   try {
-    overlayLanguage = await loadArchiveLanguage();
+    const [nextLanguage, settings] = await Promise.all([
+      loadArchiveLanguage(),
+      loadArchiveSettings()
+    ]);
+    overlayLanguage = nextLanguage;
+
+    if (!isLikesTimelinePage()) {
+      updateOverlay({
+        ...createDefaultOverlayStats(),
+        status: "failed",
+        message: getOverlayMessage("openLikesPage")
+      });
+      return;
+    }
+
+    const run: LikesImportRun = {
+      stopRequested: false,
+      collectingFinished: false,
+      stopReason: "none",
+      duplicateBatchStreak: 0,
+      duplicateBatchThreshold: settings.bulkImportDuplicateBatchThreshold,
+      traceId: crypto.randomUUID(),
+      inspectPostIds: new Set(await loadDebugInspectPostIds()),
+      inspectSignatures: new Map(),
+      stats: {
+        ...createDefaultOverlayStats(),
+        status: "collecting",
+        stopReason: "none",
+        duplicateBatchStreak: 0,
+        duplicateBatchThreshold: settings.bulkImportDuplicateBatchThreshold,
+        message: getOverlayMessage("collectingVisiblePosts")
+      }
+    };
+    currentRun = run;
+    lastOverlayStats = { ...run.stats };
+    overlayExpanded = true;
+    updateOverlay(run.stats);
+    if (run.inspectPostIds.size > 0) {
+      void requestClearLogs().catch(() => {
+        // Ignore debug log clear failures.
+      });
+      void requestDebugLog({
+        level: "info",
+        event: "likes.import.trace_started",
+        traceId: run.traceId,
+        context: {
+          inspectPostIds: [...run.inspectPostIds]
+        }
+      }).catch(() => {
+        // Ignore debug log failures.
+      });
+    }
+
+    const collectedPosts = new Map<string, QueuedPostBundle>();
+    const saveQueue = new Map<string, QueuedPostBundle>();
+    const pendingMediaWaits = new Map<string, PendingMediaWaitState>();
+    let noProgressPasses = 0;
+
+    const saveWorker = processSaveQueue(saveQueue, run);
+
+    try {
+      for (let scrollStep = 0; scrollStep < MAX_SCROLL_STEPS; scrollStep += 1) {
+        if (run.stopRequested) {
+          break;
+        }
+
+        if (!isLikesTimelinePage()) {
+          run.stopRequested = true;
+          run.stopReason = "left-page";
+          run.stats.stopReason = "left-page";
+          run.stats.message = getOverlayMessage("leftPageSaving");
+          break;
+        }
+
+        const beforeCount = collectedPosts.size;
+        collectVisiblePosts(collectedPosts, saveQueue, pendingMediaWaits, run.stats, run);
+        const addedBeforeScroll = collectedPosts.size - beforeCount;
+        const previousScrollHeight = getDocumentScrollHeight();
+
+        if (pendingMediaWaits.size >= MAX_WAITING_POSTS_BEFORE_SCROLL_PAUSE) {
+          run.stats.waiting = pendingMediaWaits.size;
+          run.stats.status = "collecting";
+          run.stats.message = getOverlayMessage("pausingForWaitingPosts", pendingMediaWaits.size);
+          updateOverlay(run.stats);
+          await wait(WAITING_PAUSE_MS);
+
+          if (run.stopRequested) {
+            break;
+          }
+
+          collectVisiblePosts(collectedPosts, saveQueue, pendingMediaWaits, run.stats, run);
+        } else {
+          scrollLikesTimeline();
+        }
+
+        await wait(getScrollWaitMs(addedBeforeScroll, noProgressPasses));
+
+        if (run.stopRequested) {
+          break;
+        }
+
+        const beforePostWaitCount = collectedPosts.size;
+        collectVisiblePosts(collectedPosts, saveQueue, pendingMediaWaits, run.stats, run);
+        const addedAfterScroll = collectedPosts.size - beforePostWaitCount;
+        const addedCount = addedBeforeScroll + addedAfterScroll;
+        const nextScrollHeight = getDocumentScrollHeight();
+        const scrollHeightIncreased = nextScrollHeight > previousScrollHeight;
+
+        run.stats.collected = collectedPosts.size;
+        run.stats.waiting = pendingMediaWaits.size;
+        run.stats.status = "collecting";
+        run.stats.message =
+          addedCount > 0
+            ? getOverlayMessage("collectedOnPass", addedCount)
+            : pendingMediaWaits.size > 0
+              ? getOverlayMessage("waitingForMediaHints", pendingMediaWaits.size)
+            : scrollHeightIncreased
+              ? getOverlayMessage("waitingForRender")
+              : getOverlayMessage("noNewPosts");
+        updateOverlay(run.stats);
+
+        noProgressPasses =
+          addedCount === 0 && !scrollHeightIncreased && pendingMediaWaits.size === 0
+            ? noProgressPasses + 1
+            : 0;
+
+        if (noProgressPasses >= MAX_IDLE_PASSES) {
+          break;
+        }
+      }
+
+      run.stats.status = run.stopRequested ? "stopping" : "saving";
+      run.stats.waiting = pendingMediaWaits.size;
+      run.stats.stopReason = run.stopReason;
+      run.stats.duplicateBatchStreak = run.duplicateBatchStreak;
+      run.stats.duplicateBatchThreshold = run.duplicateBatchThreshold;
+      run.stats.message = getSavingStatusMessage(run.stats);
+      updateOverlay(run.stats);
+
+      queuePendingMediaWaits(collectedPosts, saveQueue, pendingMediaWaits);
+      run.collectingFinished = true;
+      await saveWorker;
+
+      if (run.stopRequested) {
+        run.stats.status = "stopped";
+        run.stats.waiting = pendingMediaWaits.size;
+        run.stats.stopReason = run.stopReason;
+        run.stats.message = getStoppedStatusMessage(run.stats);
+      } else {
+        run.stats.status = "completed";
+        run.stats.waiting = pendingMediaWaits.size;
+        run.stats.stopReason = "none";
+        run.stats.message = getOverlayMessage("completed");
+      }
+    } catch (error) {
+      console.error("Likes import failed.", error);
+      run.stats.status = "failed";
+      run.stats.waiting = pendingMediaWaits.size;
+      run.stats.message =
+        error instanceof Error && error.message.trim() !== ""
+          ? error.message
+          : getOverlayMessage("failed");
+    } finally {
+      overlayExpanded = true;
+      updateOverlay(run.stats);
+      lastOverlayStats = { ...run.stats };
+      currentRun = null;
+    }
   } catch (error) {
     if (isExtensionContextInvalidatedError(error)) {
       return;
     }
 
     throw error;
-  }
-
-  if (!isLikesTimelinePage()) {
-    updateOverlay({
-      ...createDefaultOverlayStats(),
-      status: "failed",
-      message: getOverlayMessage("openLikesPage")
-    });
-    return;
-  }
-
-  const run: LikesImportRun = {
-    stopRequested: false,
-    collectingFinished: false,
-    traceId: crypto.randomUUID(),
-    inspectPostIds: new Set(await loadDebugInspectPostIds()),
-    inspectSignatures: new Map(),
-    stats: {
-      ...createDefaultOverlayStats(),
-      status: "collecting",
-      message: getOverlayMessage("collectingVisiblePosts")
-    }
-  };
-  currentRun = run;
-  lastOverlayStats = { ...run.stats };
-  overlayExpanded = true;
-  updateOverlay(run.stats);
-  if (run.inspectPostIds.size > 0) {
-    void requestClearLogs().catch(() => {
-      // Ignore debug log clear failures.
-    });
-    void requestDebugLog({
-      level: "info",
-      event: "likes.import.trace_started",
-      traceId: run.traceId,
-      context: {
-        inspectPostIds: [...run.inspectPostIds]
-      }
-    }).catch(() => {
-      // Ignore debug log failures.
-    });
-  }
-
-  const collectedPosts = new Map<string, QueuedPostBundle>();
-  const saveQueue = new Map<string, QueuedPostBundle>();
-  const pendingMediaWaits = new Map<string, PendingMediaWaitState>();
-  let noProgressPasses = 0;
-
-  const saveWorker = processSaveQueue(saveQueue, run);
-
-  try {
-    for (let scrollStep = 0; scrollStep < MAX_SCROLL_STEPS; scrollStep += 1) {
-      if (run.stopRequested) {
-        break;
-      }
-
-      if (!isLikesTimelinePage()) {
-        run.stopRequested = true;
-        run.stats.message = getOverlayMessage("leftPageSaving");
-        break;
-      }
-
-      const beforeCount = collectedPosts.size;
-      collectVisiblePosts(collectedPosts, saveQueue, pendingMediaWaits, run.stats, run);
-      const addedBeforeScroll = collectedPosts.size - beforeCount;
-      const previousScrollHeight = getDocumentScrollHeight();
-
-      if (pendingMediaWaits.size >= MAX_WAITING_POSTS_BEFORE_SCROLL_PAUSE) {
-        run.stats.waiting = pendingMediaWaits.size;
-        run.stats.status = "collecting";
-        run.stats.message = getOverlayMessage("pausingForWaitingPosts", pendingMediaWaits.size);
-        updateOverlay(run.stats);
-        await wait(WAITING_PAUSE_MS);
-        collectVisiblePosts(collectedPosts, saveQueue, pendingMediaWaits, run.stats, run);
-      } else {
-        scrollLikesTimeline();
-      }
-
-      await wait(getScrollWaitMs(addedBeforeScroll, noProgressPasses));
-
-      const beforePostWaitCount = collectedPosts.size;
-      collectVisiblePosts(collectedPosts, saveQueue, pendingMediaWaits, run.stats, run);
-      const addedAfterScroll = collectedPosts.size - beforePostWaitCount;
-      const addedCount = addedBeforeScroll + addedAfterScroll;
-      const nextScrollHeight = getDocumentScrollHeight();
-      const scrollHeightIncreased = nextScrollHeight > previousScrollHeight;
-
-      run.stats.collected = collectedPosts.size;
-      run.stats.waiting = pendingMediaWaits.size;
-      run.stats.status = "collecting";
-      run.stats.message =
-        addedCount > 0
-          ? getOverlayMessage("collectedOnPass", addedCount)
-          : pendingMediaWaits.size > 0
-            ? getOverlayMessage("waitingForMediaHints", pendingMediaWaits.size)
-          : scrollHeightIncreased
-            ? getOverlayMessage("waitingForRender")
-            : getOverlayMessage("noNewPosts");
-      updateOverlay(run.stats);
-
-      noProgressPasses =
-        addedCount === 0 && !scrollHeightIncreased && pendingMediaWaits.size === 0
-          ? noProgressPasses + 1
-          : 0;
-
-      if (noProgressPasses >= MAX_IDLE_PASSES) {
-        break;
-      }
-    }
-
-    run.stats.status = run.stopRequested ? "stopping" : "saving";
-    run.stats.waiting = pendingMediaWaits.size;
-    run.stats.message = run.stopRequested
-      ? getOverlayMessage("collectionStoppedSaving")
-      : getOverlayMessage("finishingQueuedSaves");
-    updateOverlay(run.stats);
-
-    queuePendingMediaWaits(collectedPosts, saveQueue, pendingMediaWaits);
-    run.collectingFinished = true;
-    await saveWorker;
-
-    if (run.stopRequested) {
-      run.stats.status = "stopped";
-      run.stats.waiting = pendingMediaWaits.size;
-      run.stats.message = getOverlayMessage("collectionStoppedSaved");
-    } else {
-      run.stats.status = "completed";
-      run.stats.waiting = pendingMediaWaits.size;
-      run.stats.message = getOverlayMessage("completed");
-    }
-  } catch (error) {
-    console.error("Likes import failed.", error);
-    run.stats.status = "failed";
-    run.stats.waiting = pendingMediaWaits.size;
-    run.stats.message =
-      error instanceof Error && error.message.trim() !== ""
-        ? error.message
-        : getOverlayMessage("failed");
-  } finally {
-    overlayExpanded = true;
-    updateOverlay(run.stats);
-    lastOverlayStats = { ...run.stats };
-    currentRun = null;
   }
 }
 
@@ -386,16 +426,23 @@ async function processSaveQueue(
       saveQueue.delete(item.post.x_post_id);
     }
 
+    let batchSaved = 0;
+    let batchDuplicates = 0;
+    let batchFailed = 0;
+
     try {
       for (const item of batch) {
         const response = await saveQueuedPostBundle(item, language, run.traceId);
 
         if (response.status === "saved") {
           run.stats.saved += 1;
+          batchSaved += 1;
         } else if (response.status === "duplicate") {
           run.stats.duplicates += 1;
+          batchDuplicates += 1;
         } else {
           run.stats.failed += 1;
+          batchFailed += 1;
         }
       }
     } catch (error) {
@@ -404,13 +451,34 @@ async function processSaveQueue(
         error
       });
       run.stats.failed += batch.length;
+      batchFailed += batch.length;
     }
 
-    run.stats.message = getOverlayMessage(
-      "processedProgress",
-      run.stats.saved + run.stats.duplicates + run.stats.failed,
-      run.stats.collected
-    );
+    if (batchSaved === 0 && batchFailed === 0 && batchDuplicates > 0) {
+      run.duplicateBatchStreak += 1;
+    } else {
+      run.duplicateBatchStreak = 0;
+    }
+
+    run.stats.stopReason = run.stopReason;
+    run.stats.duplicateBatchStreak = run.duplicateBatchStreak;
+    run.stats.duplicateBatchThreshold = run.duplicateBatchThreshold;
+
+    if (
+      !run.stopRequested &&
+      run.duplicateBatchStreak >= run.duplicateBatchThreshold
+    ) {
+      run.stopRequested = true;
+      run.stopReason = "duplicate-threshold";
+      run.stats.status = "stopping";
+      run.stats.stopReason = "duplicate-threshold";
+      run.stats.message = getDuplicateThresholdSavingMessage(run.stats);
+      run.stats.waiting = saveQueue.size;
+      updateOverlay(run.stats);
+      continue;
+    }
+
+    run.stats.message = formatProcessedProgressMessage(run.stats);
     run.stats.waiting = saveQueue.size;
     updateOverlay(run.stats);
   }
@@ -459,18 +527,10 @@ function collectVisiblePosts(
     });
 
     const existing = collectedPosts.get(post.x_post_id);
-
-    if (existing !== undefined && !isQueuedPostSnapshotRicher(bundle, existing)) {
-      pendingMediaWaits.delete(post.x_post_id);
-      emitInspectTrace(run, post.x_post_id, {
-        outcome: "skipped_not_richer",
-        mediaCount: post.media.length,
-        videoCandidateCount: post.video_candidates?.length ?? 0,
-        existingMediaCount: existing.post.media.length,
-        existingVideoCandidateCount: existing.post.video_candidates?.length ?? 0
-      });
-      continue;
-    }
+    const nextBundle =
+      existing === undefined || isQueuedPostSnapshotRicher(bundle, existing)
+        ? bundle
+        : existing;
 
     if (shouldWaitForMedia) {
       const nextWaitState: PendingMediaWaitState = {
@@ -488,22 +548,42 @@ function collectVisiblePosts(
         savableMediaCount
       });
 
+      collectedPosts.set(post.x_post_id, nextBundle);
+
       if (nextWaitState.waitPasses < MEDIA_WAIT_PASS_LIMIT) {
-        collectedPosts.set(post.x_post_id, bundle);
         continue;
       }
 
       pendingMediaWaits.delete(post.x_post_id);
-    } else {
-      pendingMediaWaits.delete(post.x_post_id);
+      saveQueue.set(post.x_post_id, nextBundle);
+      emitInspectTrace(run, post.x_post_id, {
+        outcome: "queued",
+        mediaCount: nextBundle.post.media.length,
+        videoCandidateCount: nextBundle.post.video_candidates?.length ?? 0,
+        queueSize: saveQueue.size
+      });
+      continue;
     }
 
-    collectedPosts.set(post.x_post_id, bundle);
-    saveQueue.set(post.x_post_id, bundle);
+    pendingMediaWaits.delete(post.x_post_id);
+
+    if (existing !== undefined && nextBundle === existing) {
+      emitInspectTrace(run, post.x_post_id, {
+        outcome: "skipped_not_richer",
+        mediaCount: post.media.length,
+        videoCandidateCount: post.video_candidates?.length ?? 0,
+        existingMediaCount: existing.post.media.length,
+        existingVideoCandidateCount: existing.post.video_candidates?.length ?? 0
+      });
+      continue;
+    }
+
+    collectedPosts.set(post.x_post_id, nextBundle);
+    saveQueue.set(post.x_post_id, nextBundle);
     emitInspectTrace(run, post.x_post_id, {
       outcome: "queued",
-      mediaCount: post.media.length,
-      videoCandidateCount: post.video_candidates?.length ?? 0,
+      mediaCount: nextBundle.post.media.length,
+      videoCandidateCount: nextBundle.post.video_candidates?.length ?? 0,
       queueSize: saveQueue.size
     });
   }
@@ -812,6 +892,9 @@ function createDefaultOverlayStats(): OverlayStats {
     failed: 0,
     scanned: 0,
     waiting: 0,
+    stopReason: "none",
+    duplicateBatchStreak: 0,
+    duplicateBatchThreshold: DEFAULT_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD,
     message: getOverlayMessage("ready")
   };
 }
@@ -825,16 +908,80 @@ function localizeOverlayMessage(stats: OverlayStats): string {
         ? getOverlayMessage("waitingForMediaHints", stats.waiting)
         : getOverlayMessage("collectingVisiblePosts");
     case "saving":
-      return getOverlayMessage("finishingQueuedSaves");
+      return getSavingStatusMessage(stats);
     case "stopping":
-      return getOverlayMessage("collectionStoppedSaving");
+      return getSavingStatusMessage(stats);
     case "stopped":
-      return getOverlayMessage("collectionStoppedSaved");
+      return getStoppedStatusMessage(stats);
     case "completed":
       return getOverlayMessage("completed");
     case "failed":
       return stats.message.trim() === "" ? getOverlayMessage("failed") : stats.message;
   }
+}
+
+function getSavingStatusMessage(stats: OverlayStats): string {
+  switch (stats.stopReason) {
+    case "manual":
+      return getOverlayMessage("collectionStoppedSaving");
+    case "left-page":
+      return getOverlayMessage("leftPageSaving");
+    case "duplicate-threshold":
+      return getDuplicateThresholdSavingMessage(stats);
+    case "none":
+      return getOverlayMessage("finishingQueuedSaves");
+  }
+}
+
+function getStoppedStatusMessage(stats: OverlayStats): string {
+  switch (stats.stopReason) {
+    case "manual":
+      return getOverlayMessage("collectionStoppedSaved");
+    case "left-page":
+      return getLeftPageSavedMessage();
+    case "duplicate-threshold":
+      return getDuplicateThresholdStoppedMessage(stats);
+    case "none":
+      return getOverlayMessage("completed");
+  }
+}
+
+function getDuplicateThresholdSavingMessage(stats: OverlayStats): string {
+  if (overlayLanguage === "ja") {
+    return `duplicate-only batch が ${stats.duplicateBatchThreshold} 回連続したため収集を停止しました。キュー済みの投稿を保存しています。`;
+  }
+
+  return `Stopped collecting after ${stats.duplicateBatchThreshold} duplicate-only batches in a row. Saving queued posts.`;
+}
+
+function getDuplicateThresholdStoppedMessage(stats: OverlayStats): string {
+  if (overlayLanguage === "ja") {
+    return `duplicate-only batch が ${stats.duplicateBatchThreshold} 回連続したため停止しました。キュー済みの投稿は保存されました。`;
+  }
+
+  return `Stopped after ${stats.duplicateBatchThreshold} duplicate-only batches in a row. Queued posts were saved.`;
+}
+
+function getLeftPageSavedMessage(): string {
+  if (overlayLanguage === "ja") {
+    return "いいねページを離れたため停止しました。キュー済みの投稿は保存されました。";
+  }
+
+  return "Stopped because you left the Likes page. Queued posts were saved.";
+}
+
+function formatProcessedProgressMessage(stats: OverlayStats): string {
+  const processedCount = stats.saved + stats.duplicates + stats.failed;
+
+  if (stats.duplicateBatchStreak <= 0) {
+    return getOverlayMessage("processedProgress", processedCount, stats.collected);
+  }
+
+  if (overlayLanguage === "ja") {
+    return `${processedCount} / ${stats.collected} 件を処理しました。duplicate-only batch 連続 ${stats.duplicateBatchStreak} / ${stats.duplicateBatchThreshold}。`;
+  }
+
+  return `Processed ${processedCount} / ${stats.collected} posts. Duplicate-only batch streak: ${stats.duplicateBatchStreak} / ${stats.duplicateBatchThreshold}.`;
 }
 
 function getToggleButtonText(isExpanded: boolean, isRunning: boolean): string {

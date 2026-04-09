@@ -2,6 +2,7 @@ import type {
   SaveImageInput,
   SavePostInput
 } from "../../types/archive";
+import { getCachedGraphqlImageCandidates } from "./graphql-image-candidate-cache";
 import { getCachedGraphqlVideoCandidates } from "./graphql-video-candidate-cache";
 
 const POST_PATH_PATTERN = /^\/([^/]+)\/status\/(\d+)/;
@@ -21,7 +22,10 @@ export function extractPostFromArticle(article: HTMLElement): ExtractedPostBundl
     return null;
   }
 
-  const media = extractPostImages(article, quotedPostContainer);
+  const media = mergeImageCandidates(
+    extractPostImages(article, quotedPostContainer),
+    getCachedGraphqlImageCandidates(permalink.xPostId)
+  );
   const text = extractPostText(article, quotedPostContainer);
   const videoCandidates = getCachedGraphqlVideoCandidates(permalink.xPostId);
   const engagement = extractEngagementCounts(article);
@@ -289,6 +293,32 @@ function extractPostImages(article: HTMLElement, exclude?: Element | null): Save
   }
 
   return images
+    .sort((left, right) => left.position - right.position)
+    .map((image, index) => ({
+      ...image,
+      position: index
+    }));
+}
+
+function mergeImageCandidates(
+  primaryImages: SaveImageInput[],
+  fallbackImages: SaveImageInput[]
+): SaveImageInput[] {
+  if (fallbackImages.length === 0) {
+    return primaryImages;
+  }
+
+  const merged = new Map<string, SaveImageInput>();
+
+  for (const image of fallbackImages) {
+    merged.set(image.source_url, image);
+  }
+
+  for (const image of primaryImages) {
+    merged.set(image.source_url, image);
+  }
+
+  return [...merged.values()]
     .sort((left, right) => left.position - right.position)
     .map((image, index) => ({
       ...image,

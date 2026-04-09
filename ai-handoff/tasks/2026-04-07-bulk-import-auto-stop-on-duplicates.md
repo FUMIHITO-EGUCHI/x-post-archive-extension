@@ -68,20 +68,33 @@ Investigate the current likes / bookmarks bulk import loops and add an automatic
 
 ## Codex Result
 
-<!-- Fill after implementation -->
+Implemented a shared bulk-import auto-stop rule for likes and bookmarks import based on consecutive duplicate-only save batches. The threshold is now a shared archive setting, defaults to `3`, is clamped to `1..20`, and the overlay keeps the stop reason explicit so duplicate-threshold stops are distinguishable from manual stops and page-leave stops. During browser verification, a separate pending-media-wait queue bug surfaced on bookmarks pages; that logic was fixed in both likes and bookmarks import so repeated non-richer scans still age toward queueing instead of dropping out silently.
 
 ## Changed Files
 
-<!-- Fill after implementation -->
+- `src/features/x/likes-import-controls.ts`
+- `src/features/x/bookmarks-import-controls.ts`
+- `src/features/settings/archive-settings.ts`
+- `src/features/viewer/components/settings-basic-panel.tsx`
+- `src/types/archive.ts`
+- `ai-handoff/current-task.md`
+- `ai-handoff/tasks/2026-04-07-bulk-import-auto-stop-on-duplicates.md`
 
 ## Verification
 
-<!-- Fill after implementation -->
+- `npm run typecheck`
+- `npm run build`
+- Shared CDP Chrome (`.shared-cdp-profile`, port `9223`):
+  - Reloaded the unpacked extension after rebuilding
+  - Temporarily changed `bulkImportDuplicateBatchThreshold` from `10` to `1` for faster verification, then restored it
+  - On `https://x.com/anifumi_dev/likes`, verified the overlay returns to `停止済み` with the duplicate-threshold message after duplicate-only processing
+  - Created three X bookmarks from post detail pages, then verified `https://x.com/i/bookmarks` also returns to `停止済み` with the duplicate-threshold message after duplicate-only processing
+  - Confirmed the bookmarks flow started counting duplicates after the pending-media-wait fix, instead of finishing with `collected > 0` and `saved/duplicates/failed = 0`
 
 ## Remaining Issues
 
-<!-- Fill after implementation -->
+- None for this issue.
 
 ## Suggested Next Action
 
-<!-- Fill after implementation -->
+Select the next active task on `feature/archive-viewer-improvements`.

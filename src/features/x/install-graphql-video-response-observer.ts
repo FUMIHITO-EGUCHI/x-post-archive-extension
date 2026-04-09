@@ -1,4 +1,9 @@
+import { extractImageCandidatesByPostIdFromGraphqlResponse } from "./graphql-image-candidates";
 import { extractVideoCandidatesByPostIdFromGraphqlResponse } from "./graphql-video-candidates";
+import {
+  GRAPHQL_IMAGE_CANDIDATES_EVENT,
+  type GraphqlImageCandidatesEventDetail
+} from "./graphql-image-events";
 import {
   GRAPHQL_VIDEO_CANDIDATES_EVENT,
   type GraphqlVideoCandidatesEventDetail
@@ -137,7 +142,20 @@ function normalizeGraphqlUrl(rawUrl: string): string | null {
 }
 
 function dispatchCandidates(payload: unknown): void {
+  const imagePosts = extractImageCandidatesByPostIdFromGraphqlResponse(payload);
   const posts = extractVideoCandidatesByPostIdFromGraphqlResponse(payload);
+
+  if (imagePosts.length > 0) {
+    const imageDetail: GraphqlImageCandidatesEventDetail = {
+      posts: imagePosts
+    };
+
+    document.dispatchEvent(
+      new CustomEvent<GraphqlImageCandidatesEventDetail>(GRAPHQL_IMAGE_CANDIDATES_EVENT, {
+        detail: imageDetail
+      })
+    );
+  }
 
   if (posts.length === 0) {
     return;

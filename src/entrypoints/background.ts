@@ -3,6 +3,7 @@ import {
   handleRuntimeMessage
 } from "../features/runtime/handle-runtime-message";
 import { resumePendingMediaPersistence } from "../features/archive/archive-service";
+import { resumeRefetchProcessing } from "../features/refetch/refetch-coordinator";
 import { createLogger } from "../features/logging/logger";
 
 const logger = createLogger("background");
@@ -15,11 +16,13 @@ export default defineBackground({
         message: "X Post Archive Extension initialized."
       });
       void resumePendingMediaPersistence();
+      void resumeRefetchProcessing();
     });
 
     chrome.runtime.onStartup?.addListener?.(() => {
       logger.info("extension.startup");
       void resumePendingMediaPersistence();
+      void resumeRefetchProcessing();
     });
 
     chrome.action.onClicked.addListener(() => {
@@ -29,8 +32,36 @@ export default defineBackground({
       });
     });
 
-    chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-      void handleRuntimeMessage(message)
+    chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+      let normalizedSender:
+        | {
+            tab?: {
+              id?: number;
+            };
+          }
+        | undefined;
+
+      if (typeof sender === "object" && sender !== null) {
+        const rawTab = Reflect.get(sender, "tab");
+
+        if (typeof rawTab === "object" && rawTab !== null) {
+          const rawTabId = Reflect.get(rawTab, "id");
+          normalizedSender =
+            typeof rawTabId === "number"
+              ? {
+                  tab: {
+                    id: rawTabId
+                  }
+                }
+              : {
+                  tab: {}
+                };
+        } else {
+          normalizedSender = {};
+        }
+      }
+
+      void handleRuntimeMessage(message, normalizedSender)
         .then((response) => {
           sendResponse(response);
         })

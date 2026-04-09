@@ -70,4 +70,31 @@
 
 ## Result
 
-<!-- 完了後に記入 -->
+Implemented a viewer-only random ordering mode that stays stable within a single viewer session and can be explicitly reshuffled from the archive toolbar. The viewer now generates a per-session random seed, passes it through `posts/list-page`, and the archive service uses that seed to deterministically shuffle the filtered post ID set before slicing. This keeps `Load more` consistent while still allowing a new order after pressing `再シャッフル` / `Reshuffle`.
+
+The shuffled order itself is not persisted to storage. If the saved viewer session restores with `sortField: "random"`, the viewer generates a fresh seed on open instead of reusing the previous ordering, and it does not try to restore the old random scroll position.
+
+## Changed Files
+
+- `src/features/viewer/components/viewer-app.tsx`
+- `src/features/archive/archive-service.ts`
+- `src/db/repositories/posts-repository.ts`
+- `src/types/viewer.ts`
+- `src/features/viewer/viewer-session-storage.ts`
+- `ai-handoff/current-task.md`
+- `ai-handoff/tasks/2026-04-06-random-display.md`
+
+## Verification
+
+- `npm run typecheck`
+- `npm run build`
+- Shared CDP Chrome (`.shared-cdp-profile`, port `9223`)
+  - Reloaded the unpacked extension after rebuild
+  - Switched the viewer sort select to `ランダム`
+  - Confirmed the sort-direction button disappears and the `再シャッフル` button appears
+  - Confirmed the first `50` post IDs stayed unchanged after pressing `さらに読み込む` and expanding to `100 / 12,743件`
+  - Confirmed `再シャッフル` changed the first visible `10` post IDs and reset the loaded count to `50 / 12,743件`
+
+## Remaining Issues
+
+- No additional issue was found during the random-order verification.
