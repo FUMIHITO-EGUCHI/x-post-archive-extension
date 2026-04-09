@@ -8,10 +8,14 @@ import type {
   MediaRecord
 } from "../../../types/archive";
 import { defaultArchiveSettings } from "../../../types/archive";
+import { DEFAULT_REFETCH_STATUS, type RefetchStatusRecord } from "../../../types/refetch";
 import type {
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
+  DateFilterTarget,
   FontSizeOption,
+  ListPostsPageInput,
+  PostFilterInput,
   PostSortField,
   StorageEstimateState,
   SortDirection,
@@ -25,6 +29,11 @@ import {
   requestArchiveSummary,
   requestDeletePost,
   requestPostsPage,
+  requestRefetchCancel,
+  requestRefetchClear,
+  requestRefetchEnqueueAll,
+  requestRefetchEnqueuePosts,
+  requestRefetchStatus,
   requestRemovePostTagByName,
   requestTagSummaries,
   requestUserSummaries
@@ -32,6 +41,7 @@ import {
 import { createLogger } from "../../logging/logger";
 import { SettingsArchiveMaintenancePanel } from "./settings-archive-maintenance-panel";
 import { SettingsBasicPanel } from "./settings-basic-panel";
+import { BulkTagModal } from "./bulk-tag-modal";
 import { SettingsLogPanel } from "./settings-log-panel";
 import { SettingsTagManagementPanel } from "./settings-tag-management-panel";
 import { SettingsTagRedirectsPanel } from "./settings-tag-redirects-panel";
@@ -54,6 +64,7 @@ import {
   persistViewerSessionRestoreMode
 } from "../viewer-session-storage";
 import { TagPickerOverlay } from "./tag-picker-overlay";
+import { useIncrementalList } from "./use-incremental-list";
 import { useDialogA11y } from "./use-dialog-a11y";
 
 type ViewerStatus = "idle" | "loading" | "ready";
@@ -76,6 +87,8 @@ const FONT_SIZE_SCALE: Record<FontSizeOption, number> = {
   medium: 1,
   large: 1.12
 };
+const FILTER_MODAL_LIST_SIZE = 40;
+const DEFAULT_DATE_FILTER_TARGET: DateFilterTarget = "saved_at";
 const logger = createLogger("viewer");
 
 export function ViewerApp() {
@@ -103,6 +116,7 @@ export function ViewerApp() {
   const [hasMorePosts, setHasMorePosts] = useState(false);
   const [sortField, setSortField] = useState<PostSortField>("saved_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [randomSeed, setRandomSeed] = useState(() => createRandomSeed());
   const [status, setStatus] = useState<ViewerStatus>("idle");
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -111,14 +125,24 @@ export function ViewerApp() {
   const [activeVideo, setActiveVideo] = useState<ActiveVideo | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [activeAuthorFilter, setActiveAuthorFilter] = useState<string | null>(null);
+  const [activeDateFilterTarget, setActiveDateFilterTarget] = useState<DateFilterTarget | null>(null);
+  const [activeDateFrom, setActiveDateFrom] = useState<string | null>(null);
+  const [activeDateTo, setActiveDateTo] = useState<string | null>(null);
   const [isTagFilterModalOpen, setIsTagFilterModalOpen] = useState(false);
   const [isAuthorFilterModalOpen, setIsAuthorFilterModalOpen] = useState(false);
+  const [isDateFilterModalOpen, setIsDateFilterModalOpen] = useState(false);
+  const [isBulkTagModalOpen, setIsBulkTagModalOpen] = useState(false);
   const [tagSearchQuery, setTagSearchQuery] = useState("");
   const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [dateFilterDraftTarget, setDateFilterDraftTarget] =
+    useState<DateFilterTarget>(DEFAULT_DATE_FILTER_TARGET);
+  const [dateFilterDraftFrom, setDateFilterDraftFrom] = useState("");
+  const [dateFilterDraftTo, setDateFilterDraftTo] = useState("");
   const [tagSortOption, setTagSortOption] = useState<TagSortOption>("count");
   const [userSummaries, setUserSummaries] = useState<UserSummary[]>([]);
   const [tagActionPostId, setTagActionPostId] = useState<string | null>(null);
   const [tagPickerPostId, setTagPickerPostId] = useState<string | null>(null);
+  const [refetchStatus, setRefetchStatus] = useState<RefetchStatusRecord>(DEFAULT_REFETCH_STATUS);
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState>({
     usage: null,
     quota: null,
@@ -128,6 +152,7 @@ export function ViewerApp() {
   const activeVideoUrlRef = useRef<string | null>(null);
   const shouldPersistSessionRef = useRef(false);
   const restoreScrollTopRef = useRef<number | null>(null);
+  const previousRefetchStatusRef = useRef<RefetchStatusRecord>(DEFAULT_REFETCH_STATUS);
   const [restoreTargetPostId, setRestoreTargetPostId] = useState<string | null>(null);
   const archiveSectionRef = useRef<HTMLElement | null>(null);
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -137,6 +162,8 @@ export function ViewerApp() {
   const tagFilterSearchInputRef = useRef<HTMLInputElement | null>(null);
   const authorFilterDialogRef = useRef<HTMLElement | null>(null);
   const authorFilterSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const dateFilterDialogRef = useRef<HTMLElement | null>(null);
+  const dateFilterTargetInputRef = useRef<HTMLSelectElement | null>(null);
   const imageLightboxRef = useRef<HTMLDivElement | null>(null);
   const imageLightboxCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const videoLightboxRef = useRef<HTMLDivElement | null>(null);
@@ -173,6 +200,13 @@ export function ViewerApp() {
     () => userSummaries.find((user) => user.screen_name === activeAuthorFilter) ?? null,
     [activeAuthorFilter, userSummaries]
   );
+  const hasActiveDateFilter =
+    activeDateFilterTarget !== null && (activeDateFrom !== null || activeDateTo !== null);
+  const dateFilterDraftError = getDateFilterDraftError(
+    dateFilterDraftFrom,
+    dateFilterDraftTo,
+    language
+  );
 
   function closeTagFilterModal() {
     setIsTagFilterModalOpen(false);
@@ -180,6 +214,21 @@ export function ViewerApp() {
 
   function closeAuthorFilterModal() {
     setIsAuthorFilterModalOpen(false);
+  }
+
+  function openDateFilterModal() {
+    setDateFilterDraftTarget(activeDateFilterTarget ?? DEFAULT_DATE_FILTER_TARGET);
+    setDateFilterDraftFrom(activeDateFrom ?? "");
+    setDateFilterDraftTo(activeDateTo ?? "");
+    setIsDateFilterModalOpen(true);
+  }
+
+  function closeDateFilterModal() {
+    setIsDateFilterModalOpen(false);
+  }
+
+  function closeBulkTagModal() {
+    setIsBulkTagModalOpen(false);
   }
 
   function closeImageLightbox() {
@@ -201,6 +250,12 @@ export function ViewerApp() {
     containerRef: authorFilterDialogRef,
     initialFocusRef: authorFilterSearchInputRef,
     onClose: closeAuthorFilterModal
+  });
+  useDialogA11y({
+    isOpen: isDateFilterModalOpen,
+    containerRef: dateFilterDialogRef,
+    initialFocusRef: dateFilterTargetInputRef,
+    onClose: closeDateFilterModal
   });
   useDialogA11y({
     isOpen: activeMedia !== null,
@@ -278,6 +333,44 @@ export function ViewerApp() {
       );
     });
   }, [userSearchQuery, userSummaries]);
+  const requiredVisibleTagOptionCount = useMemo(() => {
+    if (activeTagFilter === null) {
+      return 0;
+    }
+
+    const index = visibleTagOptions.findIndex(
+      ({ tag }) => tag.normalized_name === activeTagFilter
+    );
+    return index < 0 ? 0 : index + 1;
+  }, [activeTagFilter, visibleTagOptions]);
+  const {
+    visibleItems: displayedTagOptions,
+    remainingCount: remainingTagOptionCount,
+    hasMore: hasMoreTagOptions,
+    loadMore: loadMoreTagOptions
+  } = useIncrementalList(visibleTagOptions, {
+    initialCount: FILTER_MODAL_LIST_SIZE,
+    step: FILTER_MODAL_LIST_SIZE,
+    requiredCount: requiredVisibleTagOptionCount
+  });
+  const requiredVisibleUserOptionCount = useMemo(() => {
+    if (activeAuthorFilter === null) {
+      return 0;
+    }
+
+    const index = visibleUserOptions.findIndex((user) => user.screen_name === activeAuthorFilter);
+    return index < 0 ? 0 : index + 1;
+  }, [activeAuthorFilter, visibleUserOptions]);
+  const {
+    visibleItems: displayedUserOptions,
+    remainingCount: remainingUserOptionCount,
+    hasMore: hasMoreUserOptions,
+    loadMore: loadMoreUserOptions
+  } = useIncrementalList(visibleUserOptions, {
+    initialCount: FILTER_MODAL_LIST_SIZE,
+    step: FILTER_MODAL_LIST_SIZE,
+    requiredCount: requiredVisibleUserOptionCount
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -317,8 +410,12 @@ export function ViewerApp() {
 
         let nextSortField: PostSortField = "saved_at";
         let nextSortDirection: SortDirection = "desc";
+        let nextRandomSeed = createRandomSeed();
         let nextTagFilter: string | null = null;
         let nextAuthorFilter: string | null = null;
+        let nextDateFilterTarget: DateFilterTarget | null = null;
+        let nextDateFrom: string | null = null;
+        let nextDateTo: string | null = null;
         let initialLimit = DEFAULT_PAGE_SIZE;
 
         if (nextSessionRestoreMode !== "off" && savedSession !== null) {
@@ -326,8 +423,11 @@ export function ViewerApp() {
           nextSortDirection = savedSession.sortDirection;
           nextTagFilter = savedSession.activeTagFilter;
           nextAuthorFilter = savedSession.activeAuthorFilter ?? null;
+          nextDateFilterTarget = savedSession.activeDateFilterTarget ?? null;
+          nextDateFrom = savedSession.activeDateFrom ?? null;
+          nextDateTo = savedSession.activeDateTo ?? null;
 
-          if (nextSessionRestoreMode === "filters-and-position") {
+          if (nextSessionRestoreMode === "filters-and-position" && nextSortField !== "random") {
             initialLimit = Math.max(DEFAULT_PAGE_SIZE, savedSession.loadedCount);
             restoreScrollTopRef.current = savedSession.scrollTop;
             setRestoreTargetPostId(savedSession.anchorPostId);
@@ -336,8 +436,15 @@ export function ViewerApp() {
 
         setSortField(nextSortField);
         setSortDirection(nextSortDirection);
+        setRandomSeed(nextRandomSeed);
         setActiveTagFilter(nextTagFilter);
         setActiveAuthorFilter(nextAuthorFilter);
+        setActiveDateFilterTarget(nextDateFilterTarget);
+        setActiveDateFrom(nextDateFrom);
+        setActiveDateTo(nextDateTo);
+        setDateFilterDraftTarget(nextDateFilterTarget ?? DEFAULT_DATE_FILTER_TARGET);
+        setDateFilterDraftFrom(nextDateFrom ?? "");
+        setDateFilterDraftTo(nextDateTo ?? "");
 
         await Promise.all([
           refreshArchiveMetadata(),
@@ -346,8 +453,12 @@ export function ViewerApp() {
             limit: initialLimit,
             sortField: nextSortField,
             sortDirection: nextSortDirection,
+            randomSeed: nextSortField === "random" ? nextRandomSeed : null,
             tagFilter: nextTagFilter,
             authorFilter: nextAuthorFilter,
+            dateFilterTarget: nextDateFilterTarget,
+            dateFrom: nextDateFrom,
+            dateTo: nextDateTo,
             append: false
           })
         ]);
@@ -569,6 +680,9 @@ export function ViewerApp() {
     };
   }, [
     activeAuthorFilter,
+    activeDateFilterTarget,
+    activeDateFrom,
+    activeDateTo,
     activeTagFilter,
     posts.length,
     screen,
@@ -611,6 +725,9 @@ export function ViewerApp() {
     };
   }, [
     activeAuthorFilter,
+    activeDateFilterTarget,
+    activeDateFrom,
+    activeDateTo,
     activeTagFilter,
     posts.length,
     screen,
@@ -640,13 +757,42 @@ export function ViewerApp() {
     }
   }
 
+  function getCurrentDateFilterInput() {
+    return {
+      dateFilterTarget: activeDateFilterTarget,
+      dateFrom: activeDateFrom,
+      dateTo: activeDateTo
+    };
+  }
+
+  function getCurrentPostFilterInput(): PostFilterInput {
+    return {
+      tagFilter: activeTagFilter,
+      authorFilter: activeAuthorFilter,
+      dateFilterTarget: activeDateFilterTarget,
+      dateFrom: toDateFilterStartTimestamp(activeDateFrom),
+      dateTo: toDateFilterEndTimestamp(activeDateTo)
+    };
+  }
+
+  function getRandomSeedInput(nextSortField = sortField, seedOverride?: number | null) {
+    return {
+      randomSeed:
+        nextSortField === "random" ? seedOverride ?? randomSeed : null
+    };
+  }
+
   async function loadArchivePage(input: {
     offset: number;
     limit: number;
     sortField: PostSortField;
     sortDirection: SortDirection;
+    randomSeed: number | null;
     tagFilter: string | null;
     authorFilter: string | null;
+    dateFilterTarget: DateFilterTarget | null;
+    dateFrom: string | null;
+    dateTo: string | null;
     append: boolean;
   }): Promise<void> {
     if (input.append) {
@@ -663,8 +809,10 @@ export function ViewerApp() {
         limit: input.limit,
         sortField: input.sortField,
         sortDirection: input.sortDirection,
+        randomSeed: input.randomSeed,
         tagFilter: input.tagFilter,
-        authorFilter: input.authorFilter
+        authorFilter: input.authorFilter,
+        ...buildDateFilterRequest(input.dateFilterTarget, input.dateFrom, input.dateTo)
       });
 
       if (input.append) {
@@ -714,8 +862,10 @@ export function ViewerApp() {
         limit,
         sortField,
         sortDirection,
+        ...getRandomSeedInput(),
         tagFilter: activeTagFilter,
         authorFilter: activeAuthorFilter,
+        ...getCurrentDateFilterInput(),
         append: false
       })
     ]);
@@ -724,6 +874,62 @@ export function ViewerApp() {
   async function refreshArchive(): Promise<void> {
     await reloadCurrentArchive();
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    let timeoutId: number | null = null;
+
+    async function pollRefetchStatus() {
+      try {
+        const response = await requestRefetchStatus();
+
+        if (cancelled) {
+          return;
+        }
+
+        const previousStatus = previousRefetchStatusRef.current;
+        const nextStatus = response.status;
+
+        previousRefetchStatusRef.current = nextStatus;
+        setRefetchStatus(nextStatus);
+
+        if (
+          previousStatus.phase === "running" &&
+          nextStatus.phase !== "running" &&
+          (nextStatus.completedCount > 0 || nextStatus.failedCount > 0)
+        ) {
+          void refreshArchive();
+        }
+      } catch (error) {
+        logger.warn("refetch.status.poll_failed", {
+          message: "Failed to poll refetch status.",
+          context: {
+            error
+          }
+        });
+      } finally {
+        if (cancelled) {
+          return;
+        }
+
+        const intervalMs =
+          refetchStatus.phase === "running" || refetchStatus.totalCount > 0 ? 1000 : 5000;
+        timeoutId = window.setTimeout(() => {
+          void pollRefetchStatus();
+        }, intervalMs);
+      }
+    }
+
+    void pollRefetchStatus();
+
+    return () => {
+      cancelled = true;
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [refetchStatus.phase, refetchStatus.totalCount]);
 
   async function handleTagRenamed(
     oldNormalizedName: string,
@@ -743,8 +949,10 @@ export function ViewerApp() {
         limit: Math.max(posts.length, DEFAULT_PAGE_SIZE),
         sortField,
         sortDirection,
+        ...getRandomSeedInput(),
         tagFilter: nextTagFilter,
         authorFilter: activeAuthorFilter,
+        ...getCurrentDateFilterInput(),
         append: false
       })
     ]);
@@ -768,8 +976,10 @@ export function ViewerApp() {
         limit: Math.max(posts.length, DEFAULT_PAGE_SIZE),
         sortField,
         sortDirection,
+        ...getRandomSeedInput(),
         tagFilter: nextTagFilter,
         authorFilter: activeAuthorFilter,
+        ...getCurrentDateFilterInput(),
         append: false
       })
     ]);
@@ -947,7 +1157,11 @@ export function ViewerApp() {
   }
 
   async function handleSortFieldChange(nextValue: PostSortField) {
+    const nextRandomSeed = nextValue === "random" ? createRandomSeed() : randomSeed;
     setSortField(nextValue);
+    if (nextValue === "random") {
+      setRandomSeed(nextRandomSeed);
+    }
     window.scrollTo({
       top: 0
     });
@@ -956,13 +1170,85 @@ export function ViewerApp() {
       limit: DEFAULT_PAGE_SIZE,
       sortField: nextValue,
       sortDirection,
+      ...getRandomSeedInput(nextValue, nextRandomSeed),
       tagFilter: activeTagFilter,
       authorFilter: activeAuthorFilter,
+      ...getCurrentDateFilterInput(),
       append: false
     });
   }
 
+  async function handleRefetchPost(xPostId: string): Promise<void> {
+    try {
+      const response = await requestRefetchEnqueuePosts([xPostId], 1);
+      previousRefetchStatusRef.current = response.status;
+      setRefetchStatus(response.status);
+    } catch (error) {
+      logger.error("refetch.post.enqueue_failed", {
+        message: "Failed to enqueue a post refetch.",
+        context: {
+          xPostId,
+          error
+        }
+      });
+      setLoadNotice(
+        language === "ja"
+          ? "投稿の再取得を開始できませんでした。"
+          : "The post could not be queued for refetch."
+      );
+    }
+  }
+
+  async function handleRefetchAllPosts(): Promise<void> {
+    try {
+      const response = await requestRefetchEnqueueAll(0);
+      previousRefetchStatusRef.current = response.status;
+      setRefetchStatus(response.status);
+    } catch (error) {
+      logger.error("refetch.bulk.enqueue_failed", {
+        message: "Failed to enqueue archive refetch.",
+        context: {
+          error
+        }
+      });
+    }
+  }
+
+  async function handleCancelRefetch(): Promise<void> {
+    try {
+      const response = await requestRefetchCancel();
+      previousRefetchStatusRef.current = response.status;
+      setRefetchStatus(response.status);
+    } catch (error) {
+      logger.error("refetch.cancel.failed", {
+        message: "Failed to stop refetch processing.",
+        context: {
+          error
+        }
+      });
+    }
+  }
+
+  async function handleClearRefetchQueue(): Promise<void> {
+    try {
+      const response = await requestRefetchClear();
+      previousRefetchStatusRef.current = response.status;
+      setRefetchStatus(response.status);
+    } catch (error) {
+      logger.error("refetch.clear.failed", {
+        message: "Failed to clear the refetch queue.",
+        context: {
+          error
+        }
+      });
+    }
+  }
+
   async function handleSortDirectionToggle() {
+    if (sortField === "random") {
+      return;
+    }
+
     const nextValue = sortDirection === "desc" ? "asc" : "desc";
     setSortDirection(nextValue);
     window.scrollTo({
@@ -973,8 +1259,29 @@ export function ViewerApp() {
       limit: DEFAULT_PAGE_SIZE,
       sortField,
       sortDirection: nextValue,
+      ...getRandomSeedInput(),
       tagFilter: activeTagFilter,
       authorFilter: activeAuthorFilter,
+      ...getCurrentDateFilterInput(),
+      append: false
+    });
+  }
+
+  async function handleReshuffle() {
+    const nextRandomSeed = createRandomSeed();
+    setRandomSeed(nextRandomSeed);
+    window.scrollTo({
+      top: 0
+    });
+    await loadArchivePage({
+      offset: 0,
+      limit: DEFAULT_PAGE_SIZE,
+      sortField: "random",
+      sortDirection,
+      ...getRandomSeedInput("random", nextRandomSeed),
+      tagFilter: activeTagFilter,
+      authorFilter: activeAuthorFilter,
+      ...getCurrentDateFilterInput(),
       append: false
     });
   }
@@ -992,8 +1299,10 @@ export function ViewerApp() {
       limit: DEFAULT_PAGE_SIZE,
       sortField,
       sortDirection,
+      ...getRandomSeedInput(),
       tagFilter: nextValue,
       authorFilter: activeAuthorFilter,
+      ...getCurrentDateFilterInput(),
       append: false
     });
   }
@@ -1011,8 +1320,70 @@ export function ViewerApp() {
       limit: DEFAULT_PAGE_SIZE,
       sortField,
       sortDirection,
+      ...getRandomSeedInput(),
       tagFilter: activeTagFilter,
       authorFilter: nextValue,
+      ...getCurrentDateFilterInput(),
+      append: false
+    });
+  }
+
+  async function handleApplyDateFilter() {
+    const validationError = getDateFilterDraftError(dateFilterDraftFrom, dateFilterDraftTo, language);
+
+    if (validationError !== null) {
+      return;
+    }
+
+    const nextDateFrom = normalizeDateInputValue(dateFilterDraftFrom);
+    const nextDateTo = normalizeDateInputValue(dateFilterDraftTo);
+    const nextDateFilterTarget =
+      nextDateFrom === null && nextDateTo === null ? null : dateFilterDraftTarget;
+
+    setActiveDateFilterTarget(nextDateFilterTarget);
+    setActiveDateFrom(nextDateFrom);
+    setActiveDateTo(nextDateTo);
+    closeDateFilterModal();
+    window.scrollTo({
+      top: 0
+    });
+    await loadArchivePage({
+      offset: 0,
+      limit: DEFAULT_PAGE_SIZE,
+      sortField,
+      sortDirection,
+      ...getRandomSeedInput(),
+      tagFilter: activeTagFilter,
+      authorFilter: activeAuthorFilter,
+      dateFilterTarget: nextDateFilterTarget,
+      dateFrom: nextDateFrom,
+      dateTo: nextDateTo,
+      append: false
+    });
+  }
+
+  async function handleClearDateFilter() {
+    setActiveDateFilterTarget(null);
+    setActiveDateFrom(null);
+    setActiveDateTo(null);
+    setDateFilterDraftTarget(DEFAULT_DATE_FILTER_TARGET);
+    setDateFilterDraftFrom("");
+    setDateFilterDraftTo("");
+    closeDateFilterModal();
+    window.scrollTo({
+      top: 0
+    });
+    await loadArchivePage({
+      offset: 0,
+      limit: DEFAULT_PAGE_SIZE,
+      sortField,
+      sortDirection,
+      ...getRandomSeedInput(),
+      tagFilter: activeTagFilter,
+      authorFilter: activeAuthorFilter,
+      dateFilterTarget: null,
+      dateFrom: null,
+      dateTo: null,
       append: false
     });
   }
@@ -1023,8 +1394,10 @@ export function ViewerApp() {
       limit: DEFAULT_PAGE_SIZE,
       sortField,
       sortDirection,
+      ...getRandomSeedInput(),
       tagFilter: activeTagFilter,
       authorFilter: activeAuthorFilter,
+      ...getCurrentDateFilterInput(),
       append: true
     });
   }
@@ -1044,6 +1417,9 @@ export function ViewerApp() {
         sortDirection,
         activeTagFilter,
         activeAuthorFilter,
+        activeDateFilterTarget,
+        activeDateFrom,
+        activeDateTo,
         loadedCount: posts.length,
         anchorPostId:
           sessionRestoreMode === "filters-and-position"
@@ -1129,72 +1505,113 @@ export function ViewerApp() {
                   {formatArchiveCountLabel(posts.length, archiveTotalCount, hasMorePosts, language)}
                 </span>
               </div>
-              <div
-                className="viewer-sort-controls"
-                aria-label={language === "ja" ? "投稿の並び替え" : "Sort posts"}
-              >
-                {userSummaries.length > 0 && (
-                  <button
-                    className="viewer-secondary-button"
-                    type="button"
-                    onClick={() => {
-                      setIsAuthorFilterModalOpen(true);
-                    }}
-                  >
-                    {language === "ja" ? "ユーザー絞り込み" : "User filter"}
-                  </button>
-                )}
-                {availableTags.length > 0 && (
-                  <button
-                    className="viewer-secondary-button"
-                    type="button"
-                    onClick={() => {
-                      setIsTagFilterModalOpen(true);
-                    }}
-                  >
-                    {language === "ja" ? "タグ絞り込み" : "Tag filter"}
-                  </button>
-                )}
-                <label className="viewer-sort-label">
-                  <span>{language === "ja" ? "並び順" : "Sort"}</span>
-                  <select
-                    className="viewer-sort-select"
-                    value={sortField}
-                    onChange={(event) => {
-                      void handleSortFieldChange(event.currentTarget.value as PostSortField);
-                    }}
-                  >
-                    <option value="posted_at">{language === "ja" ? "投稿日時" : "Posted at"}</option>
-                    <option value="saved_at">{language === "ja" ? "保存日時" : "Saved at"}</option>
-                    <option value="reply_count">{language === "ja" ? "返信数" : "Replies"}</option>
-                    <option value="repost_count">{language === "ja" ? "リポスト数" : "Reposts"}</option>
-                    <option value="like_count">{language === "ja" ? "いいね数" : "Likes"}</option>
-                  </select>
-                </label>
-                <button
-                  className="viewer-sort-direction-button"
-                  type="button"
-                  aria-label={
-                    sortDirection === "desc"
-                      ? language === "ja"
-                        ? "降順で並び替え中。昇順へ切り替える"
-                        : "Sorting descending. Switch to ascending"
-                      : language === "ja"
-                        ? "昇順で並び替え中。降順へ切り替える"
-                        : "Sorting ascending. Switch to descending"
-                  }
-                  onClick={() => {
-                    void handleSortDirectionToggle();
-                  }}
+              <div className="viewer-list-controls">
+                <div
+                  className="viewer-sort-controls"
+                  aria-label={language === "ja" ? "投稿の並び替え" : "Sort posts"}
                 >
-                  {sortDirection === "desc"
-                    ? language === "ja"
-                      ? "降順"
-                      : "Desc"
-                    : language === "ja"
-                      ? "昇順"
-                      : "Asc"}
-                </button>
+                  <label className="viewer-sort-label">
+                    <span>{language === "ja" ? "並び順" : "Sort"}</span>
+                    <select
+                      className="viewer-sort-select"
+                      value={sortField}
+                      onChange={(event) => {
+                        void handleSortFieldChange(event.currentTarget.value as PostSortField);
+                      }}
+                    >
+                      <option value="random">{language === "ja" ? "ランダム" : "Random"}</option>
+                      <option value="posted_at">{language === "ja" ? "投稿日時" : "Posted at"}</option>
+                      <option value="saved_at">{language === "ja" ? "保存日時" : "Saved at"}</option>
+                      <option value="reply_count">{language === "ja" ? "返信数" : "Replies"}</option>
+                      <option value="repost_count">{language === "ja" ? "リポスト数" : "Reposts"}</option>
+                      <option value="like_count">{language === "ja" ? "いいね数" : "Likes"}</option>
+                    </select>
+                  </label>
+                  {sortField === "random" ? (
+                    <button
+                      className="viewer-secondary-button"
+                      type="button"
+                      onClick={() => {
+                        void handleReshuffle();
+                      }}
+                    >
+                      {language === "ja" ? "再シャッフル" : "Reshuffle"}
+                    </button>
+                  ) : (
+                    <button
+                      className="viewer-sort-direction-button"
+                      type="button"
+                      aria-label={
+                        sortDirection === "desc"
+                          ? language === "ja"
+                            ? "降順で並び替え中。昇順へ切り替える"
+                            : "Sorting descending. Switch to ascending"
+                          : language === "ja"
+                            ? "昇順で並び替え中。降順へ切り替える"
+                            : "Sorting ascending. Switch to descending"
+                      }
+                      onClick={() => {
+                        void handleSortDirectionToggle();
+                      }}
+                    >
+                      {sortDirection === "desc"
+                        ? language === "ja"
+                          ? "降順"
+                          : "Desc"
+                        : language === "ja"
+                          ? "昇順"
+                          : "Asc"}
+                    </button>
+                  )}
+                </div>
+                <div
+                  className="viewer-filter-controls"
+                  aria-label={language === "ja" ? "投稿の絞り込み" : "Filter posts"}
+                >
+                  {userSummaries.length > 0 && (
+                    <button
+                      className="viewer-secondary-button"
+                      type="button"
+                      onClick={() => {
+                        setIsAuthorFilterModalOpen(true);
+                      }}
+                    >
+                      {language === "ja" ? "ユーザー絞り込み" : "User filter"}
+                    </button>
+                  )}
+                  {availableTags.length > 0 && (
+                    <button
+                      className="viewer-secondary-button"
+                      type="button"
+                      onClick={() => {
+                        setIsTagFilterModalOpen(true);
+                      }}
+                    >
+                      {language === "ja" ? "タグ絞り込み" : "Tag filter"}
+                    </button>
+                  )}
+                  <button
+                    className="viewer-secondary-button"
+                    type="button"
+                    onClick={() => {
+                      openDateFilterModal();
+                    }}
+                  >
+                    {language === "ja" ? "日付絞り込み" : "Date filter"}
+                  </button>
+                  <button
+                    className="viewer-secondary-button"
+                    type="button"
+                    onClick={() => {
+                      setIsBulkTagModalOpen(true);
+                    }}
+                    disabled={status !== "ready" || archiveTotalCount === 0}
+                  >
+                    {language === "ja"
+                      ? `一括タグ付け (${formatCount(archiveTotalCount, language)}件)`
+                      : `Bulk tag (${formatCount(archiveTotalCount, language)})`}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1251,6 +1668,34 @@ export function ViewerApp() {
               </div>
             )}
 
+            {hasActiveDateFilter && (
+              <div className="viewer-active-tag-filter">
+                <div className="viewer-active-tag-copy">
+                  <strong>{language === "ja" ? "日付で絞り込み中" : "Filtered by date"}</strong>
+                  <span>
+                    {formatActiveDateFilterLabel(
+                      activeDateFilterTarget ?? DEFAULT_DATE_FILTER_TARGET,
+                      activeDateFrom,
+                      activeDateTo,
+                      archiveTotalCount,
+                      language
+                    )}
+                  </span>
+                </div>
+                <div className="viewer-active-tag-actions">
+                  <button
+                    className="viewer-tag-filter-clear"
+                    type="button"
+                    onClick={() => {
+                      void handleClearDateFilter();
+                    }}
+                  >
+                    {language === "ja" ? "解除" : "Clear"}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {status === "loading" && (
               <p className="viewer-message">
                 {language === "ja" ? "保存済み投稿を読み込み中..." : "Loading saved posts..."}
@@ -1265,6 +1710,9 @@ export function ViewerApp() {
                   language,
                   selectedTagFilter,
                   activeAuthorFilter,
+                  activeDateFilterTarget,
+                  activeDateFrom,
+                  activeDateTo,
                   selectedAuthorFilter,
                   getTagDisplayName
                 })}
@@ -1296,27 +1744,50 @@ export function ViewerApp() {
                           </p>
                         </div>
                       </div>
-                      <button
-                        className="post-delete-button"
-                        type="button"
-                        aria-label={
-                          language === "ja"
-                            ? `@${post.x_username} の投稿を削除`
-                            : `Delete post by @${post.x_username}`
-                        }
-                        onClick={() => {
-                          void handleDelete(post.x_post_id);
-                        }}
-                        disabled={deletingId === post.x_post_id}
-                      >
-                        {deletingId === post.x_post_id
-                          ? language === "ja"
-                            ? "削除中..."
-                            : "Deleting..."
-                          : language === "ja"
-                            ? "削除"
-                            : "Delete"}
-                      </button>
+                      <div className="post-card-actions">
+                        <button
+                          className="post-refetch-button"
+                          type="button"
+                          aria-label={
+                            language === "ja"
+                              ? `@${post.x_username} の投稿を再取得`
+                              : `Refetch post by @${post.x_username}`
+                          }
+                          onClick={() => {
+                            void handleRefetchPost(post.x_post_id);
+                          }}
+                          disabled={refetchStatus.currentPostId === post.x_post_id}
+                        >
+                          {refetchStatus.currentPostId === post.x_post_id
+                            ? language === "ja"
+                              ? "再取得中..."
+                              : "Refetching..."
+                            : language === "ja"
+                              ? "再取得"
+                              : "Refetch"}
+                        </button>
+                        <button
+                          className="post-delete-button"
+                          type="button"
+                          aria-label={
+                            language === "ja"
+                              ? `@${post.x_username} の投稿を削除`
+                              : `Delete post by @${post.x_username}`
+                          }
+                          onClick={() => {
+                            void handleDelete(post.x_post_id);
+                          }}
+                          disabled={deletingId === post.x_post_id}
+                        >
+                          {deletingId === post.x_post_id
+                            ? language === "ja"
+                              ? "削除中..."
+                              : "Deleting..."
+                            : language === "ja"
+                              ? "削除"
+                              : "Delete"}
+                        </button>
+                      </div>
                     </div>
 
                     {post.post_text.trim() !== "" && <p className="post-text">{post.post_text}</p>}
@@ -1608,6 +2079,10 @@ export function ViewerApp() {
                     mediaCount: archiveSummary.mediaCount,
                     tagCount: archiveSummary.tagCount
                   }}
+                  refetchStatus={refetchStatus}
+                  onRefetchAll={handleRefetchAllPosts}
+                  onRefetchCancel={handleCancelRefetch}
+                  onRefetchClear={handleClearRefetchQueue}
                   onArchiveChanged={refreshArchive}
                 />
               )}
@@ -1716,30 +2191,61 @@ export function ViewerApp() {
                   : "No tags match the current search."}
               </p>
             ) : (
-              <div className="viewer-tag-option-list">
-                {visibleTagOptions.map(({ tag, postCount }) => (
-                  <button
-                    key={tag.tag_id}
-                    className={
-                      tag.normalized_name === activeTagFilter
-                        ? "viewer-tag-option viewer-tag-option-active"
-                        : "viewer-tag-option"
-                    }
-                    type="button"
-                    onClick={() => {
-                      void handleToggleTagFilter(tag.normalized_name);
-                    }}
-                  >
-                    <strong>{getTagDisplayName(tag)}</strong>
-                    <span>
-                      {formatCount(postCount, language)} {language === "ja" ? "件" : "posts"}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              <>
+                <div className="viewer-tag-option-list">
+                  {displayedTagOptions.map(({ tag, postCount }) => (
+                    <button
+                      key={tag.tag_id}
+                      className={
+                        tag.normalized_name === activeTagFilter
+                          ? "viewer-tag-option viewer-tag-option-active"
+                          : "viewer-tag-option"
+                      }
+                      type="button"
+                      onClick={() => {
+                        void handleToggleTagFilter(tag.normalized_name);
+                      }}
+                    >
+                      <strong>{getTagDisplayName(tag)}</strong>
+                      <span>
+                        {formatCount(postCount, language)} {language === "ja" ? "件" : "posts"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {hasMoreTagOptions && (
+                  <div className="viewer-incremental-list-footer">
+                    <p className="viewer-incremental-list-meta">
+                      {language === "ja"
+                        ? `残り ${formatCount(remainingTagOptionCount, language)} 件のタグがあります。`
+                        : `${formatCount(remainingTagOptionCount, language)} more tags available.`}
+                    </p>
+                    <button
+                      className="viewer-secondary-button"
+                      type="button"
+                      onClick={() => {
+                        loadMoreTagOptions();
+                      }}
+                    >
+                      {language === "ja" ? "さらに表示" : "Load more"}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </section>
         </div>
+      )}
+
+      {isBulkTagModalOpen && (
+        <BulkTagModal
+          filter={getCurrentPostFilterInput()}
+          currentFilteredCount={archiveTotalCount}
+          allTagSummaries={availableTags}
+          language={language}
+          onClose={closeBulkTagModal}
+          onCompleted={refreshArchive}
+        />
       )}
 
       {isAuthorFilterModalOpen && (
@@ -1828,29 +2334,180 @@ export function ViewerApp() {
                   : "No users match the current search."}
               </p>
             ) : (
-              <div className="viewer-tag-option-list">
-                {visibleUserOptions.map((user) => (
-                  <button
-                    key={user.screen_name}
-                    className={
-                      user.screen_name === activeAuthorFilter
-                        ? "viewer-tag-option viewer-tag-option-active"
-                        : "viewer-tag-option"
-                    }
-                    type="button"
-                    onClick={() => {
-                      void handleToggleAuthorFilter(user.screen_name);
-                    }}
-                  >
-                    <strong>{formatUserSummaryLabel(user)}</strong>
-                    <span>
-                      {formatCount(user.post_count, language)}{" "}
-                      {language === "ja" ? "件" : "posts"}
-                    </span>
-                  </button>
-                ))}
+              <>
+                <div className="viewer-tag-option-list">
+                  {displayedUserOptions.map((user) => (
+                    <button
+                      key={user.screen_name}
+                      className={
+                        user.screen_name === activeAuthorFilter
+                          ? "viewer-tag-option viewer-tag-option-active"
+                          : "viewer-tag-option"
+                      }
+                      type="button"
+                      onClick={() => {
+                        void handleToggleAuthorFilter(user.screen_name);
+                      }}
+                    >
+                      <strong>{formatUserSummaryLabel(user)}</strong>
+                      <span>
+                        {formatCount(user.post_count, language)}{" "}
+                        {language === "ja" ? "件" : "posts"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {hasMoreUserOptions && (
+                  <div className="viewer-incremental-list-footer">
+                    <p className="viewer-incremental-list-meta">
+                      {language === "ja"
+                        ? `残り ${formatCount(remainingUserOptionCount, language)} 人のユーザーがいます。`
+                        : `${formatCount(remainingUserOptionCount, language)} more users available.`}
+                    </p>
+                    <button
+                      className="viewer-secondary-button"
+                      type="button"
+                      onClick={() => {
+                        loadMoreUserOptions();
+                      }}
+                    >
+                      {language === "ja" ? "さらに表示" : "Load more"}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        </div>
+      )}
+
+      {isDateFilterModalOpen && (
+        <div
+          className="viewer-modal-backdrop"
+          role="presentation"
+          onClick={() => {
+            closeDateFilterModal();
+          }}
+        >
+          <section
+            ref={dateFilterDialogRef}
+            className="viewer-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={language === "ja" ? "日付絞り込み" : "Date filter"}
+            tabIndex={-1}
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <div className="viewer-modal-header">
+              <div className="viewer-modal-copy">
+                <h2>{language === "ja" ? "日付で絞り込む" : "Filter by date"}</h2>
+                <p>
+                  {language === "ja"
+                    ? "保存日時または投稿日時で期間を指定し、一覧を絞り込みます。"
+                    : "Choose a saved-at or posted-at range to narrow the archive list."}
+                </p>
+              </div>
+              <button
+                className="viewer-secondary-button"
+                type="button"
+                onClick={() => {
+                  closeDateFilterModal();
+                }}
+              >
+                {language === "ja" ? "閉じる" : "Close"}
+              </button>
+            </div>
+
+            <div className="viewer-date-modal-controls">
+              <label className="viewer-sort-label">
+                <span>{language === "ja" ? "対象" : "Target"}</span>
+                <select
+                  ref={dateFilterTargetInputRef}
+                  className="viewer-sort-select"
+                  value={dateFilterDraftTarget}
+                  onChange={(event) => {
+                    setDateFilterDraftTarget(event.currentTarget.value as DateFilterTarget);
+                  }}
+                >
+                  <option value="saved_at">{language === "ja" ? "保存日時" : "Saved at"}</option>
+                  <option value="posted_at">{language === "ja" ? "投稿日時" : "Posted at"}</option>
+                </select>
+              </label>
+              <label className="viewer-sort-label">
+                <span>{language === "ja" ? "開始日" : "Start date"}</span>
+                <input
+                  className="tag-input"
+                  type="date"
+                  value={dateFilterDraftFrom}
+                  onChange={(event) => {
+                    setDateFilterDraftFrom(event.currentTarget.value);
+                  }}
+                />
+              </label>
+              <label className="viewer-sort-label">
+                <span>{language === "ja" ? "終了日" : "End date"}</span>
+                <input
+                  className="tag-input"
+                  type="date"
+                  value={dateFilterDraftTo}
+                  onChange={(event) => {
+                    setDateFilterDraftTo(event.currentTarget.value);
+                  }}
+                />
+              </label>
+            </div>
+
+            {hasActiveDateFilter && (
+              <div className="viewer-tag-modal-summary">
+                <span>
+                  {language === "ja" ? "適用中" : "Active"}:{" "}
+                  {formatActiveDateFilterLabel(
+                    activeDateFilterTarget ?? DEFAULT_DATE_FILTER_TARGET,
+                    activeDateFrom,
+                    activeDateTo,
+                    archiveTotalCount,
+                    language
+                  )}
+                </span>
+                <button
+                  className="viewer-tag-filter-clear"
+                  type="button"
+                  onClick={() => {
+                    void handleClearDateFilter();
+                  }}
+                >
+                  {language === "ja" ? "解除" : "Clear"}
+                </button>
               </div>
             )}
+
+            {dateFilterDraftError !== null && (
+              <p className="viewer-modal-inline-error">{dateFilterDraftError}</p>
+            )}
+
+            <div className="viewer-modal-actions">
+              <button
+                className="viewer-secondary-button"
+                type="button"
+                onClick={() => {
+                  void handleClearDateFilter();
+                }}
+              >
+                {language === "ja" ? "クリア" : "Clear"}
+              </button>
+              <button
+                className="viewer-action-button"
+                type="button"
+                onClick={() => {
+                  void handleApplyDateFilter();
+                }}
+                disabled={dateFilterDraftError !== null}
+              >
+                {language === "ja" ? "適用" : "Apply"}
+              </button>
+            </div>
           </section>
         </div>
       )}
@@ -2050,6 +2707,13 @@ function formatCount(value: number, language: ArchiveLanguage = "en"): string {
   return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
 }
 
+function createRandomSeed(): number {
+  const seed = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(seed);
+  const nextSeed = seed[0];
+  return nextSeed === undefined || nextSeed === 0 ? 1 : nextSeed;
+}
+
 function GearIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -2236,49 +2900,250 @@ function normalizeUserSearchQuery(value: string): string {
   return value.trim().replace(/^@+/, "").toLocaleLowerCase("ja-JP");
 }
 
+function normalizeDateInputValue(value: string): string | null {
+  const trimmedValue = value.trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedValue)) {
+    return null;
+  }
+
+  return trimmedValue;
+}
+
+function parseLocalDateInput(value: string): Date | null {
+  const normalizedValue = normalizeDateInputValue(value);
+
+  if (normalizedValue === null) {
+    return null;
+  }
+
+  const [yearText, monthText, dayText] = normalizedValue.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+
+  const date = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function toDateFilterStartTimestamp(value: string | null): number | null {
+  if (value === null) {
+    return null;
+  }
+
+  return parseLocalDateInput(value)?.getTime() ?? null;
+}
+
+function toDateFilterEndTimestamp(value: string | null): number | null {
+  if (value === null) {
+    return null;
+  }
+
+  const date = parseLocalDateInput(value);
+
+  if (date === null) {
+    return null;
+  }
+
+  date.setHours(23, 59, 59, 999);
+  return date.getTime();
+}
+
+function buildDateFilterRequest(
+  dateFilterTarget: DateFilterTarget | null,
+  dateFrom: string | null,
+  dateTo: string | null
+): Pick<ListPostsPageInput, "dateFilterTarget" | "dateFrom" | "dateTo"> {
+  const normalizedDateFrom = normalizeDateInputValue(dateFrom ?? "");
+  const normalizedDateTo = normalizeDateInputValue(dateTo ?? "");
+  const requestDateFrom = toDateFilterStartTimestamp(normalizedDateFrom);
+  const requestDateTo = toDateFilterEndTimestamp(normalizedDateTo);
+  const hasDateRange = requestDateFrom !== null || requestDateTo !== null;
+
+  return {
+    dateFilterTarget: hasDateRange ? dateFilterTarget ?? DEFAULT_DATE_FILTER_TARGET : null,
+    dateFrom: requestDateFrom,
+    dateTo: requestDateTo
+  };
+}
+
+function getDateFilterDraftError(
+  dateFrom: string,
+  dateTo: string,
+  language: ArchiveLanguage
+): string | null {
+  const normalizedDateFrom = normalizeDateInputValue(dateFrom);
+  const normalizedDateTo = normalizeDateInputValue(dateTo);
+
+  if (dateFrom !== "" && normalizedDateFrom === null) {
+    return language === "ja"
+      ? "開始日に有効な日付を入力してください。"
+      : "Enter a valid start date.";
+  }
+
+  if (dateTo !== "" && normalizedDateTo === null) {
+    return language === "ja"
+      ? "終了日に有効な日付を入力してください。"
+      : "Enter a valid end date.";
+  }
+
+  const fromDate = normalizedDateFrom === null ? null : parseLocalDateInput(normalizedDateFrom);
+  const toDate = normalizedDateTo === null ? null : parseLocalDateInput(normalizedDateTo);
+
+  if (fromDate === null || toDate === null) {
+    return null;
+  }
+
+  if (fromDate.getTime() > toDate.getTime()) {
+    return language === "ja"
+      ? "開始日は終了日以前にしてください。"
+      : "Start date must be on or before the end date.";
+  }
+
+  return null;
+}
+
+function formatDateFilterTargetLabel(
+  dateFilterTarget: DateFilterTarget,
+  language: ArchiveLanguage
+): string {
+  if (dateFilterTarget === "posted_at") {
+    return language === "ja" ? "投稿日時" : "Posted at";
+  }
+
+  return language === "ja" ? "保存日時" : "Saved at";
+}
+
+function formatDateInputLabel(value: string, language: ArchiveLanguage): string {
+  const date = parseLocalDateInput(value);
+
+  if (date === null) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "en-US", {
+    dateStyle: "medium"
+  }).format(date);
+}
+
+function formatDateFilterConditionLabel(
+  dateFilterTarget: DateFilterTarget,
+  dateFrom: string | null,
+  dateTo: string | null,
+  language: ArchiveLanguage
+): string {
+  const targetLabel = formatDateFilterTargetLabel(dateFilterTarget, language);
+  const fromLabel = dateFrom === null ? null : formatDateInputLabel(dateFrom, language);
+  const toLabel = dateTo === null ? null : formatDateInputLabel(dateTo, language);
+
+  if (fromLabel !== null && toLabel !== null) {
+    return language === "ja"
+      ? `${targetLabel}: ${fromLabel} - ${toLabel}`
+      : `${targetLabel}: ${fromLabel} to ${toLabel}`;
+  }
+
+  if (fromLabel !== null) {
+    return language === "ja"
+      ? `${targetLabel}: ${fromLabel} 以降`
+      : `${targetLabel}: from ${fromLabel}`;
+  }
+
+  if (toLabel !== null) {
+    return language === "ja"
+      ? `${targetLabel}: ${toLabel} 以前`
+      : `${targetLabel}: until ${toLabel}`;
+  }
+
+  return targetLabel;
+}
+
+function formatActiveDateFilterLabel(
+  dateFilterTarget: DateFilterTarget,
+  dateFrom: string | null,
+  dateTo: string | null,
+  totalCount: number,
+  language: ArchiveLanguage
+): string {
+  const dateConditionLabel = formatDateFilterConditionLabel(
+    dateFilterTarget,
+    dateFrom,
+    dateTo,
+    language
+  );
+
+  return language === "ja"
+    ? `${dateConditionLabel} (${formatCount(totalCount, language)}件)`
+    : `${dateConditionLabel} (${formatCount(totalCount, language)})`;
+}
+
 function formatEmptyArchiveMessage(input: {
   language: ArchiveLanguage;
   selectedTagFilter: ArchiveTagSummaryRecord | null;
   activeAuthorFilter: string | null;
+  activeDateFilterTarget: DateFilterTarget | null;
+  activeDateFrom: string | null;
+  activeDateTo: string | null;
   selectedAuthorFilter: UserSummary | null;
   getTagDisplayName: (tag: ArchiveTagRecord) => string;
 }): string {
-  const { language, selectedTagFilter, activeAuthorFilter, selectedAuthorFilter, getTagDisplayName } =
-    input;
+  const {
+    language,
+    selectedTagFilter,
+    activeAuthorFilter,
+    activeDateFilterTarget,
+    activeDateFrom,
+    activeDateTo,
+    selectedAuthorFilter,
+    getTagDisplayName
+  } = input;
+  const activeFilters: string[] = [];
 
-  if (selectedTagFilter === null && activeAuthorFilter === null) {
+  if (selectedTagFilter === null && activeAuthorFilter === null && activeDateFilterTarget === null) {
     return language === "ja" ? "保存済み投稿はありません。" : "No saved posts.";
   }
 
-  if (selectedTagFilter !== null && activeAuthorFilter !== null) {
-    const userLabel =
+  if (selectedTagFilter !== null) {
+    activeFilters.push(getTagDisplayName(selectedTagFilter.tag));
+  }
+
+  if (activeAuthorFilter !== null) {
+    activeFilters.push(
       selectedAuthorFilter === null
         ? `@${activeAuthorFilter}`
-        : formatUserSummaryLabel(selectedAuthorFilter);
-    const tagLabel = getTagDisplayName(selectedTagFilter.tag);
-
-    return language === "ja"
-      ? `${userLabel} と ${tagLabel} の条件に一致する保存済み投稿はありません。`
-      : `No saved posts match ${userLabel} and ${tagLabel}.`;
+        : formatUserSummaryLabel(selectedAuthorFilter)
+    );
   }
 
-  if (selectedTagFilter !== null) {
-    const tagLabel = getTagDisplayName(selectedTagFilter.tag);
-    return language === "ja"
-      ? `${tagLabel} に一致する保存済み投稿はありません。`
-      : `No saved posts match ${tagLabel}.`;
+  if (
+    activeDateFilterTarget !== null &&
+    (activeDateFrom !== null || activeDateTo !== null)
+  ) {
+    activeFilters.push(
+      formatDateFilterConditionLabel(
+        activeDateFilterTarget,
+        activeDateFrom,
+        activeDateTo,
+        language
+      )
+    );
   }
-
-  const userLabel =
-    selectedAuthorFilter === null && activeAuthorFilter !== null
-      ? `@${activeAuthorFilter}`
-      : selectedAuthorFilter === null
-        ? ""
-        : formatUserSummaryLabel(selectedAuthorFilter);
 
   return language === "ja"
-    ? `${userLabel} に一致する保存済み投稿はありません。`
-    : `No saved posts match ${userLabel}.`;
+    ? `次の条件に一致する保存済み投稿はありません: ${activeFilters.join(" / ")}`
+    : `No saved posts match: ${activeFilters.join(" / ")}.`;
 }
 
 function formatArchiveCountLabel(

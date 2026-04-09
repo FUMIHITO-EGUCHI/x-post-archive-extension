@@ -2,6 +2,8 @@ import type { SavePostInput } from "../../types/archive";
 import type {
   AddPostTagByNameMessage,
   AddPostTagByNameResponse,
+  BulkAssignTagApplyBatchResponse,
+  BulkAssignTagPreviewResponse,
   ClearLogsResponse,
   DeleteTagRedirectResponse,
   DeletePostResponse,
@@ -17,6 +19,10 @@ import type {
   MergeTagsResponse,
   RenameTagMessage,
   RenameTagResponse,
+  RefetchCancelResponse,
+  RefetchClearResponse,
+  RefetchEnqueueResponse,
+  RefetchStatusResponse,
   RemovePostTagByNameMessage,
   RemovePostTagByNameResponse,
   RuntimeMessage,
@@ -24,7 +30,8 @@ import type {
   SavePostResponse,
   SavePostsBatchResponse
 } from "../../types/runtime";
-import type { ListPostsPageInput } from "../../types/viewer";
+import type { RefetchQueuePriority } from "../../types/refetch";
+import type { ListPostsPageInput, PostFilterInput } from "../../types/viewer";
 
 const DEFAULT_RUNTIME_TIMEOUT_MS = 30000;
 const SAVE_RUNTIME_TIMEOUT_MS = 180000;
@@ -250,6 +257,119 @@ export async function requestDeleteTagRedirect(
 
   if (response.type !== "tag.redirects.delete") {
     throw new Error("Unexpected runtime response for tag redirect delete request.");
+  }
+
+  return response;
+}
+
+export async function requestBulkAssignTagPreview(
+  filter: PostFilterInput,
+  targetTagName: string
+): Promise<BulkAssignTagPreviewResponse> {
+  const response = await sendMessage(
+    {
+      type: "tag.bulk-assign.preview",
+      filter,
+      targetTagName
+    },
+    DEFAULT_RUNTIME_TIMEOUT_MS
+  );
+
+  if (response.type !== "tag.bulk-assign.preview") {
+    throw new Error("Unexpected runtime response for bulk assign preview.");
+  }
+
+  return response;
+}
+
+export async function requestBulkAssignTagApplyBatch(
+  postIds: string[],
+  targetTagId: string,
+  targetNormalizedName: string,
+  targetDisplayName: string
+): Promise<BulkAssignTagApplyBatchResponse> {
+  const response = await sendMessage(
+    {
+      type: "tag.bulk-assign.apply-batch",
+      postIds,
+      targetTagId,
+      targetNormalizedName,
+      targetDisplayName
+    },
+    DEFAULT_RUNTIME_TIMEOUT_MS
+  );
+
+  if (response.type !== "tag.bulk-assign.apply-batch") {
+    throw new Error("Unexpected runtime response for bulk assign apply batch.");
+  }
+
+  return response;
+}
+
+export async function requestRefetchEnqueuePosts(
+  xPostIds: string[],
+  priority: RefetchQueuePriority
+): Promise<RefetchEnqueueResponse> {
+  const response = await sendMessage({
+    type: "refetch.enqueue",
+    xPostIds,
+    priority
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "refetch.enqueue") {
+    throw new Error("Unexpected runtime response for refetch enqueue request.");
+  }
+
+  return response;
+}
+
+export async function requestRefetchEnqueueAll(
+  priority: RefetchQueuePriority
+): Promise<RefetchEnqueueResponse> {
+  const response = await sendMessage({
+    type: "refetch.enqueue",
+    enqueueAll: true,
+    priority
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "refetch.enqueue") {
+    throw new Error("Unexpected runtime response for refetch enqueue-all request.");
+  }
+
+  return response;
+}
+
+export async function requestRefetchStatus(): Promise<RefetchStatusResponse> {
+  const response = await sendMessage({
+    type: "refetch.status"
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "refetch.status") {
+    throw new Error("Unexpected runtime response for refetch status request.");
+  }
+
+  return response;
+}
+
+export async function requestRefetchCancel(): Promise<RefetchCancelResponse> {
+  const response = await sendMessage({
+    type: "refetch.cancel"
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "refetch.cancel") {
+    throw new Error("Unexpected runtime response for refetch cancel request.");
+  }
+
+  return response;
+}
+
+export async function requestRefetchClear(): Promise<RefetchClearResponse> {
+  const response = await sendMessage({
+    type: "refetch.clear"
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "refetch.clear") {
+    throw new Error("Unexpected runtime response for refetch clear request.");
   }
 
   return response;

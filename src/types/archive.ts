@@ -6,14 +6,20 @@ export type BuiltInTagKey = "liked" | "image" | "video" | "quoted" | "bookmarked
 
 export type VideoDownloadMode = "direct_mp4" | "hls";
 
+export const DEFAULT_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD = 3;
+export const MIN_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD = 1;
+export const MAX_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD = 20;
+
 export type ArchiveSettings = {
   autoArchiveOnLike: boolean;
   autoArchiveOnBookmark: boolean;
+  bulkImportDuplicateBatchThreshold: number;
 };
 
 export const defaultArchiveSettings: ArchiveSettings = {
   autoArchiveOnLike: false,
-  autoArchiveOnBookmark: false
+  autoArchiveOnBookmark: false,
+  bulkImportDuplicateBatchThreshold: DEFAULT_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD
 };
 
 export type PostRecord = {

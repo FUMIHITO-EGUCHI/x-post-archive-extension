@@ -1,6 +1,7 @@
 import type { ArchiveTagRecord } from "./archive";
 
 export type PostSortField =
+  | "random"
   | "posted_at"
   | "saved_at"
   | "reply_count"
@@ -8,6 +9,7 @@ export type PostSortField =
   | "like_count";
 
 export type SortDirection = "desc" | "asc";
+export type DateFilterTarget = "saved_at" | "posted_at";
 
 export type ArchiveTagSummaryRecord = {
   tag: ArchiveTagRecord;
@@ -45,9 +47,18 @@ export type ListPostsPageInput = {
   limit: number;
   sortField: PostSortField;
   sortDirection: SortDirection;
+  randomSeed?: number | null;
   tagFilter: string | null;
   authorFilter: string | null;
+  dateFilterTarget: DateFilterTarget | null;
+  dateFrom: number | null;
+  dateTo: number | null;
 };
+
+export type PostFilterInput = Pick<
+  ListPostsPageInput,
+  "tagFilter" | "authorFilter" | "dateFilterTarget" | "dateFrom" | "dateTo"
+>;
 
 export type ViewerSessionRestoreMode = "off" | "filters" | "filters-and-position";
 export type ViewerTheme = "light" | "dark";
@@ -67,6 +78,9 @@ export type ViewerSessionState = {
   sortDirection: SortDirection;
   activeTagFilter: string | null;
   activeAuthorFilter?: string | null;
+  activeDateFilterTarget?: DateFilterTarget | null;
+  activeDateFrom?: string | null;
+  activeDateTo?: string | null;
   loadedCount: number;
   anchorPostId: string | null;
   scrollTop: number;
