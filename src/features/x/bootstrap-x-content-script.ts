@@ -1,12 +1,20 @@
 import type { ContentScriptContext } from "#imports";
 import { requestHasPost, requestSavePost } from "../runtime/client";
-import type { RefetchCheckMessage } from "../../types/refetch";
+import type {
+  RefetchCheckMessage,
+  RefetchCheckResponse
+} from "../../types/refetch";
 import {
   buildLocalizedDefaultAutoTags,
   loadArchiveLanguage
 } from "../settings/archive-language";
 import { loadArchiveSettings } from "../settings/archive-settings";
-import { extractPostFromArticle, extractPostIdFromArticle } from "./extract-post-from-article";
+import { ensureGraphqlImageCandidateListener } from "./graphql-image-candidate-cache";
+import {
+  extractPostFromArticle,
+  extractPostIdFromArticle,
+  inspectArticleMediaSignals
+} from "./extract-post-from-article";
 import { findTweetArticles } from "./find-tweet-articles";
 import { ensureGraphqlVideoCandidateListener } from "./graphql-video-candidate-cache";
 import {
@@ -34,6 +42,7 @@ const SAVE_BUTTON_SELECTOR = "[data-xpa-save-button]";
 const AUTO_ARCHIVE_ERROR_DISPLAY_MS = 3000;
 const AUTO_ARCHIVE_ARTICLE_RETRY_INTERVAL_MS = 500;
 const AUTO_ARCHIVE_ARTICLE_MAX_ATTEMPTS = 10;
+const QUOTED_POST_CONTAINER_SELECTOR = 'div[role="link"][tabindex="0"]';
 
 const processedArticles = new WeakSet<HTMLElement>();
 let initialized = false;
@@ -64,6 +73,7 @@ export function bootstrapXContentScript(ctx: ContentScriptContext): void {
     removeLikesImportControls();
   });
   ensureGraphqlVideoCandidateListener();
+  ensureGraphqlImageCandidateListener();
   startWhenBodyReady(ctx);
 }
 
@@ -405,29 +415,48 @@ function handleRefetchMessage(
   }
 
   void handleRefetchCheck(message)
-    .then((found) => {
-      sendResponse({
-        found
-      });
+    .then((response) => {
+      sendResponse(response);
     })
     .catch(() => {
-      sendResponse({
-        found: false
-      });
+      sendResponse(createDefaultRefetchCheckResponse());
     });
 
   return true;
 }
 
-async function handleRefetchCheck(message: RefetchCheckMessage): Promise<boolean> {
+async function handleRefetchCheck(message: RefetchCheckMessage): Promise<RefetchCheckResponse> {
   scanTweetArticles();
   const article = findArticleByPostId(message.xPostId);
 
   if (article === null) {
-    return false;
+    return createDefaultRefetchCheckResponse();
   }
 
   const extracted = extractPostFromArticle(article);
+  const mediaSignals = inspectArticleMediaSignals(article);
+  const savableMediaCount =
+    extracted === null
+      ? 0
+      : extracted.post.media.length +
+        (extracted.post.video_candidates ?? []).filter((c) => c.download_mode === "direct_mp4")
+          .length;
+  const mediaHintCount = mediaSignals.imageHintCount + mediaSignals.videoHintCount;
+  const waitingForMedia = mediaHintCount > savableMediaCount;
+  let warmupApplied = false;
+
+  if (waitingForMedia) {
+    warmupApplied = await warmupRefetchArticleMedia(article);
+    return {
+      found: true,
+      extracted: extracted !== null,
+      waitingForMedia: true,
+      imageHintCount: mediaSignals.imageHintCount,
+      videoHintCount: mediaSignals.videoHintCount,
+      savableMediaCount,
+      warmupApplied
+    };
+  }
 
   await chrome.runtime.sendMessage({
     type: "refetch.complete",
@@ -436,7 +465,144 @@ async function handleRefetchCheck(message: RefetchCheckMessage): Promise<boolean
     error: extracted === null ? "Post extraction failed." : null
   });
 
-  return true;
+  return {
+    found: true,
+    extracted: extracted !== null,
+    waitingForMedia: false,
+    imageHintCount: mediaSignals.imageHintCount,
+    videoHintCount: mediaSignals.videoHintCount,
+    savableMediaCount,
+    warmupApplied
+  };
+}
+
+function createDefaultRefetchCheckResponse(): RefetchCheckResponse {
+  return {
+    found: false,
+    extracted: false,
+    waitingForMedia: false,
+    imageHintCount: 0,
+    videoHintCount: 0,
+    savableMediaCount: 0,
+    warmupApplied: false
+  };
+}
+
+async function warmupRefetchArticleMedia(article: HTMLElement): Promise<boolean> {
+  const quotedPostContainer = article.querySelector<HTMLElement>(QUOTED_POST_CONTAINER_SELECTOR);
+  const warmupTargets = collectRefetchWarmupTargets(article, quotedPostContainer);
+  let warmupApplied = false;
+
+  try {
+    article.scrollIntoView({
+      block: "center",
+      inline: "nearest"
+    });
+    warmupApplied = true;
+  } catch {
+    // Ignore browser-specific scroll failures and keep trying other warm-up steps.
+  }
+
+  for (const container of warmupTargets.containers) {
+    dispatchRefetchWarmupEvents(container);
+    warmupApplied = true;
+  }
+
+  for (const anchor of warmupTargets.anchors) {
+    dispatchRefetchWarmupEvents(anchor);
+    warmupApplied = true;
+  }
+
+  for (const image of warmupTargets.images) {
+    try {
+      image.loading = "eager";
+      image.decoding = "sync";
+    } catch {
+      // Ignore property assignment failures.
+    }
+
+    const src = image.currentSrc || image.src;
+
+    if (src.trim() !== "" && typeof image.decode === "function") {
+      try {
+        await image.decode();
+        warmupApplied = true;
+      } catch {
+        warmupApplied = true;
+      }
+    }
+  }
+
+  for (const video of warmupTargets.videos) {
+    try {
+      video.preload = "auto";
+      video.load();
+      warmupApplied = true;
+    } catch {
+      warmupApplied = true;
+    }
+  }
+
+  return warmupApplied;
+}
+
+function collectRefetchWarmupTargets(
+  article: HTMLElement,
+  quotedPostContainer: HTMLElement | null
+): {
+  anchors: HTMLAnchorElement[];
+  containers: HTMLElement[];
+  images: HTMLImageElement[];
+  videos: HTMLVideoElement[];
+} {
+  const anchors = Array.from(article.querySelectorAll<HTMLAnchorElement>('a[href*="/photo/"]')).filter(
+    (anchor) => !isNodeInsideQuotedPost(anchor, quotedPostContainer)
+  );
+  const containers = Array.from(
+    article.querySelectorAll<HTMLElement>('[data-testid="tweetPhoto"]')
+  ).filter((container) => !isNodeInsideQuotedPost(container, quotedPostContainer));
+  const images = Array.from(
+    article.querySelectorAll<HTMLImageElement>(
+      '[data-testid="tweetPhoto"] img, a[href*="/photo/"] img, img[src*="pbs.twimg.com/media/"]'
+    )
+  ).filter((image) => !isNodeInsideQuotedPost(image, quotedPostContainer));
+  const videos = Array.from(article.querySelectorAll<HTMLVideoElement>("video")).filter(
+    (video) => !isNodeInsideQuotedPost(video, quotedPostContainer)
+  );
+
+  return {
+    anchors,
+    containers,
+    images,
+    videos
+  };
+}
+
+function dispatchRefetchWarmupEvents(target: Element): void {
+  const eventTargets = [
+    new PointerEvent("pointerenter", {
+      bubbles: true,
+      pointerType: "mouse"
+    }),
+    new MouseEvent("mouseenter", {
+      bubbles: true
+    }),
+    new MouseEvent("mouseover", {
+      bubbles: true
+    })
+  ];
+
+  for (const event of eventTargets) {
+    try {
+      target.dispatchEvent(event);
+    } catch {
+      // Ignore synthetic event failures and continue with other warm-up steps.
+    }
+  }
+}
+
+function isNodeInsideQuotedPost(node: Element, quotedPostContainer: HTMLElement | null): boolean {
+  return quotedPostContainer !== null && quotedPostContainer.contains(node);
 }
 
 function clearPendingAutoArchiveRetries(): void {

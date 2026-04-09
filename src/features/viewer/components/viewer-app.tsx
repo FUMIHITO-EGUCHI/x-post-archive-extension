@@ -15,6 +15,7 @@ import type {
   DateFilterTarget,
   FontSizeOption,
   ListPostsPageInput,
+  PostFilterInput,
   PostSortField,
   StorageEstimateState,
   SortDirection,
@@ -40,6 +41,7 @@ import {
 import { createLogger } from "../../logging/logger";
 import { SettingsArchiveMaintenancePanel } from "./settings-archive-maintenance-panel";
 import { SettingsBasicPanel } from "./settings-basic-panel";
+import { BulkTagModal } from "./bulk-tag-modal";
 import { SettingsLogPanel } from "./settings-log-panel";
 import { SettingsTagManagementPanel } from "./settings-tag-management-panel";
 import { SettingsTagRedirectsPanel } from "./settings-tag-redirects-panel";
@@ -129,6 +131,7 @@ export function ViewerApp() {
   const [isTagFilterModalOpen, setIsTagFilterModalOpen] = useState(false);
   const [isAuthorFilterModalOpen, setIsAuthorFilterModalOpen] = useState(false);
   const [isDateFilterModalOpen, setIsDateFilterModalOpen] = useState(false);
+  const [isBulkTagModalOpen, setIsBulkTagModalOpen] = useState(false);
   const [tagSearchQuery, setTagSearchQuery] = useState("");
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [dateFilterDraftTarget, setDateFilterDraftTarget] =
@@ -222,6 +225,10 @@ export function ViewerApp() {
 
   function closeDateFilterModal() {
     setIsDateFilterModalOpen(false);
+  }
+
+  function closeBulkTagModal() {
+    setIsBulkTagModalOpen(false);
   }
 
   function closeImageLightbox() {
@@ -755,6 +762,16 @@ export function ViewerApp() {
       dateFilterTarget: activeDateFilterTarget,
       dateFrom: activeDateFrom,
       dateTo: activeDateTo
+    };
+  }
+
+  function getCurrentPostFilterInput(): PostFilterInput {
+    return {
+      tagFilter: activeTagFilter,
+      authorFilter: activeAuthorFilter,
+      dateFilterTarget: activeDateFilterTarget,
+      dateFrom: toDateFilterStartTimestamp(activeDateFrom),
+      dateTo: toDateFilterEndTimestamp(activeDateTo)
     };
   }
 
@@ -1488,94 +1505,113 @@ export function ViewerApp() {
                   {formatArchiveCountLabel(posts.length, archiveTotalCount, hasMorePosts, language)}
                 </span>
               </div>
-              <div
-                className="viewer-sort-controls"
-                aria-label={language === "ja" ? "投稿の並び替え" : "Sort posts"}
-              >
-                {userSummaries.length > 0 && (
-                  <button
-                    className="viewer-secondary-button"
-                    type="button"
-                    onClick={() => {
-                      setIsAuthorFilterModalOpen(true);
-                    }}
-                  >
-                    {language === "ja" ? "ユーザー絞り込み" : "User filter"}
-                  </button>
-                )}
-                {availableTags.length > 0 && (
-                  <button
-                    className="viewer-secondary-button"
-                    type="button"
-                    onClick={() => {
-                      setIsTagFilterModalOpen(true);
-                    }}
-                  >
-                    {language === "ja" ? "タグ絞り込み" : "Tag filter"}
-                  </button>
-                )}
-                <button
-                  className="viewer-secondary-button"
-                  type="button"
-                  onClick={() => {
-                    openDateFilterModal();
-                  }}
+              <div className="viewer-list-controls">
+                <div
+                  className="viewer-sort-controls"
+                  aria-label={language === "ja" ? "投稿の並び替え" : "Sort posts"}
                 >
-                  {language === "ja" ? "日付絞り込み" : "Date filter"}
-                </button>
-                <label className="viewer-sort-label">
-                  <span>{language === "ja" ? "並び順" : "Sort"}</span>
-                  <select
-                    className="viewer-sort-select"
-                    value={sortField}
-                    onChange={(event) => {
-                      void handleSortFieldChange(event.currentTarget.value as PostSortField);
-                    }}
-                  >
-                    <option value="random">{language === "ja" ? "ランダム" : "Random"}</option>
-                    <option value="posted_at">{language === "ja" ? "投稿日時" : "Posted at"}</option>
-                    <option value="saved_at">{language === "ja" ? "保存日時" : "Saved at"}</option>
-                    <option value="reply_count">{language === "ja" ? "返信数" : "Replies"}</option>
-                    <option value="repost_count">{language === "ja" ? "リポスト数" : "Reposts"}</option>
-                    <option value="like_count">{language === "ja" ? "いいね数" : "Likes"}</option>
-                  </select>
-                </label>
-                {sortField === "random" ? (
+                  <label className="viewer-sort-label">
+                    <span>{language === "ja" ? "並び順" : "Sort"}</span>
+                    <select
+                      className="viewer-sort-select"
+                      value={sortField}
+                      onChange={(event) => {
+                        void handleSortFieldChange(event.currentTarget.value as PostSortField);
+                      }}
+                    >
+                      <option value="random">{language === "ja" ? "ランダム" : "Random"}</option>
+                      <option value="posted_at">{language === "ja" ? "投稿日時" : "Posted at"}</option>
+                      <option value="saved_at">{language === "ja" ? "保存日時" : "Saved at"}</option>
+                      <option value="reply_count">{language === "ja" ? "返信数" : "Replies"}</option>
+                      <option value="repost_count">{language === "ja" ? "リポスト数" : "Reposts"}</option>
+                      <option value="like_count">{language === "ja" ? "いいね数" : "Likes"}</option>
+                    </select>
+                  </label>
+                  {sortField === "random" ? (
+                    <button
+                      className="viewer-secondary-button"
+                      type="button"
+                      onClick={() => {
+                        void handleReshuffle();
+                      }}
+                    >
+                      {language === "ja" ? "再シャッフル" : "Reshuffle"}
+                    </button>
+                  ) : (
+                    <button
+                      className="viewer-sort-direction-button"
+                      type="button"
+                      aria-label={
+                        sortDirection === "desc"
+                          ? language === "ja"
+                            ? "降順で並び替え中。昇順へ切り替える"
+                            : "Sorting descending. Switch to ascending"
+                          : language === "ja"
+                            ? "昇順で並び替え中。降順へ切り替える"
+                            : "Sorting ascending. Switch to descending"
+                      }
+                      onClick={() => {
+                        void handleSortDirectionToggle();
+                      }}
+                    >
+                      {sortDirection === "desc"
+                        ? language === "ja"
+                          ? "降順"
+                          : "Desc"
+                        : language === "ja"
+                          ? "昇順"
+                          : "Asc"}
+                    </button>
+                  )}
+                </div>
+                <div
+                  className="viewer-filter-controls"
+                  aria-label={language === "ja" ? "投稿の絞り込み" : "Filter posts"}
+                >
+                  {userSummaries.length > 0 && (
+                    <button
+                      className="viewer-secondary-button"
+                      type="button"
+                      onClick={() => {
+                        setIsAuthorFilterModalOpen(true);
+                      }}
+                    >
+                      {language === "ja" ? "ユーザー絞り込み" : "User filter"}
+                    </button>
+                  )}
+                  {availableTags.length > 0 && (
+                    <button
+                      className="viewer-secondary-button"
+                      type="button"
+                      onClick={() => {
+                        setIsTagFilterModalOpen(true);
+                      }}
+                    >
+                      {language === "ja" ? "タグ絞り込み" : "Tag filter"}
+                    </button>
+                  )}
                   <button
                     className="viewer-secondary-button"
                     type="button"
                     onClick={() => {
-                      void handleReshuffle();
+                      openDateFilterModal();
                     }}
                   >
-                    {language === "ja" ? "再シャッフル" : "Reshuffle"}
+                    {language === "ja" ? "日付絞り込み" : "Date filter"}
                   </button>
-                ) : (
                   <button
-                    className="viewer-sort-direction-button"
+                    className="viewer-secondary-button"
                     type="button"
-                    aria-label={
-                      sortDirection === "desc"
-                        ? language === "ja"
-                          ? "降順で並び替え中。昇順へ切り替える"
-                          : "Sorting descending. Switch to ascending"
-                        : language === "ja"
-                          ? "昇順で並び替え中。降順へ切り替える"
-                          : "Sorting ascending. Switch to descending"
-                    }
                     onClick={() => {
-                      void handleSortDirectionToggle();
+                      setIsBulkTagModalOpen(true);
                     }}
+                    disabled={status !== "ready" || archiveTotalCount === 0}
                   >
-                    {sortDirection === "desc"
-                      ? language === "ja"
-                        ? "降順"
-                        : "Desc"
-                      : language === "ja"
-                        ? "昇順"
-                        : "Asc"}
+                    {language === "ja"
+                      ? `一括タグ付け (${formatCount(archiveTotalCount, language)}件)`
+                      : `Bulk tag (${formatCount(archiveTotalCount, language)})`}
                   </button>
-                )}
+                </div>
               </div>
             </div>
 
@@ -2199,6 +2235,17 @@ export function ViewerApp() {
             )}
           </section>
         </div>
+      )}
+
+      {isBulkTagModalOpen && (
+        <BulkTagModal
+          filter={getCurrentPostFilterInput()}
+          currentFilteredCount={archiveTotalCount}
+          allTagSummaries={availableTags}
+          language={language}
+          onClose={closeBulkTagModal}
+          onCompleted={refreshArchive}
+        />
       )}
 
       {isAuthorFilterModalOpen && (

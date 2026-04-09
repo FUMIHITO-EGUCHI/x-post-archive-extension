@@ -15,6 +15,7 @@ import type {
   ArchiveTagRedirectSummaryRecord,
   ArchiveTagSummaryRecord,
   ListPostsPageInput,
+  PostFilterInput,
   UserSummary
 } from "./viewer";
 
@@ -95,6 +96,20 @@ export type DeleteTagRedirectMessage = {
   tagRedirectId: string;
 };
 
+export type BulkAssignTagPreviewMessage = {
+  type: "tag.bulk-assign.preview";
+  filter: PostFilterInput;
+  targetTagName: string;
+};
+
+export type BulkAssignTagApplyBatchMessage = {
+  type: "tag.bulk-assign.apply-batch";
+  postIds: string[];
+  targetTagId: string;
+  targetNormalizedName: string;
+  targetDisplayName: string;
+};
+
 export type RefetchEnqueueMessage = {
   type: "refetch.enqueue";
   priority: RefetchQueuePriority;
@@ -150,6 +165,8 @@ export type RuntimeMessage =
   | MergeTagsMessage
   | ListTagRedirectsMessage
   | DeleteTagRedirectMessage
+  | BulkAssignTagPreviewMessage
+  | BulkAssignTagApplyBatchMessage
   | RefetchEnqueueMessage
   | RefetchStatusMessage
   | RefetchCancelMessage
@@ -261,6 +278,21 @@ export type DeleteTagRedirectResponse = {
   deleted: boolean;
 };
 
+export type BulkAssignTagPreviewResponse = {
+  type: "tag.bulk-assign.preview";
+  candidatePostIds: string[];
+  targetTagId: string;
+  targetNormalizedName: string;
+  targetDisplayName: string;
+  totalMatchCount: number;
+  skipCount: number;
+};
+
+export type BulkAssignTagApplyBatchResponse = {
+  type: "tag.bulk-assign.apply-batch";
+  tagged: number;
+};
+
 export type RefetchEnqueueResponse = {
   type: "refetch.enqueue";
   enqueuedCount: number;
@@ -314,6 +346,8 @@ export type RuntimeResponse =
   | MergeTagsResponse
   | ListTagRedirectsResponse
   | DeleteTagRedirectResponse
+  | BulkAssignTagPreviewResponse
+  | BulkAssignTagApplyBatchResponse
   | RefetchEnqueueResponse
   | RefetchStatusResponse
   | RefetchCancelResponse

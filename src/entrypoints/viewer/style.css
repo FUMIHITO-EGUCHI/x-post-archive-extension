@@ -893,10 +893,24 @@ body {
   color: #526479;
 }
 
+.viewer-list-controls {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
 .viewer-sort-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.viewer-filter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 10px;
 }
@@ -1765,6 +1779,55 @@ body {
   margin-top: 20px;
 }
 
+.bulk-tag-modal {
+  width: min(720px, 100%);
+  display: grid;
+  gap: 16px;
+}
+
+.bulk-tag-form {
+  display: grid;
+  gap: 12px;
+}
+
+.bulk-tag-suggestion-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(240px, 32vh);
+  overflow-y: auto;
+}
+
+.bulk-tag-suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(16, 32, 51, 0.08);
+  border-radius: 14px;
+  background: #f8fbff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bulk-tag-suggestion strong {
+  min-width: 0;
+  font-size: calc(14px * var(--viewer-font-scale));
+}
+
+.bulk-tag-suggestion span {
+  color: #5e7389;
+  font-size: calc(13px * var(--viewer-font-scale));
+  white-space: nowrap;
+}
+
+.bulk-tag-suggestion:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .viewer-tag-option-list {
   display: grid;
   gap: 10px;
@@ -1980,7 +2043,8 @@ body {
 
 :root[data-theme="dark"] .viewer-active-tag-filter,
 :root[data-theme="dark"] .viewer-tag-modal-summary,
-:root[data-theme="dark"] .tag-chip {
+:root[data-theme="dark"] .tag-chip,
+:root[data-theme="dark"] .bulk-tag-suggestion {
   border: 1px solid var(--color-accent-soft-strong);
   background: rgba(29, 155, 240, 0.12);
   color: var(--color-text);
@@ -2002,6 +2066,10 @@ body {
 :root[data-theme="dark"] .viewer-modal-inline-error {
   background: var(--color-danger-soft);
   color: var(--color-danger-text);
+}
+
+:root[data-theme="dark"] .bulk-tag-suggestion span {
+  color: var(--color-text-sub);
 }
 
 :root[data-theme="dark"] .viewer-sort-select,
@@ -2179,7 +2247,12 @@ body {
     align-items: stretch;
   }
 
+  .viewer-list-controls,
   .viewer-sort-controls {
+    justify-content: flex-start;
+  }
+
+  .viewer-filter-controls {
     justify-content: flex-start;
   }
 

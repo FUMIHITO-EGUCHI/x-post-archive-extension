@@ -55,6 +55,11 @@ export type ListPostsPageInput = {
   dateTo: number | null;
 };
 
+export type PostFilterInput = Pick<
+  ListPostsPageInput,
+  "tagFilter" | "authorFilter" | "dateFilterTarget" | "dateFrom" | "dateTo"
+>;
+
 export type ViewerSessionRestoreMode = "off" | "filters" | "filters-and-position";
 export type ViewerTheme = "light" | "dark";
 
