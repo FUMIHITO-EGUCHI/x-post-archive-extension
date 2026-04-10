@@ -447,7 +447,10 @@ export async function handleRuntimeMessage(
       const result = await enqueueRefetchPosts({
         priority: message.priority,
         ...(message.xPostIds === undefined ? {} : { xPostIds: message.xPostIds }),
-        ...(message.enqueueAll === undefined ? {} : { enqueueAll: message.enqueueAll })
+        ...(message.enqueueAll === undefined ? {} : { enqueueAll: message.enqueueAll }),
+        ...(message.enqueueZeroEngagement === undefined
+          ? {}
+          : { enqueueZeroEngagement: message.enqueueZeroEngagement })
       });
       const response: RefetchEnqueueResponse = {
         type: "refetch.enqueue",

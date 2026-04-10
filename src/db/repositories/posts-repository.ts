@@ -42,6 +42,14 @@ export async function listPostIds(): Promise<string[]> {
   return archiveDb.posts.toCollection().primaryKeys();
 }
 
+export async function listPostIdsWithZeroEngagementCounts(): Promise<string[]> {
+  return archiveDb.posts
+    .where("reply_count")
+    .equals(0)
+    .and((post) => post.repost_count === 0 && post.like_count === 0)
+    .primaryKeys();
+}
+
 export async function listPostsSliceBySort(
   sortField: PostSortField,
   sortDirection: SortDirection,

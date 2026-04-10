@@ -9,6 +9,7 @@ import {
   loadArchiveLanguage
 } from "../settings/archive-language";
 import { loadArchiveSettings } from "../settings/archive-settings";
+import { ensureGraphqlEngagementListener } from "./graphql-engagement-cache";
 import { ensureGraphqlImageCandidateListener } from "./graphql-image-candidate-cache";
 import {
   extractPostFromArticle,
@@ -42,6 +43,8 @@ const SAVE_BUTTON_SELECTOR = "[data-xpa-save-button]";
 const AUTO_ARCHIVE_ERROR_DISPLAY_MS = 3000;
 const AUTO_ARCHIVE_ARTICLE_RETRY_INTERVAL_MS = 500;
 const AUTO_ARCHIVE_ARTICLE_MAX_ATTEMPTS = 10;
+const VISIBLE_SAVE_MEDIA_RETRY_INTERVAL_MS = 250;
+const VISIBLE_SAVE_MEDIA_MAX_ATTEMPTS = 5;
 const QUOTED_POST_CONTAINER_SELECTOR = 'div[role="link"][tabindex="0"]';
 
 const processedArticles = new WeakSet<HTMLElement>();
@@ -74,6 +77,7 @@ export function bootstrapXContentScript(ctx: ContentScriptContext): void {
   });
   ensureGraphqlVideoCandidateListener();
   ensureGraphqlImageCandidateListener();
+  ensureGraphqlEngagementListener();
   startWhenBodyReady(ctx);
 }
 
@@ -317,7 +321,7 @@ async function saveArticleSnapshot(
     includeBookmarkedTag?: boolean;
   } = {}
 ): Promise<void> {
-  const extracted = extractPostFromArticle(article);
+  const extracted = await extractReadyPostFromVisibleArticle(article);
 
   if (extracted === null) {
     throw new Error("Post extraction failed.");
@@ -354,6 +358,24 @@ async function saveArticleSnapshot(
   if (response.status !== "saved" && response.status !== "duplicate") {
     throw new Error("Unexpected save status.");
   }
+}
+
+async function extractReadyPostFromVisibleArticle(
+  article: HTMLElement
+): Promise<ReturnType<typeof extractPostFromArticle>> {
+  let latestExtraction = extractPostFromArticle(article);
+
+  for (let attempt = 0; attempt < VISIBLE_SAVE_MEDIA_MAX_ATTEMPTS; attempt += 1) {
+    if (!shouldWaitForVisibleArticleMedia(article, latestExtraction)) {
+      return latestExtraction;
+    }
+
+    await warmupArticleMedia(article);
+    await wait(VISIBLE_SAVE_MEDIA_RETRY_INTERVAL_MS);
+    latestExtraction = extractPostFromArticle(article);
+  }
+
+  return latestExtraction;
 }
 
 async function syncArticleSaveButtonState(
@@ -446,7 +468,7 @@ async function handleRefetchCheck(message: RefetchCheckMessage): Promise<Refetch
   let warmupApplied = false;
 
   if (waitingForMedia) {
-    warmupApplied = await warmupRefetchArticleMedia(article);
+    warmupApplied = await warmupArticleMedia(article);
     return {
       found: true,
       extracted: extracted !== null,
@@ -488,7 +510,22 @@ function createDefaultRefetchCheckResponse(): RefetchCheckResponse {
   };
 }
 
-async function warmupRefetchArticleMedia(article: HTMLElement): Promise<boolean> {
+function shouldWaitForVisibleArticleMedia(
+  article: HTMLElement,
+  extracted: ReturnType<typeof extractPostFromArticle>
+): boolean {
+  const mediaSignals = inspectArticleMediaSignals(article);
+  const savableMediaCount =
+    extracted === null
+      ? 0
+      : extracted.post.media.length +
+        (extracted.post.video_candidates ?? []).filter((c) => c.download_mode === "direct_mp4")
+          .length;
+
+  return mediaSignals.imageHintCount + mediaSignals.videoHintCount > savableMediaCount;
+}
+
+async function warmupArticleMedia(article: HTMLElement): Promise<boolean> {
   const quotedPostContainer = article.querySelector<HTMLElement>(QUOTED_POST_CONTAINER_SELECTOR);
   const warmupTargets = collectRefetchWarmupTargets(article, quotedPostContainer);
   let warmupApplied = false;
@@ -611,6 +648,12 @@ function clearPendingAutoArchiveRetries(): void {
   }
 
   pendingAutoArchiveRetryTimers.clear();
+}
+
+function wait(durationMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, durationMs);
+  });
 }
 
 function syncLikesImportControls(): void {

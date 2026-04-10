@@ -1,4 +1,9 @@
+import { extractEngagementCountsByPostIdFromGraphqlResponse } from "./graphql-engagements";
 import { extractImageCandidatesByPostIdFromGraphqlResponse } from "./graphql-image-candidates";
+import {
+  GRAPHQL_ENGAGEMENT_COUNTS_EVENT,
+  type GraphqlEngagementCountsEventDetail
+} from "./graphql-engagement-events";
 import { extractVideoCandidatesByPostIdFromGraphqlResponse } from "./graphql-video-candidates";
 import {
   GRAPHQL_IMAGE_CANDIDATES_EVENT,
@@ -142,8 +147,21 @@ function normalizeGraphqlUrl(rawUrl: string): string | null {
 }
 
 function dispatchCandidates(payload: unknown): void {
+  const engagementPosts = extractEngagementCountsByPostIdFromGraphqlResponse(payload);
   const imagePosts = extractImageCandidatesByPostIdFromGraphqlResponse(payload);
   const posts = extractVideoCandidatesByPostIdFromGraphqlResponse(payload);
+
+  if (engagementPosts.length > 0) {
+    const engagementDetail: GraphqlEngagementCountsEventDetail = {
+      posts: engagementPosts
+    };
+
+    document.dispatchEvent(
+      new CustomEvent<GraphqlEngagementCountsEventDetail>(GRAPHQL_ENGAGEMENT_COUNTS_EVENT, {
+        detail: engagementDetail
+      })
+    );
+  }
 
   if (imagePosts.length > 0) {
     const imageDetail: GraphqlImageCandidatesEventDetail = {

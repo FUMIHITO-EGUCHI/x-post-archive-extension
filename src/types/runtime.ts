@@ -115,6 +115,7 @@ export type RefetchEnqueueMessage = {
   priority: RefetchQueuePriority;
   xPostIds?: string[];
   enqueueAll?: boolean;
+  enqueueZeroEngagement?: boolean;
 };
 
 export type RefetchStatusMessage = {

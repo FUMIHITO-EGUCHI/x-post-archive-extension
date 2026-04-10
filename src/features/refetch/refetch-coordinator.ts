@@ -1,4 +1,8 @@
-import { getPost, listPostIds } from "../../db/repositories/posts-repository";
+import {
+  getPost,
+  listPostIds,
+  listPostIdsWithZeroEngagementCounts
+} from "../../db/repositories/posts-repository";
 import {
   bulkUpsertPendingRefetchQueueRecords,
   deleteAllRefetchQueueRecords,
@@ -42,6 +46,7 @@ const pendingResults = new Map<string, PendingRefetchResult>();
 export async function enqueueRefetchPosts(input: {
   xPostIds?: string[];
   enqueueAll?: boolean;
+  enqueueZeroEngagement?: boolean;
   priority: RefetchQueuePriority;
 }): Promise<{
   enqueuedCount: number;
@@ -50,7 +55,11 @@ export async function enqueueRefetchPosts(input: {
   stopRequested = false;
   stoppedWithPendingQueue = false;
 
-  const targetPostIds = input.enqueueAll ? await listPostIds() : [...new Set(input.xPostIds ?? [])];
+  const targetPostIds = input.enqueueZeroEngagement
+    ? await listPostIdsWithZeroEngagementCounts()
+    : input.enqueueAll
+      ? await listPostIds()
+      : [...new Set(input.xPostIds ?? [])];
   const enqueuedCount = await bulkUpsertPendingRefetchQueueRecords(targetPostIds, input.priority);
 
   void resumeRefetchProcessing({

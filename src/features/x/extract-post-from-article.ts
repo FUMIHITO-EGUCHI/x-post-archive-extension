@@ -2,6 +2,7 @@ import type {
   SaveImageInput,
   SavePostInput
 } from "../../types/archive";
+import { getCachedGraphqlEngagementCounts } from "./graphql-engagement-cache";
 import { getCachedGraphqlImageCandidates } from "./graphql-image-candidate-cache";
 import { getCachedGraphqlVideoCandidates } from "./graphql-video-candidate-cache";
 
@@ -28,7 +29,10 @@ export function extractPostFromArticle(article: HTMLElement): ExtractedPostBundl
   );
   const text = extractPostText(article, quotedPostContainer);
   const videoCandidates = getCachedGraphqlVideoCandidates(permalink.xPostId);
-  const engagement = extractEngagementCounts(article);
+  const engagement = mergeEngagementCounts(
+    extractEngagementCounts(article),
+    getCachedGraphqlEngagementCounts(permalink.xPostId)
+  );
 
   if (text === "" && media.length === 0 && videoCandidates.length === 0) {
     return null;
@@ -487,7 +491,10 @@ function extractQuotedPostFromContainer(container: HTMLElement): SavePostInput |
   const text = extractPostText(container);
   const media = extractPostImages(container);
   const videoCandidates = getCachedGraphqlVideoCandidates(permalink.xPostId);
-  const engagement = extractEngagementCounts(container);
+  const engagement = mergeEngagementCounts(
+    extractEngagementCounts(container),
+    getCachedGraphqlEngagementCounts(permalink.xPostId)
+  );
 
   if (text === "" && media.length === 0 && videoCandidates.length === 0) {
     return null;
@@ -565,6 +572,35 @@ function extractEngagementCounts(article: HTMLElement): {
     reply_count: extractActionCount(article, ["reply"]),
     repost_count: extractActionCount(article, ["retweet", "unretweet"]),
     like_count: extractActionCount(article, ["like", "unlike"])
+  };
+}
+
+function mergeEngagementCounts(
+  primary: {
+    reply_count: number;
+    repost_count: number;
+    like_count: number;
+  },
+  fallback:
+    | {
+        reply_count: number;
+        repost_count: number;
+        like_count: number;
+      }
+    | null
+): {
+  reply_count: number;
+  repost_count: number;
+  like_count: number;
+} {
+  if (fallback === null) {
+    return primary;
+  }
+
+  return {
+    reply_count: primary.reply_count > 0 ? primary.reply_count : fallback.reply_count,
+    repost_count: primary.repost_count > 0 ? primary.repost_count : fallback.repost_count,
+    like_count: primary.like_count > 0 ? primary.like_count : fallback.like_count
   };
 }
 
