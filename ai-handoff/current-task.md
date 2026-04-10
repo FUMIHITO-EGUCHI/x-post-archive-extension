@@ -2,13 +2,13 @@
 
 ## Active
 
-- id: `2026-04-10-verify-zero-engagement-refetch-and-visible-save`
-- title: `Verify Zero-engagement Refetch + Visible Save Media Wait`
+- id: `2026-04-10-investigate-bulk-import-duplicate-images`
+- title: `Investigate Bulk Import Duplicate Images`
 - owner: `Codex`
 - status: `active`
 - branch: `master`
-- priority: `medium`
-- task_file: `ai-handoff/tasks/2026-04-10-verify-zero-engagement-refetch-and-visible-save.md`
+- priority: `high`
+- task_file: `ai-handoff/tasks/2026-04-10-investigate-bulk-import-duplicate-images.md`
 
 ## Scope
 - files_in_scope: `src/features/refetch/refetch-coordinator.ts`, `src/features/x/bootstrap-x-content-script.ts`, `src/features/x/extract-post-from-article.ts`, `src/features/x/likes-import-controls.ts`, `src/services/archive-service.ts`
@@ -31,17 +31,18 @@
 
 
 
-- acceptance_criteria: shared CDP Chrome verification confirms the zero-engagement-only refetch action enqueues only posts with all three engagement counts at `0`
-- acceptance_criteria: shared CDP Chrome verification confirms the visible save path no longer immediately persists a media-hinted post before image extraction is ready, or the remaining failure mode is documented with evidence
-- acceptance_criteria: findings are recorded in `Codex Result` and `Verification`
+
+- acceptance_criteria: at least one concrete duplicate-image scenario is documented with log, DB, or browser evidence
+- acceptance_criteria: the investigation states whether the duplicate is introduced during extraction, duplicate-save handling, or persistence
+- acceptance_criteria: the fix prevents duplicate image persistence for the reproduced case without regressing valid multi-image saves
 
 ## Completion Checklist
 
 - [ ] implementation finished
-- [x] `npm run typecheck`
-- [x] `npm run build`
+- [ ] `npm run typecheck`
+- [ ] `npm run build`
 - [x] task packet `Codex Result` or `Result` updated
-- [x] task packet `Verification` updated
+- [x] `task packet \`Verification\` updated`
 - [ ] `ai-handoff/current-task.md` updated
 - [ ] `npm run handoff:check`
 
@@ -60,10 +61,10 @@
 
 - `2026-04-10-investigate-quoted-nesting-display`: Investigate Quoted Nesting Display
 - `2026-04-10-investigate-bulk-import-missing-posts`: Investigate Bulk Import Missing Posts
-- `2026-04-10-investigate-bulk-import-duplicate-images`: Investigate Bulk Import Duplicate Images
 
 ## Recently Completed
 
+- `2026-04-10-verify-zero-engagement-refetch-and-visible-save`: shared CDP verification confirmed zero-engagement refetch works from the viewer and visible-page save now waits long enough to persist image media for post `1757243797334094301
 - `2026-04-10-enforce-content-safe-boundaries`: ESLint boundary rules and a built content-script guard now prevent Dexie-backed DB code from re-entering content-safe modules or shipping inside content script bundles
 - `2026-04-10-zero-engagement-refetch-and-image-investigation`: zero-engagement-only refetch was added, GraphQL engagement fallback now reduces false 0-count saves, and visible-page save waits briefly for media before persisting
 - `2026-04-09-inactive-refetch-background-only`: refetch now succeeds in an inactive X tab by combining progress-aware waiting, DOM warm-up, and GraphQL image fallback

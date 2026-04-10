@@ -444,6 +444,15 @@ export async function handleRuntimeMessage(
     }
 
     case "refetch.enqueue": {
+      logger.info("refetch.enqueue.requested", {
+        requestId,
+        context: {
+          priority: message.priority,
+          enqueueAll: message.enqueueAll ?? false,
+          enqueueZeroEngagement: message.enqueueZeroEngagement ?? false,
+          explicitPostCount: message.xPostIds?.length ?? 0
+        }
+      });
       const result = await enqueueRefetchPosts({
         priority: message.priority,
         ...(message.xPostIds === undefined ? {} : { xPostIds: message.xPostIds }),

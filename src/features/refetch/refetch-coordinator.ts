@@ -60,6 +60,15 @@ export async function enqueueRefetchPosts(input: {
     : input.enqueueAll
       ? await listPostIds()
       : [...new Set(input.xPostIds ?? [])];
+  logger.info("refetch.enqueue.prepared", {
+    context: {
+      enqueueAll: input.enqueueAll ?? false,
+      enqueueZeroEngagement: input.enqueueZeroEngagement ?? false,
+      explicitPostCount: input.xPostIds?.length ?? 0,
+      targetPostCount: targetPostIds.length,
+      priority: input.priority
+    }
+  });
   const enqueuedCount = await bulkUpsertPendingRefetchQueueRecords(targetPostIds, input.priority);
 
   void resumeRefetchProcessing({
