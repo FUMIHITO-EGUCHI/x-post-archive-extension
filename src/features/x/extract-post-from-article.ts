@@ -5,6 +5,7 @@ import type {
 import { getCachedGraphqlEngagementCounts } from "./graphql-engagement-cache";
 import { getCachedGraphqlImageCandidates } from "./graphql-image-candidate-cache";
 import { getCachedGraphqlVideoCandidates } from "./graphql-video-candidate-cache";
+import { canonicalizeTwitterImageUrl } from "./twitter-image-url";
 
 const POST_PATH_PATTERN = /^\/([^/]+)\/status\/(\d+)/;
 const PHOTO_PATH_PATTERN = /\/photo\/(\d+)$/;
@@ -414,23 +415,9 @@ function extractPhotoPosition(anchor: HTMLAnchorElement, fallbackIndex: number):
 }
 
 function normalizeImageUrl(src: string): string | null {
-  try {
-    const url = new URL(src, window.location.origin);
-
-    if (url.hostname !== "pbs.twimg.com" || !url.pathname.includes("/media/")) {
-      return null;
-    }
-
-    url.protocol = "https:";
-
-    if (url.searchParams.has("name")) {
-      url.searchParams.set("name", "orig");
-    }
-
-    return url.toString();
-  } catch {
-    return null;
-  }
+  return canonicalizeTwitterImageUrl(src, {
+    baseUrl: window.location.origin
+  });
 }
 
 function normalizeVideoPosterUrl(src: string): string | null {

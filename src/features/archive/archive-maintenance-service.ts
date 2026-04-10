@@ -23,9 +23,11 @@ import type {
 } from "../../types/archive-backup";
 import {
   clearMediaRootFromOpfs,
+  deleteBlobFromOpfs,
   readBlobFromOpfs,
   writeBlobToOpfs
 } from "../media-storage/opfs-media-storage";
+import { canonicalizeTwitterImageUrl } from "../x/twitter-image-url";
 
 const ARCHIVE_BACKUP_FORMAT = "x-post-archive-backup";
 const ARCHIVE_BACKUP_VERSION = 2;
@@ -37,6 +39,30 @@ export type ArchiveTransferProgress = {
   completed: number;
   total: number;
   detail: string | null;
+};
+
+export type DuplicateImageCleanupOptions = {
+  apply?: boolean;
+  xPostIds?: string[];
+};
+
+export type DuplicateImageCleanupGroup = {
+  xPostId: string;
+  canonicalSourceUrl: string;
+  keepMediaId: string;
+  removeMediaIds: string[];
+  mediaIds: string[];
+};
+
+export type DuplicateImageCleanupResult = {
+  mode: "dry-run" | "apply";
+  scannedImageCount: number;
+  duplicatePostCount: number;
+  duplicateGroupCount: number;
+  removableRecordCount: number;
+  updatedRecordCount: number;
+  deletedFileCount: number;
+  groups: DuplicateImageCleanupGroup[];
 };
 
 export async function streamArchiveBackupZip(
@@ -342,6 +368,79 @@ export async function resetExtensionState(): Promise<void> {
   await browser.storage.local.clear();
 }
 
+export async function cleanupDuplicateImageMedia(
+  options: DuplicateImageCleanupOptions = {}
+): Promise<DuplicateImageCleanupResult> {
+  const targetPostIds = normalizeTargetPostIds(options.xPostIds ?? []);
+  const media = await archiveDb.media.toArray();
+  const imageRecords = media.filter(
+    (record) =>
+      record.media_type === "image" &&
+      (targetPostIds === null || targetPostIds.has(record.x_post_id))
+  );
+  const duplicateGroups = collectDuplicateImageGroups(imageRecords);
+  const groups = duplicateGroups.map((group) => ({
+    xPostId: group.xPostId,
+    canonicalSourceUrl: group.canonicalSourceUrl,
+    keepMediaId: group.keepRecord.media_id,
+    removeMediaIds: group.removeRecords.map((record) => record.media_id),
+    mediaIds: group.records.map((record) => record.media_id)
+  }));
+  const removableRecords = duplicateGroups.flatMap((group) => group.removeRecords);
+  const retainedUpdates = duplicateGroups
+    .map((group) => buildRetainedRecordUpdate(group))
+    .filter((update): update is { mediaId: string; changes: Partial<MediaRecord> } => update !== null);
+
+  if (options.apply !== true) {
+    return {
+      mode: "dry-run",
+      scannedImageCount: imageRecords.length,
+      duplicatePostCount: new Set(duplicateGroups.map((group) => group.xPostId)).size,
+      duplicateGroupCount: duplicateGroups.length,
+      removableRecordCount: removableRecords.length,
+      updatedRecordCount: retainedUpdates.length,
+      deletedFileCount: 0,
+      groups
+    };
+  }
+
+  const removableIds = removableRecords.map((record) => record.media_id);
+
+  await archiveDb.transaction("rw", archiveDb.media, async () => {
+    for (const update of retainedUpdates) {
+      await archiveDb.media.update(update.mediaId, update.changes);
+    }
+
+    if (removableIds.length > 0) {
+      await archiveDb.media.bulkDelete(removableIds);
+    }
+  });
+
+  const remainingMedia = await archiveDb.media.toArray();
+  const remainingPaths = collectReferencedMediaPaths(remainingMedia);
+  let deletedFileCount = 0;
+
+  for (const path of collectReferencedMediaPaths(removableRecords)) {
+    if (remainingPaths.has(path)) {
+      continue;
+    }
+
+    await deleteBlobFromOpfs(path);
+    deletedFileCount += 1;
+  }
+
+  return {
+    mode: "apply",
+    scannedImageCount: imageRecords.length,
+    duplicatePostCount: new Set(duplicateGroups.map((group) => group.xPostId)).size,
+    duplicateGroupCount: duplicateGroups.length,
+    removableRecordCount: removableRecords.length,
+    updatedRecordCount: retainedUpdates.length,
+    deletedFileCount,
+    groups
+  };
+}
+
 export function summarizeBackup(backup: ArchiveBackupManifest): ArchiveBackupSummary {
   return {
     postCount: backup.data.posts.length,
@@ -352,6 +451,14 @@ export function summarizeBackup(backup: ArchiveBackupManifest): ArchiveBackupSum
     fileCount: backup.data.files.length
   };
 }
+
+type DuplicateImageGroupPlan = {
+  xPostId: string;
+  canonicalSourceUrl: string;
+  records: MediaRecord[];
+  keepRecord: MediaRecord;
+  removeRecords: MediaRecord[];
+};
 
 function collectBackupFilePaths(media: MediaRecord[]): string[] {
   const paths = new Set<string>();
@@ -367,6 +474,124 @@ function collectBackupFilePaths(media: MediaRecord[]): string[] {
   }
 
   return [...paths.values()];
+}
+
+function collectDuplicateImageGroups(media: MediaRecord[]): DuplicateImageGroupPlan[] {
+  const grouped = new Map<string, MediaRecord[]>();
+
+  for (const record of media) {
+    const canonicalSourceUrl = canonicalizeTwitterImageUrl(record.source_url) ?? record.source_url;
+    const key = `${record.x_post_id}\u0000${canonicalSourceUrl}`;
+    const existingRecords = grouped.get(key);
+
+    if (existingRecords === undefined) {
+      grouped.set(key, [record]);
+      continue;
+    }
+
+    existingRecords.push(record);
+  }
+
+  return [...grouped.entries()]
+    .map(([key, records]) => {
+      if (records.length < 2) {
+        return null;
+      }
+
+      const separatorIndex = key.indexOf("\u0000");
+      const xPostId = key.slice(0, separatorIndex);
+      const canonicalSourceUrl = key.slice(separatorIndex + 1);
+      const orderedRecords = [...records].sort(compareDuplicateImageCandidates);
+
+      return {
+        xPostId,
+        canonicalSourceUrl,
+        records: [...records].sort((left, right) => left.position - right.position),
+        keepRecord: orderedRecords[0],
+        removeRecords: orderedRecords.slice(1)
+      };
+    })
+    .filter((group): group is DuplicateImageGroupPlan => group !== null)
+    .sort((left, right) => {
+      if (left.xPostId === right.xPostId) {
+        return left.canonicalSourceUrl.localeCompare(right.canonicalSourceUrl);
+      }
+
+      return left.xPostId.localeCompare(right.xPostId);
+    });
+}
+
+function compareDuplicateImageCandidates(left: MediaRecord, right: MediaRecord): number {
+  const leftReadyScore = left.storage_status === "ready" ? 1 : 0;
+  const rightReadyScore = right.storage_status === "ready" ? 1 : 0;
+
+  if (leftReadyScore !== rightReadyScore) {
+    return rightReadyScore - leftReadyScore;
+  }
+
+  const leftByteSize = left.byte_size ?? -1;
+  const rightByteSize = right.byte_size ?? -1;
+
+  if (leftByteSize !== rightByteSize) {
+    return rightByteSize - leftByteSize;
+  }
+
+  if (left.saved_at !== right.saved_at) {
+    return right.saved_at - left.saved_at;
+  }
+
+  if (left.position !== right.position) {
+    return left.position - right.position;
+  }
+
+  return left.media_id.localeCompare(right.media_id);
+}
+
+function buildRetainedRecordUpdate(
+  group: DuplicateImageGroupPlan
+): {
+  mediaId: string;
+  changes: Partial<MediaRecord>;
+} | null {
+  const changes: Partial<MediaRecord> = {};
+  const nextPosition = Math.min(...group.records.map((record) => record.position));
+
+  if (group.keepRecord.source_url !== group.canonicalSourceUrl) {
+    changes.source_url = group.canonicalSourceUrl;
+  }
+
+  if (group.keepRecord.position !== nextPosition) {
+    changes.position = nextPosition;
+  }
+
+  return Object.keys(changes).length === 0
+    ? null
+    : {
+        mediaId: group.keepRecord.media_id,
+        changes
+      };
+}
+
+function collectReferencedMediaPaths(media: MediaRecord[]): Set<string> {
+  const paths = new Set<string>();
+
+  for (const record of media) {
+    paths.add(record.opfs_path);
+
+    if (record.preview_image_opfs_path !== null) {
+      paths.add(record.preview_image_opfs_path);
+    }
+  }
+
+  return paths;
+}
+
+function normalizeTargetPostIds(xPostIds: string[]): Set<string> | null {
+  const normalized = xPostIds
+    .map((xPostId) => xPostId.trim())
+    .filter((xPostId) => xPostId !== "");
+
+  return normalized.length === 0 ? null : new Set(normalized);
 }
 
 function createFileEntryMap(entries: Entry[]): Map<string, FileEntry> {

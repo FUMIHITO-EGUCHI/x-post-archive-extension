@@ -6,7 +6,7 @@
 - title: `Investigate Bulk Import Duplicate Images`
 - owner: `Codex`
 - status: `active`
-- branch: `master`
+- branch: `feature/archive-followups`
 - priority: `high`
 - task_file: `ai-handoff/tasks/2026-04-10-investigate-bulk-import-duplicate-images.md`
 
@@ -24,6 +24,8 @@
 
 ## Next Action
 - next_action: run the remaining shared-CDP visible-save media-wait verification against a reproducible X post with image media, and document the result or remaining failure mode
+
+
 
 
 

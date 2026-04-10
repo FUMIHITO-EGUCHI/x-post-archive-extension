@@ -80,6 +80,7 @@ import {
   writeBlobToOpfs
 } from "../media-storage/opfs-media-storage";
 import { createLogger } from "../logging/logger";
+import { canonicalizeTwitterImageUrl } from "../x/twitter-image-url";
 
 const PENDING_MEDIA_RESUME_BATCH_SIZE = 24;
 const activeMediaPersistenceIds = new Set<string>();
@@ -1638,12 +1639,13 @@ function createPendingImageRecord(
   validateSaveImageInput(image);
 
   const mediaId = crypto.randomUUID();
+  const canonicalSourceUrl = canonicalizeTwitterImageUrl(image.source_url) ?? image.source_url;
 
   return {
     media_id: mediaId,
     x_post_id: xPostId,
     media_type: "image",
-    source_url: image.source_url,
+    source_url: canonicalSourceUrl,
     preview_image_url: null,
     preview_image_opfs_path: null,
     opfs_path: buildMediaOpfsPath(xPostId, mediaId, "image"),
@@ -1957,7 +1959,7 @@ function prepareRefetchedMediaUpdate(
 
     const reusedRecord: MediaRecord = {
       ...existing,
-      source_url: image.source_url,
+      source_url: canonicalizeTwitterImageUrl(image.source_url) ?? image.source_url,
       position: image.position,
       alt_text: image.alt_text,
       width: image.width,
@@ -2041,7 +2043,12 @@ function normalizeDateFilterTimestamp(value: number | null): number | null {
 }
 
 function getMediaSourceKey(mediaType: MediaRecord["media_type"], sourceUrl: string): string {
-  return `${mediaType}:${sourceUrl}`;
+  if (mediaType !== "image") {
+    return `${mediaType}:${sourceUrl}`;
+  }
+
+  const canonicalSourceUrl = canonicalizeTwitterImageUrl(sourceUrl) ?? sourceUrl;
+  return `${mediaType}:${canonicalSourceUrl}`;
 }
 
 function dedupeMediaRecordsById(records: MediaRecord[]): MediaRecord[] {

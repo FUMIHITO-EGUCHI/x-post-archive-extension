@@ -3,7 +3,7 @@
 ## Meta
 - status: waiting
 - owner: Codex
-- branch: master
+- branch: feature/archive-followups
 - priority: medium
 - files_in_scope: src/features/archive/archive-service.ts, src/db/repositories/posts-repository.ts, src/features/viewer/components/viewer-app.tsx, src/types/archive.ts
 - blocked_by: active task `2026-04-10-verify-zero-engagement-refetch-and-visible-save`
