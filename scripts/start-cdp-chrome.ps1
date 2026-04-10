@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
   [int]$Port = 9223,
-  [string]$ProfileDirName = ".codex-cdp-profile-2",
+  [string]$ProfileDirName = ".shared-cdp-profile",
   [switch]$ResetProfile,
   [switch]$SkipExtension,
   [switch]$TakeoverPort

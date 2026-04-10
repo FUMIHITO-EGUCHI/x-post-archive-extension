@@ -32,6 +32,7 @@ import type {
 } from "../../types/runtime";
 import type { RefetchQueuePriority } from "../../types/refetch";
 import type { ListPostsPageInput, PostFilterInput } from "../../types/viewer";
+import { ARCHIVE_DB_NAME } from "../../db/constants";
 
 const DEFAULT_RUNTIME_TIMEOUT_MS = 30000;
 const SAVE_RUNTIME_TIMEOUT_MS = 180000;
@@ -342,17 +343,8 @@ export async function requestRefetchEnqueueAll(
 export async function requestRefetchEnqueueZeroEngagement(
   priority: RefetchQueuePriority
 ): Promise<RefetchEnqueueResponse> {
-  const response = await sendMessage({
-    type: "refetch.enqueue",
-    enqueueZeroEngagement: true,
-    priority
-  }, DEFAULT_RUNTIME_TIMEOUT_MS);
-
-  if (response.type !== "refetch.enqueue") {
-    throw new Error("Unexpected runtime response for zero-engagement refetch enqueue request.");
-  }
-
-  return response;
+  const zeroEngagementPostIds = await listZeroEngagementPostIds();
+  return requestRefetchEnqueuePosts(zeroEngagementPostIds, priority);
 }
 
 export async function requestRefetchStatus(): Promise<RefetchStatusResponse> {
@@ -412,6 +404,60 @@ function createTimeoutPromise(timeoutMs: number): Promise<RuntimeResponse> {
     window.setTimeout(() => {
       reject(new Error(`Runtime request timed out after ${timeoutMs}ms.`));
     }, timeoutMs);
+  });
+}
+
+async function listZeroEngagementPostIds(): Promise<string[]> {
+  return new Promise<string[]>((resolve, reject) => {
+    const openRequest = indexedDB.open(ARCHIVE_DB_NAME);
+
+    openRequest.onerror = () => {
+      reject(openRequest.error ?? new Error("Failed to open the archive database."));
+    };
+
+    openRequest.onsuccess = () => {
+      const nativeDb = openRequest.result;
+      const transaction = nativeDb.transaction("posts", "readonly");
+      const store = transaction.objectStore("posts");
+      const index = store.index("reply_count");
+      const cursorRequest = index.openCursor(IDBKeyRange.only(0));
+      const postIds: string[] = [];
+
+      cursorRequest.onerror = () => {
+        nativeDb.close();
+        reject(cursorRequest.error ?? new Error("Failed to query zero-engagement posts."));
+      };
+
+      cursorRequest.onsuccess = () => {
+        const cursor = cursorRequest.result;
+
+        if (cursor === null) {
+          return;
+        }
+
+        const post = cursor.value as {
+          x_post_id: string;
+          repost_count: number;
+          like_count: number;
+        };
+
+        if (post.repost_count === 0 && post.like_count === 0) {
+          postIds.push(post.x_post_id);
+        }
+
+        cursor.continue();
+      };
+
+      transaction.oncomplete = () => {
+        nativeDb.close();
+        resolve(postIds);
+      };
+
+      transaction.onerror = () => {
+        nativeDb.close();
+        reject(transaction.error ?? new Error("Failed to complete zero-engagement query."));
+      };
+    };
   });
 }
 

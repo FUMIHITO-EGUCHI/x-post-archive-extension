@@ -1,7 +1,7 @@
 # Task Packet: Verify Zero-engagement Refetch + Visible Save Media Wait
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
 - branch: master
 - priority: medium
@@ -10,19 +10,7 @@
 - related_findings: shared CDP Chrome port `9223`, DB name `x-post-archive-posts-v1`
 - needs_from_claude: none
 - handoff_to_codex: verify the new zero-engagement-only refetch action and visible-page media-wait behavior on shared CDP Chrome
-- summary: shared CDP verification now confirms the viewer settings zero-engagement refetch flow works via viewer-side explicit enqueue on the shared profile; visible-save media-wait verification is still pending
-
-## Work Log
-- `2026-04-10 Codex`: follow-up verification task created after completing the zero-engagement refetch and image-capture implementation task
-- `2026-04-10 Codex`: shared profile 上で raw IndexedDB zero-count query は `828` 件を返す一方、runtime の `refetch.enqueue { enqueueZeroEngagement: true }` は `0` 件のまま動かないことを再現した
-- `2026-04-10 Codex`: explicit `xPostIds` enqueue は shared CDP Chrome 上で正常に動くことを確認し、viewer 側で zero-count post IDs を列挙して explicit enqueue する workaround に切り替えた
-- `2026-04-10 Codex`: shared CDP Chrome の viewer settings から `反応数 0 の投稿だけ再取得` を実行し、queue が `running` に入り `pendingCount = 827`, `totalCount = 827` になったことを確認後、`Stop after current` -> `stopped` -> `Clear queue` まで確認した
-- `2026-04-10 Codex`: verification 中に 1 件 refetch が完了したため、archive 上の zero-count 件数は `827 -> 826` に減少し、queue 件数と整合することを確認した
-- `2026-04-10 Codex`: visible-save media wait のブラウザ検証は未着手。再現に使う X post 候補がまだ必要
-
-- `2026-04-10 Codex`: investigated Chrome's `content-scripts/x.js` UTF-8 load error and traced it to `src/features/runtime/client.ts` importing `ARCHIVE_DB_NAME` from the Dexie module, which pulled Dexie back into the content script bundle
-- `2026-04-10 Codex`: paused this verification task and switched the active task to content-safe boundary enforcement so the Dexie regression cannot recur silently
-- `2026-04-10 Codex`: resumed this verification task after landing ESLint and build-time content-safe guards to prevent the Dexie regression from recurring
+- summary: shared CDP verification confirmed zero-engagement refetch works from the viewer and visible-page save now waits long enough to persist image media for post `1757243797334094301`
 
 ## Goal
 
@@ -79,10 +67,20 @@ save media-wait path on shared CDP Chrome.
 
 ## Open Questions
 
-- which concrete visible-page post should be used to re-check missing-image
-  timing
 - whether the service-worker-side `enqueueZeroEngagement` selector bug should
   be fixed now that the viewer flow is using explicit `xPostIds`
+
+## Work Log
+
+- `2026-04-10 Codex`: follow-up verification task created after completing the zero-engagement refetch and image-capture implementation task
+- `2026-04-10 Codex`: shared profile raw IndexedDB zero-count query returned `828` while runtime `refetch.enqueue { enqueueZeroEngagement: true }` stayed at `0`, so the broken service-worker-side selector path was reproduced
+- `2026-04-10 Codex`: explicit `xPostIds` enqueue worked on shared CDP Chrome, so the viewer flow was switched to enumerate zero-count post IDs locally and enqueue them explicitly
+- `2026-04-10 Codex`: shared CDP Chrome viewer settings verification confirmed `反応数 0 の投稿だけ再取得` moved the queue into `running`, then `Stop after current` and `Clear queue` both worked
+- `2026-04-10 Codex`: during verification one refetch completed, so the zero-count archive cohort dropped from `827` to `826` and stayed aligned with queue counts
+- `2026-04-10 Codex`: investigated Chrome's `content-scripts/x.js` UTF-8 load error and traced it to `src/features/runtime/client.ts` importing `ARCHIVE_DB_NAME` from the Dexie module, which pulled Dexie back into the content script bundle
+- `2026-04-10 Codex`: paused this verification task and switched the active task to content-safe boundary enforcement so the Dexie regression could not recur silently
+- `2026-04-10 Codex`: resumed this verification task after landing ESLint and build-time content-safe guards
+- `2026-04-10 Codex`: user provided reproducible visible-save post `1757243797334094301`; shared CDP verification deleted the existing saved row, re-saved from the live X page, and confirmed that media rows were persisted instead of the prior zero-media state
 
 ## Codex Plan
 
@@ -93,15 +91,15 @@ save media-wait path on shared CDP Chrome.
 
 ## Codex Result
 
-Shared CDP verification is partially complete.
+Shared CDP verification is complete.
 
 Confirmed:
 - the shared CDP profile contains the real archive again and can enumerate the
   zero-count cohort directly from IndexedDB
 - the background queue path itself is healthy on shared CDP Chrome: explicit
   `xPostIds` enqueue works and starts processing immediately
-- the viewer settings zero-engagement action now works on shared CDP Chrome via
-  the viewer-side explicit-enqueue workaround
+- the viewer settings zero-engagement action works on shared CDP Chrome via the
+  viewer-side explicit-enqueue workaround
 - browser verification passed for the settings button:
   - clicked `反応数 0 の投稿だけ再取得`
   - queue moved to `running`
@@ -109,9 +107,13 @@ Confirmed:
     `pendingCount = 827`, `totalCount = 827`
   - `Stop after current` moved the queue to `stopped`
   - `Clear queue` returned it to `idle`
-
-Not yet confirmed:
-- visible-page save media-wait behavior on shared CDP Chrome
+- visible-page save media-wait verification passed on shared CDP Chrome using
+  post `1757243797334094301`
+  - the previously saved archive row existed with `storedMediaCount = 0`
+  - after deleting that row and clicking the live page's `Save` button, the
+    button progressed `Save -> Saving... -> Saved`
+  - the archive then contained `storedMediaCount = 2` media rows instead of the
+    prior zero-media state
 
 ## Changed Files
 
@@ -152,7 +154,20 @@ Not yet confirmed:
     `pendingCount = 826`, `completedCount = 1`
   - `refetch.clear` returned the queue to `phase = "idle"` with all queue
     counts reset to `0`
-- Visible-save media-wait verification is still pending
+- Visible-save media-wait verification on shared CDP Chrome:
+  - used the live X page `https://x.com/minmy34866626/status/1757243797334094301`
+  - viewer-page IndexedDB inspection showed an existing saved row with
+    `storedMediaCount = 0`
+  - deleted the archived post via runtime message, reloaded the X page, and
+    confirmed the injected save button was back in the `Save` state
+  - clicked the save button and observed `Save -> Saving... -> Saved`
+  - viewer-page IndexedDB inspection then showed:
+    - `exists = true`
+    - `storedMediaCount = 2`
+    - `postUrl = "https://x.com/minmy34866626/status/1757243797334094301"`
+    - media source URLs:
+      - `https://pbs.twimg.com/media/GGL73oPasAEnwM0?format=jpg&name=orig`
+      - `https://pbs.twimg.com/media/GGL73oPasAEnwM0.jpg?name=orig`
 
 ## Remaining Issues
 
@@ -160,16 +175,18 @@ Not yet confirmed:
   inconsistently on shared CDP Chrome; direct runtime enqueue by flag returns
   `0` even though raw zero-count IndexedDB queries and explicit `xPostIds`
   enqueue both work
-- visible-save media-wait behavior still needs a separate browser pass
+- post `1757243797334094301` saved with two image URLs that appear to point to
+  the same underlying image asset; this may be related to the separate
+  duplicate-image investigation but does not block the visible-save wait fix
 
 ## Suggested Next Action
 
-Run the remaining shared-CDP visible-save media-wait verification against a
-reproducible X post with image media, and either confirm the wait fixes the
-race or document the remaining failure mode.
+Investigate duplicate-image persistence next, using post `1757243797334094301`
+as a possible seed case while keeping the bulk-import scope separate from this
+verification task.
 
 ## Completion Checklist
-- [ ] implementation finished
+- [x] implementation finished
 - [x] `npm run typecheck`
 - [x] `npm run build`
 - [x] task packet `Codex Result` or `Result` updated
