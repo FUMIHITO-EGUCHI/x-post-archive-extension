@@ -32,6 +32,7 @@ import {
   requestRefetchCancel,
   requestRefetchClear,
   requestRefetchEnqueueAll,
+  requestRefetchEnqueueZeroEngagement,
   requestRefetchEnqueuePosts,
   requestRefetchStatus,
   requestRemovePostTagByName,
@@ -1214,6 +1215,21 @@ export function ViewerApp() {
     }
   }
 
+  async function handleRefetchZeroEngagementPosts(): Promise<void> {
+    try {
+      const response = await requestRefetchEnqueueZeroEngagement(0);
+      previousRefetchStatusRef.current = response.status;
+      setRefetchStatus(response.status);
+    } catch (error) {
+      logger.error("refetch.zero_engagement.enqueue_failed", {
+        message: "Failed to enqueue zero-engagement refetch.",
+        context: {
+          error
+        }
+      });
+    }
+  }
+
   async function handleCancelRefetch(): Promise<void> {
     try {
       const response = await requestRefetchCancel();
@@ -2081,6 +2097,7 @@ export function ViewerApp() {
                   }}
                   refetchStatus={refetchStatus}
                   onRefetchAll={handleRefetchAllPosts}
+                  onRefetchZeroEngagement={handleRefetchZeroEngagementPosts}
                   onRefetchCancel={handleCancelRefetch}
                   onRefetchClear={handleClearRefetchQueue}
                   onArchiveChanged={refreshArchive}

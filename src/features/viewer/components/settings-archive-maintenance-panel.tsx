@@ -19,6 +19,7 @@ type ArchiveMaintenancePanelProps = {
   };
   refetchStatus: RefetchStatusRecord;
   onRefetchAll: () => Promise<void>;
+  onRefetchZeroEngagement: () => Promise<void>;
   onRefetchCancel: () => Promise<void>;
   onRefetchClear: () => Promise<void>;
   onArchiveChanged: () => Promise<void>;
@@ -33,6 +34,7 @@ export function SettingsArchiveMaintenancePanel({
   archiveSummary,
   refetchStatus,
   onRefetchAll,
+  onRefetchZeroEngagement,
   onRefetchCancel,
   onRefetchClear,
   onArchiveChanged
@@ -260,6 +262,16 @@ export function SettingsArchiveMaintenancePanel({
             disabled={archiveSummary.postCount === 0}
           >
             {isJapanese ? "保存済み投稿を一括再取得" : "Refetch all saved posts"}
+          </button>
+          <button
+            className="viewer-secondary-button"
+            type="button"
+            onClick={() => {
+              void onRefetchZeroEngagement();
+            }}
+            disabled={archiveSummary.postCount === 0}
+          >
+            {isJapanese ? "反応数 0 の投稿だけ再取得" : "Refetch posts with 0 engagement"}
           </button>
           <button
             className="viewer-secondary-button"

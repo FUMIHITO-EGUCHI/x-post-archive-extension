@@ -339,6 +339,22 @@ export async function requestRefetchEnqueueAll(
   return response;
 }
 
+export async function requestRefetchEnqueueZeroEngagement(
+  priority: RefetchQueuePriority
+): Promise<RefetchEnqueueResponse> {
+  const response = await sendMessage({
+    type: "refetch.enqueue",
+    enqueueZeroEngagement: true,
+    priority
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "refetch.enqueue") {
+    throw new Error("Unexpected runtime response for zero-engagement refetch enqueue request.");
+  }
+
+  return response;
+}
+
 export async function requestRefetchStatus(): Promise<RefetchStatusResponse> {
   const response = await sendMessage({
     type: "refetch.status"
