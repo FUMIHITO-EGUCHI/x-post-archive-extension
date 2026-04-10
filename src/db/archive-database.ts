@@ -9,9 +9,9 @@ import type {
 import type { LogRecord } from "../types/logger";
 import type { RefetchQueueRecord } from "../types/refetch";
 import { resolveKnownBuiltInTagKey } from "../features/settings/archive-language";
+import { ARCHIVE_DB_NAME } from "./constants";
 
-const ARCHIVE_DB_NAME = "x-post-archive-posts-v1";
-
+// Keep shared DB constants in Dexie-free modules so content scripts never import this file transitively.
 export class ArchiveDatabase extends Dexie {
   posts!: Table<PostRecord, string>;
   media!: Table<MediaRecord, string>;

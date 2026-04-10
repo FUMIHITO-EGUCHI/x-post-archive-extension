@@ -7,8 +7,14 @@
     "dev": "wxt",
     "build": "wxt build",
     "zip": "wxt zip",
+    "lint": "eslint .",
+    "check:content-script-bundle": "node scripts/check-content-script-bundle.mjs",
+    "guard:content-scripts": "npm run build && npm run check:content-script-bundle",
+    "precommit:check": "npm run handoff:check && npm run lint && npm run guard:content-scripts",
     "typecheck": "tsc --noEmit",
     "handoff:check": "node scripts/check-handoff-consistency.mjs",
+    "handoff:sync": "node scripts/sync-handoff.mjs",
+    "handoff:log-changes": "node scripts/log-changes.mjs",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
@@ -20,8 +26,11 @@
   "devDependencies": {
     "@types/react": "19.1.1",
     "@types/react-dom": "19.1.1",
+    "@typescript-eslint/parser": "^8.58.1",
     "@wxt-dev/module-react": "1.1.5",
     "chrome-devtools-mcp": "^0.21.0",
+    "eslint": "^10.2.0",
+    "globals": "^17.4.0",
     "typescript": "5.9.2",
     "wxt": "0.20.11"
   }

@@ -24,8 +24,10 @@ X の投稿を 1 件ずつ保存して、あとから一覧で見返すための
 
 ```bash
 npm install
+npm run lint
 npm run typecheck
 npm run build
+npm run check:content-script-bundle
 ```
 
 開発時:
@@ -35,6 +37,14 @@ npm run dev
 ```
 
 Chrome では `.output/chrome-mv3/` を unpacked extension として読み込みます。
+
+## Content-safe Guardrails
+
+- `src/features/x/*` and `src/features/runtime/client.ts` are treated as content-safe modules
+- content-safe modules must not import `src/db/archive-database.ts`, `src/db/repositories/*`, or `dexie`
+- shared DB constants, types, and pure helpers must live in Dexie-free modules such as `src/db/constants.ts`
+- `npm run lint` enforces the import boundary
+- `npm run guard:content-scripts` rebuilds and verifies that built content scripts do not contain `Dexie`, `DexieError`, or `U+FFFF`
 
 ## One-off Migration
 

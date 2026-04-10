@@ -1,0 +1,14 @@
+#!/bin/sh
+# pre-commit hook
+# install with: sh scripts/setup-hooks.sh
+
+npm run precommit:check
+
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "Pre-commit checks failed."
+  echo "  1. Fix handoff consistency, lint, or content-script guard failures."
+  echo "  2. If the content-script guard failed, keep Dexie out of content-safe modules."
+  echo "  3. Re-run the relevant commands and commit again."
+  exit 1
+fi

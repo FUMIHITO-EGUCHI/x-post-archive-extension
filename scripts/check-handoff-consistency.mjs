@@ -64,6 +64,68 @@ function assertTaskHasCompletedSections(taskPath) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Meta helpers (案5: status field validation)
+// ---------------------------------------------------------------------------
+
+function extractMetaField(content, key) {
+  const m = content.match(new RegExp(`^- ${key}:\\s*\`?([^\`\\n]+)\`?`, "m"));
+  return m ? m[1].trim() : null;
+}
+
+function assertActivePacketStatus(taskPath) {
+  const content = readFile(taskPath);
+  const metaBody = findSectionBody(content, ["Meta"]);
+  if (metaBody === null) return; // Old packet without Meta — skip validation
+
+  const status = extractMetaField(content, "status");
+  if (status && status !== "active") {
+    fail(
+      `Active task packet has status \`${status}\` (expected \`active\`): ${path.relative(repoRoot, taskPath)}\n` +
+        `  Run \`npm run handoff:sync\` or update ## Meta status to \`active\`.`
+    );
+  }
+}
+
+function assertCompletedPacketStatus(taskPath) {
+  const content = readFile(taskPath);
+  const metaBody = findSectionBody(content, ["Meta"]);
+  if (metaBody === null) return; // Old packet without Meta — skip validation
+
+  const status = extractMetaField(content, "status");
+  if (status && status !== "done") {
+    fail(
+      `Recently completed task packet has status \`${status}\` (expected \`done\`): ${path.relative(repoRoot, taskPath)}\n` +
+        `  Update ## Meta - status: done in the task packet when closing a task.`
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Checklist sync validation (案2: detect when sync:handoff was not run)
+// ---------------------------------------------------------------------------
+
+function assertChecklistSynced(currentTask, taskPath) {
+  const packetContent = readFile(taskPath);
+  const packetChecklist = findSectionBody(packetContent, ["Completion Checklist"]);
+  const currentChecklist = findSectionBody(currentTask, ["Completion Checklist"]);
+
+  if (packetChecklist === null || currentChecklist === null) return;
+
+  // Compare ignoring whitespace differences
+  const normalize = (s) => s.replace(/\s+/g, " ").trim();
+  if (normalize(packetChecklist) !== normalize(currentChecklist)) {
+    fail(
+      `Completion Checklist in current-task.md differs from task packet.\n` +
+        `  Run \`npm run handoff:sync\` to resync.`
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
 function main() {
   if (!fs.existsSync(currentTaskPath)) {
     fail("Missing ai-handoff/current-task.md");
@@ -79,6 +141,11 @@ function main() {
     const resolved = path.join(repoRoot, activeTaskFile);
     if (!fs.existsSync(resolved)) {
       fail(`Active task file does not exist: ${activeTaskFile}`);
+    } else {
+      // 案5: active packet status must be "active"
+      assertActivePacketStatus(resolved);
+      // 案2: checklist must be in sync
+      assertChecklistSynced(currentTask, resolved);
     }
   }
 
@@ -93,6 +160,8 @@ function main() {
     }
 
     assertTaskHasCompletedSections(taskPath);
+    // 案5: completed packet status must be "done"
+    assertCompletedPacketStatus(taskPath);
   }
 
   if (process.exitCode && process.exitCode !== 0) {

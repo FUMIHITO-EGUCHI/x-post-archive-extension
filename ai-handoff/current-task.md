@@ -23,7 +23,10 @@
 - handoff_to_codex: add zero-engagement-only refetch task and investigate zero counts plus intermittent missing-image capture
 
 ## Next Action
-- next_action: inspect refetch selection, engagement extraction, and image extraction paths before implementing the new filter
+- next_action: run the remaining shared-CDP visible-save media-wait verification against a reproducible X post with image media, and document the result or remaining failure mode
+
+
+
 
 
 
@@ -35,14 +38,17 @@
 ## Completion Checklist
 
 - [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
+- [x] `npm run typecheck`
+- [x] `npm run build`
 - [x] task packet `Codex Result` or `Result` updated
 - [x] task packet `Verification` updated
 - [ ] `ai-handoff/current-task.md` updated
 - [ ] `npm run handoff:check`
 
 ## Recent Updates
+- `2026-04-10 Codex`: shared CDP Chrome で viewer settings の `反応数 0 の投稿だけ再取得` を実行し、queue が `running` に入り `pendingCount = 827`, `totalCount = 827` となること、`Stop after current` -> `stopped` -> `Clear queue` が通ることを確認した
+- `2026-04-10 Codex`: direct runtime `enqueueZeroEngagement` は shared profile 上で引き続き `0` 件のままだったため、viewer 側で zero-count post IDs を列挙して explicit enqueue する workaround に切り替え、shared profile 上で実動確認した
+- `2026-04-10 Codex`: shared CDP verification seeded 3 archive posts for reproducible testing and confirmed that regular archive runtime requests still work, but the real `refetch.status` / `refetch.enqueue` path currently resolves to `null` and leaves `refetch_queue` empty even after a full Chrome restart.
 - `2026-04-10 Codex`: opened `2026-04-10-zero-engagement-refetch-and-image-investigation` as the active task. Scope covers a new zero-engagement-only refetch path plus investigation of why some saved posts still persist `reply_count = repost_count = like_count = 0` and why image capture sometimes fails.
 - `2026-04-09 Codex`: merged `feature/archive-viewer-improvements` into `master`, reran `npm run typecheck`, `npm run build`, and reloaded the unpacked extension on shared CDP Chrome via `scripts/load-unpacked-extension.ps1 -Port 9223`.
 - `2026-04-09 Codex`: added handoff workflow safeguards. `ai-handoff/README.md` now defines a concrete Definition of Done, both handoff templates include a completion checklist, `npm run handoff:check` validates active and recently-completed task consistency, and previously implemented but unclosed task packets `2026-04-04-viewer-theme` and `2026-04-04-viewer-tag-inline` were updated with result and verification notes.
@@ -52,10 +58,13 @@
 
 ## Waiting Tasks
 
-- `none`
+- `2026-04-10-investigate-quoted-nesting-display`: Investigate Quoted Nesting Display
+- `2026-04-10-investigate-bulk-import-missing-posts`: Investigate Bulk Import Missing Posts
+- `2026-04-10-investigate-bulk-import-duplicate-images`: Investigate Bulk Import Duplicate Images
 
 ## Recently Completed
 
+- `2026-04-10-enforce-content-safe-boundaries`: ESLint boundary rules and a built content-script guard now prevent Dexie-backed DB code from re-entering content-safe modules or shipping inside content script bundles
 - `2026-04-10-zero-engagement-refetch-and-image-investigation`: zero-engagement-only refetch was added, GraphQL engagement fallback now reduces false 0-count saves, and visible-page save waits briefly for media before persisting
 - `2026-04-09-inactive-refetch-background-only`: refetch now succeeds in an inactive X tab by combining progress-aware waiting, DOM warm-up, and GraphQL image fallback
 - `2026-04-09-refetch-missing-media`: verified that refetch restores the missing image record for post `2041068152390598815`

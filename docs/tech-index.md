@@ -53,6 +53,19 @@
 - `src/features/runtime/handle-runtime-message.ts`
   - background 側の message dispatcher
 
+### Content-safe boundary
+- `src/features/x/*`
+  - content-safe 螻暮幕
+  - Dexie / `src/db/archive-database.ts` / `src/db/repositories/*` 繧貞性縺溘↑縺・
+- `src/features/runtime/client.ts`
+  - content-safe 螻暮幕
+  - runtime message client 縺ｨ Dexie-free helper 縺ｮ縺ｿ繧剃ｽｿ縺・
+- `src/db/constants.ts`
+  - content-safe 側縺九ｉ蜿ｯ逕ｨ縺励※繧医＞ DB 螳夂ｾｩ / 縺昴・莉倥・ Dexie-free 螳壽焚
+- `src/db/archive-database.ts`
+  - Dexie schema / singleton
+  - content-safe 螻暮幕縺九ｉ import 禁豁｣
+
 ## Domain And Storage
 
 ### Core types
