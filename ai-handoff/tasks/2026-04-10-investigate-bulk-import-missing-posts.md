@@ -3,7 +3,7 @@
 ## Meta
 - status: waiting
 - owner: Claude
-- branch: master
+- branch: feature/archive-followups
 - priority: high
 - files_in_scope: src/features/x/likes-import-controls.ts, src/features/x/bookmarks-import-controls.ts, src/features/x/bootstrap-x-content-script.ts, src/features/x/find-tweet-articles.ts, src/features/x/extract-post-from-article.ts, src/features/archive/archive-service.ts, src/db/repositories/posts-repository.ts
 - blocked_by: active task `2026-04-10-verify-zero-engagement-refetch-and-visible-save`

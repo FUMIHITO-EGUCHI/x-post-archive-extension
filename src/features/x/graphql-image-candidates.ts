@@ -1,7 +1,7 @@
 import type { SaveImageInput } from "../../types/archive";
 import type { GraphqlImageCandidatesByPostId } from "./graphql-image-events";
+import { canonicalizeTwitterImageUrl } from "./twitter-image-url";
 
-const IMAGE_HOSTNAME = "pbs.twimg.com";
 const URL_BASE = "https://x.com";
 
 export function extractImageCandidatesByPostIdFromGraphqlResponse(
@@ -170,19 +170,9 @@ function normalizeImageUrl(value: unknown): string | null {
     return null;
   }
 
-  try {
-    const url = new URL(rawUrl, URL_BASE);
-    url.protocol = "https:";
-
-    if (url.hostname !== IMAGE_HOSTNAME || !url.pathname.includes("/media/")) {
-      return null;
-    }
-
-    url.searchParams.set("name", "orig");
-    return url.toString();
-  } catch {
-    return null;
-  }
+  return canonicalizeTwitterImageUrl(rawUrl, {
+    baseUrl: URL_BASE
+  });
 }
 
 function normalizeNullableNumber(value: unknown): number | null {
