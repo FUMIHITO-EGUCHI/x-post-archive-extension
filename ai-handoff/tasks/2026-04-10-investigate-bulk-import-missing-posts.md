@@ -1,7 +1,7 @@
 # Task Packet: Investigate Bulk Import Missing Posts
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
 - branch: feature/archive-followups
 - priority: high
@@ -10,7 +10,7 @@
 - related_findings: `docs/likes-import-handover-2026-04-01.md`, duplicate-threshold auto-stop added in `2026-04-07-bulk-import-auto-stop-on-duplicates`, visible-save media wait improved in `2026-04-10-zero-engagement-refetch-and-image-investigation`
 - needs_from_claude: none
 - handoff_to_codex: implement the selected fix after root cause and acceptance criteria are clarified
-- summary:
+- summary: bulk import missing-post loss was fixed by bounded incremental timeline scrolling plus final stop-after-scroll collection, and the target likes post was confirmed saved in real-device verification
 
 ## Goal
 
@@ -101,6 +101,7 @@ saving some posts that should have been included in the run.
 - `2026-04-11 Codex`: ran additional likes verification with `bulkImportDuplicateBatchThreshold` temporarily raised from `10` to `20` and restored afterward; likes run completed with `7 / 7` independently observed posts saved, but X did not render more than 7 articles even after a 15s reload wait and repeated bottom scrolls.
 - `2026-04-11 Codex`: investigated the user-provided likes case where `2042731877069656563` below `2042639420353056839` was not imported; before reload, the post was visible and extractable in the likes DOM but had no `likes.import.inspect` or `post.save` logs, confirming a collector traversal miss; after extension reload, X lost the reproduced DOM state and only rendered 1-7 earlier articles, so exact post-level verification needs the page repositioned again.
 - `2026-04-11 Codex`: updated likes/bookmarks traversal to use bounded incremental viewport scrolling instead of jumping to `scrollHeight`, and expanded the final stop-after-scroll collection into repeated short collect passes.
+- `2026-04-11 Codex`: user performed the remaining real-device check around `2042639420353056839` / `2042731877069656563` and confirmed the previously missed post is now saved.
 
 ## Codex Plan
 
@@ -218,9 +219,10 @@ skipping posts by jumping past X's render window.
     - logs: no `likes.import.inspect` or `post.save` for
       `2042731877069656563`
     - after reloading the extension/page to test the fix, X no longer restored
-      the same DOM state and only rendered 1-7 earlier articles, so exact
-      verification of `2042731877069656563` is still pending page
-      repositioning
+      the same DOM state and only rendered 1-7 earlier articles, so Codex could
+      not complete exact verification in that session
+    - user later repositioned/re-ran the real-device check and confirmed
+      `2042731877069656563` is saved
 - `npm run typecheck`
 - `npm run build`
 - `npm run lint`
@@ -232,15 +234,12 @@ skipping posts by jumping past X's render window.
   before scanning the entire bookmarks or likes history. This fix improves
   traversal and final visible collection, but it is not an exhaustive
   full-history crawl.
-- exact verification for `2042731877069656563` remains blocked until the live X
-  page is repositioned to the same likes timeline area again.
+- none for this task; duplicate-threshold remains a non-exhaustive scan
+  heuristic by design.
 
 ## Suggested Next Action
 
-Ask the user to reposition the shared CDP likes page around
-`2042639420353056839` / `2042731877069656563`, then rerun likes bulk import
-with the incremental scroll build loaded and confirm `2042731877069656563`
-enters `likes.import.inspect` and/or `post.save`.
+Move on to the next waiting follow-up task.
 
 ## Completion Checklist
 - [x] implementation finished
