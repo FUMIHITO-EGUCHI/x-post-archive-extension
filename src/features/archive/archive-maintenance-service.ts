@@ -425,8 +425,14 @@ export async function cleanupDuplicateImageMedia(
       continue;
     }
 
-    await deleteBlobFromOpfs(path);
-    deletedFileCount += 1;
+    try {
+      await deleteBlobFromOpfs(path);
+      deletedFileCount += 1;
+    } catch (error) {
+      if (!isNotFoundError(error)) {
+        throw error;
+      }
+    }
   }
 
   return {
@@ -564,6 +570,11 @@ function buildRetainedRecordUpdate(
     changes.position = nextPosition;
   }
 
+  if (group.keepRecord.storage_status !== "ready") {
+    changes.storage_status = "pending";
+    changes.last_error = null;
+  }
+
   return Object.keys(changes).length === 0
     ? null
     : {
@@ -686,6 +697,10 @@ function parsePostRecord(value: unknown): PostRecord {
     reply_count: requireFiniteNumberValue(value.reply_count, "post.reply_count"),
     repost_count: requireFiniteNumberValue(value.repost_count, "post.repost_count"),
     like_count: requireFiniteNumberValue(value.like_count, "post.like_count"),
+    quoted_post_id:
+      value.quoted_post_id === undefined
+        ? null
+        : requireNullableString(value.quoted_post_id, "post.quoted_post_id"),
     saved_at: requireFiniteNumberValue(value.saved_at, "post.saved_at")
   };
 }
@@ -796,6 +811,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "NotFoundError";
 }
 
 function requireString(value: unknown, field: string): string {

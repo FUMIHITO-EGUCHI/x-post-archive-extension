@@ -506,8 +506,23 @@ function collectVisiblePosts(
 
   for (const article of articles) {
     const xPostId = extractPostIdFromArticle(article);
-    const extracted = extractPostFromArticle(article);
     const mediaSignals = inspectArticleMediaSignals(article);
+    let extracted: ExtractedPostBundle | null;
+
+    try {
+      extracted = extractPostFromArticle(article);
+    } catch (error) {
+      console.warn("Skipping a likes import article because extraction failed.", {
+        xPostId,
+        error
+      });
+      emitInspectTrace(run, xPostId, {
+        outcome: "post_null",
+        imageHintCount: mediaSignals.imageHintCount,
+        videoHintCount: mediaSignals.videoHintCount
+      });
+      continue;
+    }
 
     if (extracted === null) {
       emitInspectTrace(run, xPostId, {

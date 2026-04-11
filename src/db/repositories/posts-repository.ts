@@ -1,5 +1,4 @@
 import { archiveDb } from "../archive-database";
-import { ARCHIVE_DB_NAME } from "../constants";
 import type { PostRecord } from "../../types/archive";
 import type { PostSortField, SortDirection } from "../../types/viewer";
 
@@ -44,53 +43,11 @@ export async function listPostIds(): Promise<string[]> {
 }
 
 export async function listPostIdsWithZeroEngagementCounts(): Promise<string[]> {
-  return new Promise<string[]>((resolve, reject) => {
-    const openRequest = indexedDB.open(ARCHIVE_DB_NAME);
+  const posts = await archiveDb.posts.where("reply_count").equals(0).toArray();
 
-    openRequest.onerror = () => {
-      reject(openRequest.error ?? new Error("Failed to open the archive database."));
-    };
-
-    openRequest.onsuccess = () => {
-      const nativeDb = openRequest.result;
-      const transaction = nativeDb.transaction("posts", "readonly");
-      const store = transaction.objectStore("posts");
-      const index = store.index("reply_count");
-      const request = index.openCursor(IDBKeyRange.only(0));
-      const postIds: string[] = [];
-
-      request.onerror = () => {
-        nativeDb.close();
-        reject(request.error ?? new Error("Failed to query zero-engagement posts."));
-      };
-
-      request.onsuccess = () => {
-        const cursor = request.result;
-
-        if (cursor === null) {
-          return;
-        }
-
-        const post = cursor.value as PostRecord;
-
-        if (post.repost_count === 0 && post.like_count === 0) {
-          postIds.push(post.x_post_id);
-        }
-
-        cursor.continue();
-      };
-
-      transaction.oncomplete = () => {
-        nativeDb.close();
-        resolve(postIds);
-      };
-
-      transaction.onerror = () => {
-        nativeDb.close();
-        reject(transaction.error ?? new Error("Failed to complete zero-engagement query."));
-      };
-    };
-  });
+  return posts
+    .filter((post) => post.repost_count === 0 && post.like_count === 0)
+    .map((post) => post.x_post_id);
 }
 
 export async function listPostsSliceBySort(

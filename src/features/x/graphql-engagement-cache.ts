@@ -5,6 +5,7 @@ import {
 } from "./graphql-engagement-events";
 
 const cachedCountsByPostId = new Map<string, GraphqlEngagementCounts>();
+const MAX_CACHE_ENTRIES = 2000;
 let listenerAttached = false;
 
 export function ensureGraphqlEngagementListener(): void {
@@ -57,5 +58,18 @@ function handleEngagementEvent(event: Event): void {
           ? post.counts.like_count
           : 0
     });
+    evictOldestEntries(cachedCountsByPostId);
+  }
+}
+
+function evictOldestEntries<T>(cache: Map<string, T>): void {
+  while (cache.size > MAX_CACHE_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+
+    if (oldestKey === undefined) {
+      return;
+    }
+
+    cache.delete(oldestKey);
   }
 }

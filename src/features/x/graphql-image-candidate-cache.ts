@@ -5,6 +5,7 @@ import {
 } from "./graphql-image-events";
 
 const cachedImagesByPostId = new Map<string, SaveImageInput[]>();
+const MAX_CACHE_ENTRIES = 2000;
 let listenerAttached = false;
 
 export function ensureGraphqlImageCandidateListener(): void {
@@ -38,5 +39,18 @@ function handleCandidatesEvent(event: Event): void {
     }
 
     cachedImagesByPostId.set(post.xPostId, post.images);
+    evictOldestEntries(cachedImagesByPostId);
+  }
+}
+
+function evictOldestEntries<T>(cache: Map<string, T>): void {
+  while (cache.size > MAX_CACHE_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+
+    if (oldestKey === undefined) {
+      return;
+    }
+
+    cache.delete(oldestKey);
   }
 }

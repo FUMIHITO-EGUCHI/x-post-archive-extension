@@ -5,6 +5,7 @@ import {
 } from "./graphql-video-events";
 
 const cachedCandidatesByPostId = new Map<string, SaveVideoCandidateInput[]>();
+const MAX_CACHE_ENTRIES = 2000;
 let listenerAttached = false;
 
 export function ensureGraphqlVideoCandidateListener(): void {
@@ -38,5 +39,18 @@ function handleCandidatesEvent(event: Event): void {
     }
 
     cachedCandidatesByPostId.set(post.xPostId, post.candidates);
+    evictOldestEntries(cachedCandidatesByPostId);
+  }
+}
+
+function evictOldestEntries<T>(cache: Map<string, T>): void {
+  while (cache.size > MAX_CACHE_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+
+    if (oldestKey === undefined) {
+      return;
+    }
+
+    cache.delete(oldestKey);
   }
 }

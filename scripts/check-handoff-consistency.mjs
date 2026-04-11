@@ -34,6 +34,11 @@ function extractActiveTaskFile(content) {
   return match?.[1] ?? null;
 }
 
+function hasNoActiveTask(content) {
+  const section = findSectionBody(content, ["Active"]);
+  return section !== null && /^-\s*none\s*$/im.test(section);
+}
+
 function extractRecentlyCompletedIds(content) {
   const section = findSectionBody(content, ["Recently Completed"]);
 
@@ -135,9 +140,9 @@ function main() {
   const currentTask = readFile(currentTaskPath);
   const activeTaskFile = extractActiveTaskFile(currentTask);
 
-  if (activeTaskFile === null) {
+  if (activeTaskFile === null && !hasNoActiveTask(currentTask)) {
     fail("Missing `task_file` entry in ai-handoff/current-task.md");
-  } else {
+  } else if (activeTaskFile !== null) {
     const resolved = path.join(repoRoot, activeTaskFile);
     if (!fs.existsSync(resolved)) {
       fail(`Active task file does not exist: ${activeTaskFile}`);
