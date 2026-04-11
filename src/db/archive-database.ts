@@ -206,6 +206,12 @@ export async function getArchiveObjectStoreNames(): Promise<Set<string>> {
   if (objectStoreNamesPromise === null) {
     objectStoreNamesPromise = archiveDb.open().then(() => {
       const nativeDb = archiveDb.backendDB();
+      nativeDb.addEventListener("versionchange", () => {
+        objectStoreNamesPromise = null;
+      });
+      nativeDb.addEventListener("close", () => {
+        objectStoreNamesPromise = null;
+      });
       return new Set(Array.from(nativeDb.objectStoreNames));
     });
   }

@@ -1,4 +1,5 @@
 import type { SavePostInput } from "../../types/archive";
+import type { ArchiveBackupSummary } from "../../types/archive-backup";
 import type {
   AddPostTagByNameMessage,
   AddPostTagByNameResponse,
@@ -37,6 +38,8 @@ import { ARCHIVE_DB_NAME } from "../../db/constants";
 const DEFAULT_RUNTIME_TIMEOUT_MS = 30000;
 const SAVE_RUNTIME_TIMEOUT_MS = 180000;
 const SAVE_BATCH_RUNTIME_TIMEOUT_MS = 300000;
+const RESET_RUNTIME_TIMEOUT_MS = 60000;
+const RESTORE_RUNTIME_TIMEOUT_MS = 600000;
 
 export async function requestSavePost(
   post: SavePostInput,
@@ -44,26 +47,14 @@ export async function requestSavePost(
     traceId?: string;
   } = {}
 ): Promise<SavePostResponse> {
-  const autoTags = [...(post.auto_tags ?? [])];
   const response = await sendMessage({
     type: "posts/save",
-    post: {
-      ...post,
-      auto_tags: []
-    },
+    post,
     ...(options.traceId === undefined ? {} : { traceId: options.traceId })
   }, SAVE_RUNTIME_TIMEOUT_MS);
 
   if (response.type !== "posts/save-result") {
     throw new Error("Unexpected runtime response for save request.");
-  }
-
-  if (autoTags.length > 0) {
-    const postId = response.post?.x_post_id ?? post.x_post_id;
-
-    for (const tagName of autoTags) {
-      await requestAddPostTagByName(postId, tagName);
-    }
   }
 
   return response;
@@ -383,28 +374,54 @@ export async function requestRefetchClear(): Promise<RefetchClearResponse> {
   return response;
 }
 
+export async function requestResetArchive(): Promise<void> {
+  const response = await sendMessage({
+    type: "archive/reset"
+  }, RESET_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "archive/reset-result") {
+    throw new Error("Unexpected runtime response for archive reset request.");
+  }
+}
+
+export async function requestRestoreArchive(stagingPath: string): Promise<ArchiveBackupSummary> {
+  const response = await sendMessage({
+    type: "archive/restore",
+    stagingPath
+  }, RESTORE_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "archive/restore-result") {
+    throw new Error("Unexpected runtime response for archive restore request.");
+  }
+
+  return response.summary;
+}
+
 async function sendMessage(
   message: RuntimeMessage,
   timeoutMs: number
 ): Promise<RuntimeResponse> {
+  let timeoutId: number | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(`Runtime request timed out after ${timeoutMs}ms.`));
+    }, timeoutMs);
+  });
+
   const response = (await Promise.race([
     chrome.runtime.sendMessage(message),
-    createTimeoutPromise(timeoutMs)
-  ])) as RuntimeResponse;
+    timeoutPromise
+  ]).finally(() => {
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+  })) as RuntimeResponse;
 
   if (response?.type === "runtime/error") {
     throw new Error(response.message);
   }
 
   return response;
-}
-
-function createTimeoutPromise(timeoutMs: number): Promise<RuntimeResponse> {
-  return new Promise((_, reject) => {
-    window.setTimeout(() => {
-      reject(new Error(`Runtime request timed out after ${timeoutMs}ms.`));
-    }, timeoutMs);
-  });
 }
 
 async function listZeroEngagementPostIds(): Promise<string[]> {
