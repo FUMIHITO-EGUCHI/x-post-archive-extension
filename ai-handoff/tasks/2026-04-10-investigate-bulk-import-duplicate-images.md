@@ -1,7 +1,7 @@
 # Task Packet: Investigate Bulk Import Duplicate Images
 
 ## Meta
-- status: waiting
+- status: active
 - owner: Codex
 - branch: feature/archive-followups
 - priority: high
@@ -77,6 +77,8 @@ same image more than once for a post.
   times during one bulk run
 
 ## Work Log
+
+- `2026-04-11 Codex`: activated after closing `2026-04-10-investigate-bulk-import-missing-posts`; start from existing duplicate-media cleanup and importer traversal findings before further code changes.
 
 - `2026-04-10 Codex`: created this waiting task from the user report that bulk import can sometimes save duplicate images for a post.
 - `2026-04-10 Codex`: while closing the visible-save verification task, shared CDP re-save of post `1757243797334094301` persisted two media rows with URLs `.../GGL73oPasAEnwM0?format=jpg&name=orig` and `.../GGL73oPasAEnwM0.jpg?name=orig`; this may be a useful seed case even though the original report was bulk-import specific.
@@ -181,5 +183,5 @@ post before testing a fresh bulk import.
 - [x] `npm run build`
 - [x] task packet `Codex Result` or `Result` updated
 - [x] `task packet \`Verification\` updated`
-- [ ] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] `ai-handoff/current-task.md` updated
+- [x] `npm run handoff:check`

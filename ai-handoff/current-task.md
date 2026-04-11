@@ -2,34 +2,36 @@
 
 ## Active
 
-- id: `2026-04-10-investigate-bulk-import-missing-posts`
-- title: `Investigate Bulk Import Missing Posts`
+- id: `2026-04-10-investigate-bulk-import-duplicate-images`
+- title: `Investigate Bulk Import Duplicate Images`
 - owner: `Codex`
 - status: `active`
 - branch: `feature/archive-followups`
 - priority: `high`
-- task_file: `ai-handoff/tasks/2026-04-10-investigate-bulk-import-missing-posts.md`
+- task_file: `ai-handoff/tasks/2026-04-10-investigate-bulk-import-duplicate-images.md`
 
 ## Scope
-- files_in_scope: `src/features/x/likes-import-controls.ts`, `src/features/x/bookmarks-import-controls.ts`, `src/features/x/bootstrap-x-content-script.ts`, `src/features/x/find-tweet-articles.ts`, `src/features/x/extract-post-from-article.ts`, `src/features/archive/archive-service.ts`, `src/db/repositories/posts-repository.ts`
-- out_of_scope: broad importer redesign without a confirmed cause
-- out_of_scope: unrelated media-only failures when the post itself is still saved
-- out_of_scope: refetch repair work
+- files_in_scope: `src/features/x/likes-import-controls.ts`, `src/features/x/bookmarks-import-controls.ts`, `src/features/x/bootstrap-x-content-script.ts`, `src/features/archive/archive-service.ts`, `src/db/repositories/media-repository.ts`, `src/features/x/extract-post-from-article.ts`
+- out_of_scope: missing-image cases where no duplicate is saved
+- out_of_scope: video-only duplication unless it shares the same root cause
+- out_of_scope: broad importer redesign
 - out_of_scope: push
 
 ## Coordination
 - blocked_by: `none`
-- related_findings: `docs/likes-import-handover-2026-04-01.md`, `2026-04-07-bulk-import-auto-stop-on-duplicates`, log artifact `C:\Users\kurah\Downloads\x-post-archive-logs-2026-04-10T03-37-10.734Z.json`
-- needs_from_claude: `none`
-- handoff_to_codex: investigate concrete missing-post evidence, identify whether the post is lost in collection, extraction, save dedupe, queue waiting, auto-stop, or persistence, then document a narrow fix direction
+- related_findings: `2026-04-09-refetch-missing-media`, `2026-04-10-zero-engagement-refetch-and-image-investigation`, `2026-04-10-investigate-bulk-import-missing-posts`
+- needs_from_claude: `reproduce at least one concrete duplicate-image case on X and compress the findings if browser-only evidence is needed`
+- handoff_to_codex: investigate why bulk import can persist duplicate image media records for a single saved post, then implement the narrowest safe fix
 
 ## Next Action
-- next_action: ask the user to reposition shared CDP likes around `2042639420353056839` / `2042731877069656563`, then rerun likes bulk import with the incremental scroll build loaded and confirm `2042731877069656563` enters `likes.import.inspect` and/or `post.save`
+- next_action: run end-to-end browser verification for a fresh bulk-import duplicate-image scenario, then decide whether to close the temporary viewer cleanup hook or promote it to a supported maintenance path
 
-- acceptance_criteria: at least one concrete missed-post scenario is documented with reproduction notes or log/DB evidence
-- acceptance_criteria: the investigation states where the post was lost: collector, extractor, dedupe, pending wait, auto-stop, or persistence
-- acceptance_criteria: the findings distinguish shared code from likes-only or bookmarks-only logic
-- acceptance_criteria: the packet ends with a narrow fix direction or a smaller follow-up task list
+
+
+
+- acceptance_criteria: at least one concrete duplicate-image scenario is documented with log, DB, or browser evidence
+- acceptance_criteria: the investigation states whether the duplicate is introduced during extraction, duplicate-save handling, or persistence
+- acceptance_criteria: the fix prevents duplicate image persistence for the reproduced case without regressing valid multi-image saves
 
 ## Completion Checklist
 
@@ -37,11 +39,12 @@
 - [x] `npm run typecheck`
 - [x] `npm run build`
 - [x] task packet `Codex Result` or `Result` updated
-- [x] task packet `Verification` updated
+- [x] `task packet \`Verification\` updated`
 - [x] `ai-handoff/current-task.md` updated
 - [x] `npm run handoff:check`
 
 ## Recent Updates
+- `2026-04-11 Codex`: closed `2026-04-10-investigate-bulk-import-missing-posts` after user confirmed real-device save for `2042731877069656563`, then activated `2026-04-10-investigate-bulk-import-duplicate-images` as the next high-priority follow-up.
 - `2026-04-11 Codex`: investigated the user-provided likes miss around `2042639420353056839` / `2042731877069656563`; confirmed `2042731877069656563` was visible and extractable before reload but absent from DB/importer/save logs, then changed likes/bookmarks traversal from `scrollHeight` jumps to bounded incremental scrolling. Exact post-level verification is pending because reload lost the reproduced X DOM position.
 - `2026-04-11 Codex`: reproduced a bookmarks missing-post case where visible IDs `2016731193367285915` and `2014688978965037378` were absent from both DB and importer/save logs, then fixed likes/bookmarks final-scroll stop handling and verified a post-fix bookmarks run with `15 / 15` independently observed visible posts saved.
 - `2026-04-11 Codex`: closed `2026-04-10-investigate-quoted-nesting-display` and activated `2026-04-10-investigate-bulk-import-missing-posts` as the next investigation task.
@@ -59,10 +62,10 @@
 ## Waiting Tasks
 
 - `2026-04-11-investigate-quoted-container-annotation-coverage`: Investigate Quoted Container Annotation Coverage
-- `2026-04-10-investigate-bulk-import-duplicate-images`: Investigate Bulk Import Duplicate Images
 
 ## Recently Completed
 
+- `2026-04-10-investigate-bulk-import-missing-posts`: bulk import missing-post loss was fixed by bounded incremental timeline scrolling plus final stop-after-scroll collection, and the target likes post was confirmed saved in real-device verification
 - `2026-04-10-investigate-quoted-nesting-display`: quoted nesting now backfills `quoted_post_id` during duplicate save and refetch, with shared-profile runtime and viewer DOM verification
 - `2026-04-10-verify-zero-engagement-refetch-and-visible-save`: shared CDP verification confirmed zero-engagement refetch works from the viewer and visible-page save now waits long enough to persist image media for post `1757243797334094301
 - `2026-04-10-enforce-content-safe-boundaries`: ESLint boundary rules and a built content-script guard now prevent Dexie-backed DB code from re-entering content-safe modules or shipping inside content script bundles
