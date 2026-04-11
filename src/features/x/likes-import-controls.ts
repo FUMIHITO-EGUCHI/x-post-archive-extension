@@ -36,6 +36,11 @@ const SAVE_BATCH_SIZE = 12;
 const MEDIA_WAIT_PASS_LIMIT = 4;
 const MAX_WAITING_POSTS_BEFORE_SCROLL_PAUSE = 6;
 const WAITING_PAUSE_MS = 700;
+const FINAL_STOP_SCROLL_COLLECT_PASSES = 6;
+const FINAL_STOP_SCROLL_COLLECT_WAIT_MS = 500;
+const TIMELINE_SCROLL_VIEWPORT_RATIO = 0.85;
+const MIN_TIMELINE_SCROLL_STEP_PX = 550;
+const MAX_TIMELINE_SCROLL_STEP_PX = 1000;
 
 let rootElement: HTMLDivElement | null = null;
 let currentRun: LikesImportRun | null = null;
@@ -309,6 +314,7 @@ async function startLikesImport(): Promise<void> {
         collectVisiblePosts(collectedPosts, saveQueue, pendingMediaWaits, run.stats, run);
         const addedBeforeScroll = collectedPosts.size - beforeCount;
         const previousScrollHeight = getDocumentScrollHeight();
+        let scrolledThisPass = false;
 
         if (pendingMediaWaits.size >= MAX_WAITING_POSTS_BEFORE_SCROLL_PAUSE) {
           run.stats.waiting = pendingMediaWaits.size;
@@ -324,11 +330,15 @@ async function startLikesImport(): Promise<void> {
           collectVisiblePosts(collectedPosts, saveQueue, pendingMediaWaits, run.stats, run);
         } else {
           scrollLikesTimeline();
+          scrolledThisPass = true;
         }
 
         await wait(getScrollWaitMs(addedBeforeScroll, noProgressPasses));
 
         if (run.stopRequested) {
+          if (scrolledThisPass && isLikesTimelinePage()) {
+            await collectFinalScrolledPosts(collectedPosts, saveQueue, pendingMediaWaits, run.stats, run);
+          }
           break;
         }
 
@@ -607,6 +617,22 @@ function queuePendingMediaWaits(
   }
 }
 
+async function collectFinalScrolledPosts(
+  collectedPosts: Map<string, QueuedPostBundle>,
+  saveQueue: Map<string, QueuedPostBundle>,
+  pendingMediaWaits: Map<string, PendingMediaWaitState>,
+  stats: OverlayStats,
+  run: LikesImportRun
+): Promise<void> {
+  for (let pass = 0; pass < FINAL_STOP_SCROLL_COLLECT_PASSES; pass += 1) {
+    collectVisiblePosts(collectedPosts, saveQueue, pendingMediaWaits, stats, run);
+
+    if (pass < FINAL_STOP_SCROLL_COLLECT_PASSES - 1) {
+      await wait(FINAL_STOP_SCROLL_COLLECT_WAIT_MS);
+    }
+  }
+}
+
 function emitInspectTrace(
   run: LikesImportRun | undefined,
   xPostId: string | null,
@@ -781,10 +807,10 @@ async function saveQueuedPostBundle(
 }
 
 function scrollLikesTimeline(): void {
-  const nextScrollTop = Math.max(
-    document.documentElement.scrollHeight,
-    document.body?.scrollHeight ?? 0
-  );
+  const viewportStep = Math.floor(window.innerHeight * TIMELINE_SCROLL_VIEWPORT_RATIO);
+  const nextScrollTop =
+    window.scrollY +
+    Math.min(MAX_TIMELINE_SCROLL_STEP_PX, Math.max(MIN_TIMELINE_SCROLL_STEP_PX, viewportStep));
 
   window.scrollTo({
     top: nextScrollTop,

@@ -24,18 +24,7 @@
 - handoff_to_codex: investigate concrete missing-post evidence, identify whether the post is lost in collection, extraction, save dedupe, queue waiting, auto-stop, or persistence, then document a narrow fix direction
 
 ## Next Action
-- next_action: review the open log artifact and importer control flow, then reproduce or identify at least one confirmed missed `x_post_id` before selecting a fix
-
-
-
-
-
-
-
-
-
-
-
+- next_action: ask the user to reposition shared CDP likes around `2042639420353056839` / `2042731877069656563`, then rerun likes bulk import with the incremental scroll build loaded and confirm `2042731877069656563` enters `likes.import.inspect` and/or `post.save`
 
 - acceptance_criteria: at least one concrete missed-post scenario is documented with reproduction notes or log/DB evidence
 - acceptance_criteria: the investigation states where the post was lost: collector, extractor, dedupe, pending wait, auto-stop, or persistence
@@ -44,15 +33,17 @@
 
 ## Completion Checklist
 
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
 - [x] task packet `Codex Result` or `Result` updated
 - [x] task packet `Verification` updated
 - [x] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] `npm run handoff:check`
 
 ## Recent Updates
+- `2026-04-11 Codex`: investigated the user-provided likes miss around `2042639420353056839` / `2042731877069656563`; confirmed `2042731877069656563` was visible and extractable before reload but absent from DB/importer/save logs, then changed likes/bookmarks traversal from `scrollHeight` jumps to bounded incremental scrolling. Exact post-level verification is pending because reload lost the reproduced X DOM position.
+- `2026-04-11 Codex`: reproduced a bookmarks missing-post case where visible IDs `2016731193367285915` and `2014688978965037378` were absent from both DB and importer/save logs, then fixed likes/bookmarks final-scroll stop handling and verified a post-fix bookmarks run with `15 / 15` independently observed visible posts saved.
 - `2026-04-11 Codex`: closed `2026-04-10-investigate-quoted-nesting-display` and activated `2026-04-10-investigate-bulk-import-missing-posts` as the next investigation task.
 - `2026-04-11 Codex`: split quoted-container annotation coverage into waiting follow-up task `2026-04-11-investigate-quoted-container-annotation-coverage`; current quoted nesting task now remains focused on the fixed `quoted_post_id` persistence and viewer rendering path.
 - `2026-04-10 Codex`: shared CDP Chrome で viewer settings の `反応数 0 の投稿だけ再取得` を実行し、queue が `running` に入り `pendingCount = 827`, `totalCount = 827` となること、`Stop after current` -> `stopped` -> `Clear queue` が通ることを確認した
