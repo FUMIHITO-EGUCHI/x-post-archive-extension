@@ -122,9 +122,11 @@ export async function saveArchivePost(
     Date.now()
   );
   const existing = await getPost(input.x_post_id);
+  const normalizedQuotedPostId = normalizeQuotedPostId(input.quoted_post_id);
 
   if (existing !== undefined) {
     const duplicateMediaWork = await prepareDuplicateMediaWork(input);
+    const shouldUpdateQuotedPostId = existing.quoted_post_id !== normalizedQuotedPostId;
 
     logger.info("post.save.duplicate_detected", {
       context: {
@@ -145,6 +147,12 @@ export async function saveArchivePost(
       }
     }
 
+    if (shouldUpdateQuotedPostId) {
+      await updatePostFields(input.x_post_id, {
+        quoted_post_id: normalizedQuotedPostId
+      });
+    }
+
     try {
       await assignAutoTags(input.x_post_id, autoTags);
     } catch (error) {
@@ -157,7 +165,13 @@ export async function saveArchivePost(
 
     return {
       status: "duplicate",
-      post: existing
+      post:
+        shouldUpdateQuotedPostId
+          ? {
+              ...existing,
+              quoted_post_id: normalizedQuotedPostId
+            }
+          : existing
     };
   }
 
@@ -172,7 +186,7 @@ export async function saveArchivePost(
     reply_count: input.reply_count,
     repost_count: input.repost_count,
     like_count: input.like_count,
-    quoted_post_id: input.quoted_post_id ?? null,
+    quoted_post_id: normalizedQuotedPostId,
     saved_at: savedAt
   };
   const imageMedia = input.media.map((image) =>
@@ -1212,6 +1226,7 @@ export async function refetchArchivePost(
 
   const existingMedia = await listMediaByPostId(xPostId);
   const preparedMediaUpdate = prepareRefetchedMediaUpdate(xPostId, input, existingMedia);
+  const normalizedQuotedPostId = normalizeQuotedPostId(input.quoted_post_id);
   const removedMediaPaths = preparedMediaUpdate.removedRecords.flatMap((record) =>
     [record.opfs_path, record.preview_image_opfs_path].filter(
       (path): path is string => typeof path === "string" && path.trim() !== ""
@@ -1227,7 +1242,8 @@ export async function refetchArchivePost(
     posted_at: input.posted_at,
     reply_count: input.reply_count,
     repost_count: input.repost_count,
-    like_count: input.like_count
+    like_count: input.like_count,
+    quoted_post_id: normalizedQuotedPostId
   };
 
   await archiveDb.transaction("rw", archiveDb.posts, archiveDb.media, async () => {
@@ -1239,7 +1255,8 @@ export async function refetchArchivePost(
       posted_at: updatedPost.posted_at,
       reply_count: updatedPost.reply_count,
       repost_count: updatedPost.repost_count,
-      like_count: updatedPost.like_count
+      like_count: updatedPost.like_count,
+      quoted_post_id: normalizedQuotedPostId
     });
 
     if (preparedMediaUpdate.removedRecords.length > 0) {
@@ -1921,6 +1938,15 @@ function normalizeAuthorFilter(value: string | null): string | null {
 
   const cleaned = value.trim().replace(/^@+/, "").toLocaleLowerCase("en-US");
   return cleaned === "" ? null : cleaned;
+}
+
+function normalizeQuotedPostId(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized === "" ? null : normalized;
 }
 
 function prepareRefetchedMediaUpdate(

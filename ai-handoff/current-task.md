@@ -2,28 +2,29 @@
 
 ## Active
 
-- id: `2026-04-10-investigate-bulk-import-duplicate-images`
-- title: `Investigate Bulk Import Duplicate Images`
+- id: `2026-04-10-investigate-bulk-import-missing-posts`
+- title: `Investigate Bulk Import Missing Posts`
 - owner: `Codex`
 - status: `active`
 - branch: `feature/archive-followups`
 - priority: `high`
-- task_file: `ai-handoff/tasks/2026-04-10-investigate-bulk-import-duplicate-images.md`
+- task_file: `ai-handoff/tasks/2026-04-10-investigate-bulk-import-missing-posts.md`
 
 ## Scope
-- files_in_scope: `src/features/refetch/refetch-coordinator.ts`, `src/features/x/bootstrap-x-content-script.ts`, `src/features/x/extract-post-from-article.ts`, `src/features/x/likes-import-controls.ts`, `src/services/archive-service.ts`
-- out_of_scope: full refetch redesign
-- out_of_scope: non-image media fixes unless directly related
+- files_in_scope: `src/features/x/likes-import-controls.ts`, `src/features/x/bookmarks-import-controls.ts`, `src/features/x/bootstrap-x-content-script.ts`, `src/features/x/find-tweet-articles.ts`, `src/features/x/extract-post-from-article.ts`, `src/features/archive/archive-service.ts`, `src/db/repositories/posts-repository.ts`
+- out_of_scope: broad importer redesign without a confirmed cause
+- out_of_scope: unrelated media-only failures when the post itself is still saved
+- out_of_scope: refetch repair work
 - out_of_scope: push
 
 ## Coordination
 - blocked_by: `none`
-- related_findings: shared CDP Chrome port `9223`, DB name `x-post-archive-posts-v1`
+- related_findings: `docs/likes-import-handover-2026-04-01.md`, `2026-04-07-bulk-import-auto-stop-on-duplicates`, log artifact `C:\Users\kurah\Downloads\x-post-archive-logs-2026-04-10T03-37-10.734Z.json`
 - needs_from_claude: `none`
-- handoff_to_codex: add zero-engagement-only refetch task and investigate zero counts plus intermittent missing-image capture
+- handoff_to_codex: investigate concrete missing-post evidence, identify whether the post is lost in collection, extraction, save dedupe, queue waiting, auto-stop, or persistence, then document a narrow fix direction
 
 ## Next Action
-- next_action: run the remaining shared-CDP visible-save media-wait verification against a reproducible X post with image media, and document the result or remaining failure mode
+- next_action: review the open log artifact and importer control flow, then reproduce or identify at least one confirmed missed `x_post_id` before selecting a fix
 
 
 
@@ -34,9 +35,12 @@
 
 
 
-- acceptance_criteria: at least one concrete duplicate-image scenario is documented with log, DB, or browser evidence
-- acceptance_criteria: the investigation states whether the duplicate is introduced during extraction, duplicate-save handling, or persistence
-- acceptance_criteria: the fix prevents duplicate image persistence for the reproduced case without regressing valid multi-image saves
+
+
+- acceptance_criteria: at least one concrete missed-post scenario is documented with reproduction notes or log/DB evidence
+- acceptance_criteria: the investigation states where the post was lost: collector, extractor, dedupe, pending wait, auto-stop, or persistence
+- acceptance_criteria: the findings distinguish shared code from likes-only or bookmarks-only logic
+- acceptance_criteria: the packet ends with a narrow fix direction or a smaller follow-up task list
 
 ## Completion Checklist
 
@@ -44,11 +48,13 @@
 - [ ] `npm run typecheck`
 - [ ] `npm run build`
 - [x] task packet `Codex Result` or `Result` updated
-- [x] `task packet \`Verification\` updated`
-- [ ] `ai-handoff/current-task.md` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
 - [ ] `npm run handoff:check`
 
 ## Recent Updates
+- `2026-04-11 Codex`: closed `2026-04-10-investigate-quoted-nesting-display` and activated `2026-04-10-investigate-bulk-import-missing-posts` as the next investigation task.
+- `2026-04-11 Codex`: split quoted-container annotation coverage into waiting follow-up task `2026-04-11-investigate-quoted-container-annotation-coverage`; current quoted nesting task now remains focused on the fixed `quoted_post_id` persistence and viewer rendering path.
 - `2026-04-10 Codex`: shared CDP Chrome で viewer settings の `反応数 0 の投稿だけ再取得` を実行し、queue が `running` に入り `pendingCount = 827`, `totalCount = 827` となること、`Stop after current` -> `stopped` -> `Clear queue` が通ることを確認した
 - `2026-04-10 Codex`: direct runtime `enqueueZeroEngagement` は shared profile 上で引き続き `0` 件のままだったため、viewer 側で zero-count post IDs を列挙して explicit enqueue する workaround に切り替え、shared profile 上で実動確認した
 - `2026-04-10 Codex`: shared CDP verification seeded 3 archive posts for reproducible testing and confirmed that regular archive runtime requests still work, but the real `refetch.status` / `refetch.enqueue` path currently resolves to `null` and leaves `refetch_queue` empty even after a full Chrome restart.
@@ -61,11 +67,12 @@
 
 ## Waiting Tasks
 
-- `2026-04-10-investigate-quoted-nesting-display`: Investigate Quoted Nesting Display
-- `2026-04-10-investigate-bulk-import-missing-posts`: Investigate Bulk Import Missing Posts
+- `2026-04-11-investigate-quoted-container-annotation-coverage`: Investigate Quoted Container Annotation Coverage
+- `2026-04-10-investigate-bulk-import-duplicate-images`: Investigate Bulk Import Duplicate Images
 
 ## Recently Completed
 
+- `2026-04-10-investigate-quoted-nesting-display`: quoted nesting now backfills `quoted_post_id` during duplicate save and refetch, with shared-profile runtime and viewer DOM verification
 - `2026-04-10-verify-zero-engagement-refetch-and-visible-save`: shared CDP verification confirmed zero-engagement refetch works from the viewer and visible-page save now waits long enough to persist image media for post `1757243797334094301
 - `2026-04-10-enforce-content-safe-boundaries`: ESLint boundary rules and a built content-script guard now prevent Dexie-backed DB code from re-entering content-safe modules or shipping inside content script bundles
 - `2026-04-10-zero-engagement-refetch-and-image-investigation`: zero-engagement-only refetch was added, GraphQL engagement fallback now reduces false 0-count saves, and visible-page save waits briefly for media before persisting

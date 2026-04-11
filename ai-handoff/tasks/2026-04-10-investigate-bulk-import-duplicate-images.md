@@ -1,7 +1,7 @@
 # Task Packet: Investigate Bulk Import Duplicate Images
 
 ## Meta
-- status: active
+- status: waiting
 - owner: Codex
 - branch: feature/archive-followups
 - priority: high

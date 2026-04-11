@@ -1,14 +1,14 @@
 # Task Packet: Investigate Bulk Import Missing Posts
 
 ## Meta
-- status: waiting
-- owner: Claude
+- status: active
+- owner: Codex
 - branch: feature/archive-followups
 - priority: high
 - files_in_scope: src/features/x/likes-import-controls.ts, src/features/x/bookmarks-import-controls.ts, src/features/x/bootstrap-x-content-script.ts, src/features/x/find-tweet-articles.ts, src/features/x/extract-post-from-article.ts, src/features/archive/archive-service.ts, src/db/repositories/posts-repository.ts
-- blocked_by: active task `2026-04-10-verify-zero-engagement-refetch-and-visible-save`
+- blocked_by: none
 - related_findings: `docs/likes-import-handover-2026-04-01.md`, duplicate-threshold auto-stop added in `2026-04-07-bulk-import-auto-stop-on-duplicates`, visible-save media wait improved in `2026-04-10-zero-engagement-refetch-and-image-investigation`
-- needs_from_claude: reproduce a concrete missing-post case on X and compress the findings
+- needs_from_claude: none
 - handoff_to_codex: implement the selected fix after root cause and acceptance criteria are clarified
 - summary:
 
@@ -95,6 +95,7 @@ saving some posts that should have been included in the run.
 
 - `2026-04-10 Codex`: created this waiting investigation task from the user
   report that bulk import can miss posts that should have been saved.
+- `2026-04-11 Codex`: activated this task after closing `2026-04-10-investigate-quoted-nesting-display`; starting from log artifact review and importer control-flow inspection before any code changes.
 
 ## Codex Plan
 
@@ -122,9 +123,8 @@ Pending investigation.
 
 ## Suggested Next Action
 
-After the active verification task is closed, reproduce a bulk import run with
-at least one confirmed missed `x_post_id` and compare collector logs against the
-saved `posts` table.
+Review the open log artifact and importer control flow, then reproduce or
+identify at least one confirmed missed `x_post_id` before selecting a fix.
 
 ## Completion Checklist
 - [ ] implementation finished
@@ -132,5 +132,5 @@ saved `posts` table.
 - [ ] `npm run build`
 - [x] task packet `Codex Result` or `Result` updated
 - [x] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
+- [x] `ai-handoff/current-task.md` updated
 - [ ] `npm run handoff:check`
