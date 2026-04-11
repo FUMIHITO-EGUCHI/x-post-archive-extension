@@ -83,6 +83,8 @@ import { createLogger } from "../logging/logger";
 import { canonicalizeTwitterImageUrl } from "../x/twitter-image-url";
 
 const PENDING_MEDIA_RESUME_BATCH_SIZE = 24;
+const MEDIA_PERSISTENCE_IDLE_WAIT_MS = 100;
+const MEDIA_PERSISTENCE_IDLE_MAX_WAIT_MS = 30000;
 const activeMediaPersistenceIds = new Set<string>();
 let pendingResumePromise: Promise<void> | null = null;
 const logger = createLogger("archive-service");
@@ -126,7 +128,8 @@ export async function saveArchivePost(
 
   if (existing !== undefined) {
     const duplicateMediaWork = await prepareDuplicateMediaWork(input);
-    const shouldUpdateQuotedPostId = existing.quoted_post_id !== normalizedQuotedPostId;
+    const shouldUpdateQuotedPostId =
+      normalizedQuotedPostId !== null && existing.quoted_post_id !== normalizedQuotedPostId;
 
     logger.info("post.save.duplicate_detected", {
       context: {
@@ -198,20 +201,13 @@ export async function saveArchivePost(
       createPendingVideoRecord(input.x_post_id, candidate, savedAt, imageMedia.length + index)
     );
   const media = [...imageMedia, ...videoMedia];
-  let postCreated = false;
 
   try {
-    await addPost(post);
-    postCreated = true;
-    await addMediaRecords(media);
+    await archiveDb.transaction("rw", archiveDb.posts, archiveDb.media, async () => {
+      await addPost(post);
+      await addMediaRecords(media);
+    });
   } catch (error) {
-    if (postCreated) {
-      await Promise.allSettled([
-        deleteMediaRecordsByPostId(post.x_post_id),
-        deletePostRecord(post.x_post_id)
-      ]);
-    }
-
     throw new Error(`Post save failed in create transaction: ${formatError(error)}`);
   }
 
@@ -854,13 +850,14 @@ export async function bulkAssignTagApplyBatch(
   }
 
   const now = Date.now();
+  const targetTag = await getTagById(targetTagId);
   const records: PostTagRecord[] = postIds.map((postId) => ({
     post_tag_id: crypto.randomUUID(),
     x_post_id: postId,
     tag_id: targetTagId,
     normalized_name: targetNormalizedName,
     display_name: targetDisplayName,
-    system_key: null,
+    system_key: targetTag?.system_key ?? null,
     source: "manual",
     assigned_at: now
   }));
@@ -1056,6 +1053,19 @@ function enqueueMediaPersistence(media: MediaRecord[], traceId?: string): void {
   });
 }
 
+async function waitForInactiveMediaPersistence(media: MediaRecord[]): Promise<void> {
+  const mediaIds = new Set(media.map((record) => record.media_id));
+  const startedAt = Date.now();
+
+  while ([...mediaIds].some((mediaId) => activeMediaPersistenceIds.has(mediaId))) {
+    if (Date.now() - startedAt >= MEDIA_PERSISTENCE_IDLE_MAX_WAIT_MS) {
+      throw new Error("Timed out waiting for in-flight media persistence before refetch.");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, MEDIA_PERSISTENCE_IDLE_WAIT_MS));
+  }
+}
+
 export async function resumePendingMediaPersistence(): Promise<void> {
   if (pendingResumePromise !== null) {
     return pendingResumePromise;
@@ -1226,6 +1236,7 @@ export async function refetchArchivePost(
 
   const existingMedia = await listMediaByPostId(xPostId);
   const preparedMediaUpdate = prepareRefetchedMediaUpdate(xPostId, input, existingMedia);
+  await waitForInactiveMediaPersistence(preparedMediaUpdate.removedRecords);
   const normalizedQuotedPostId = normalizeQuotedPostId(input.quoted_post_id);
   const removedMediaPaths = preparedMediaUpdate.removedRecords.flatMap((record) =>
     [record.opfs_path, record.preview_image_opfs_path].filter(
@@ -1420,23 +1431,21 @@ async function listPostIdsByDateFilter(
   dateFrom: number | null,
   dateTo: number | null
 ): Promise<string[]> {
-  const posts = await listPosts();
+  const index = archiveDb.posts.where(target);
 
-  return posts
-    .filter((post) => {
-      const timestamp = target === "saved_at" ? post.saved_at : post.posted_at;
+  if (dateFrom !== null && dateTo !== null) {
+    return (await index.between(dateFrom, dateTo, true, true).primaryKeys()).map(String);
+  }
 
-      if (dateFrom !== null && timestamp < dateFrom) {
-        return false;
-      }
+  if (dateFrom !== null) {
+    return (await index.aboveOrEqual(dateFrom).primaryKeys()).map(String);
+  }
 
-      if (dateTo !== null && timestamp > dateTo) {
-        return false;
-      }
+  if (dateTo !== null) {
+    return (await index.belowOrEqual(dateTo).primaryKeys()).map(String);
+  }
 
-      return true;
-    })
-    .map((post) => post.x_post_id);
+  return listPostIds();
 }
 
 async function ensureTagAssignments(inputs: PostTagInput[]): Promise<void> {
@@ -1517,6 +1526,7 @@ async function assignPostTagsDirectly(inputs: PostTagInput[]): Promise<void> {
       if (existingPostTag !== undefined) {
         if (existingPostTag.source === "auto" && item.source === "manual") {
           await deletePostTag(existingPostTag.post_tag_id);
+          await deleteOrphanedTag(existingPostTag.tag_id);
         } else {
           return;
         }

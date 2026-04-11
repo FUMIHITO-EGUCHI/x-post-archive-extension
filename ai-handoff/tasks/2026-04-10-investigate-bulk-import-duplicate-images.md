@@ -1,7 +1,7 @@
 # Task Packet: Investigate Bulk Import Duplicate Images
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
 - branch: feature/archive-followups
 - priority: high
@@ -10,7 +10,7 @@
 - related_findings: `2026-04-09-refetch-missing-media`, `2026-04-10-zero-engagement-refetch-and-image-investigation`, `2026-04-10-investigate-bulk-import-missing-posts`
 - needs_from_claude: reproduce at least one concrete duplicate-image case on X and compress the findings if browser-only evidence is needed
 - handoff_to_codex: investigate why bulk import can persist duplicate image media records for a single saved post, then implement the narrowest safe fix
-- summary:
+- summary: duplicate image persistence was fixed by canonical Twitter image URL identity, existing duplicate cleanup was verified, the temporary cleanup hook is dev-only, and a fresh bookmarks bulk import produced duplicate-save logs with no new media rows
 
 ## Goal
 
@@ -89,6 +89,8 @@ same image more than once for a post.
 - `2026-04-10 Codex`: implemented shared canonicalization in DOM extraction, GraphQL fallback extraction, pending image record creation, and archive media identity keys; verified that the two seed-case URL variants now normalize to the same canonical URL.
 - `2026-04-10 Codex`: started implementing a temporary viewer-side cleanup script for already-saved duplicate image rows, with dry-run default and explicit apply mode.
 - `2026-04-11 Codex`: verified the temporary cleanup script on shared profile via viewer CDP for post `1757243797334094301`; dry-run reported one removable duplicate image row, apply removed it and deleted one unreferenced OPFS file, and a second dry-run returned zero duplicate groups.
+- `2026-04-11 Codex`: guarded the temporary viewer cleanup hook behind `import.meta.env.DEV` and changed the viewer entrypoint to dynamic-import archive maintenance only in dev builds. Production build output no longer contains `__xPostArchiveCleanupDuplicateImages`.
+- `2026-04-11 Codex`: ran a fresh bookmarks bulk import on shared CDP Chrome after reloading the production extension build. The run finished with `collected=4`, `saved=0`, `duplicates=4`, `failed=0`; extension DB logs for trace `c3ba5d37-440e-46bc-9ae9-d76664fcb7ff` showed all four duplicate-save paths had `newMediaCount=0` and `retryMediaCount=0`, so the run did not reintroduce duplicate image media rows.
 
 ## Codex Plan
 
@@ -128,15 +130,16 @@ all image-entry points that participate in deduplication:
   same identity during duplicate-save and refetch flows
 
 To clean up already-saved duplicate rows, the branch now also includes a
-temporary viewer-side script entry point:
+temporary dev-only viewer-side script entry point:
 
 - `cleanupDuplicateImageMedia()` in archive maintenance scans image rows by
   `x_post_id + canonical image URL`
 - dry-run is the default mode
 - `apply: true` updates the kept row to the canonical URL, deletes duplicate
   media rows, and best-effort removes unreferenced OPFS files
-- the function is temporarily exposed in the viewer tab as
-  `window.__xPostArchiveCleanupDuplicateImages`
+- in dev builds only, the function is exposed in the viewer tab as
+  `window.__xPostArchiveCleanupDuplicateImages`; production builds do not expose
+  the hook
 
 ## Changed Files
 
@@ -163,19 +166,32 @@ temporary viewer-side script entry point:
 - apply result: `removableRecordCount=1`, `updatedRecordCount=1`,
   `deletedFileCount=1`
 - post-apply dry-run result: `scannedImageCount=1`, `duplicateGroupCount=0`
+- after guarding the cleanup hook, `npm run typecheck` and `npm run build`
+  passed
+- production build output check found no
+  `__xPostArchiveCleanupDuplicateImages` or `cleanupDuplicateImageMedia` symbol
+  under `.output/chrome-mv3`
+- fresh bookmarks bulk import verification on shared CDP Chrome with production
+  extension build loaded: overlay ended at `collected=4`, `saved=0`,
+  `duplicates=4`, `failed=0`
+- extension DB log verification for trace
+  `c3ba5d37-440e-46bc-9ae9-d76664fcb7ff`: all four
+  `post.save.duplicate_detected` entries reported `newMediaCount=0` and
+  `retryMediaCount=0`
+- DB-wide canonical duplicate scan still finds historical duplicate groups from
+  earlier runs, so the final E2E recurrence check relies on the fresh import
+  trace showing no newly added duplicate-save media work
 
 ## Remaining Issues
 
-- end-to-end browser verification for a full bulk-import run is still pending
-- cleanup script is still a temporary viewer-exposed entry point and has not
-  been promoted to a supported maintenance UI
+- cleanup script is still a temporary dev-only viewer-exposed entry point and
+  has not been promoted to a supported maintenance UI
 
 ## Suggested Next Action
 
-Use the viewer console to run `window.__xPostArchiveCleanupDuplicateImages({
-  xPostIds: ["1757243797334094301"]
-})`, inspect the dry-run report, then rerun with `apply: true` on the same
-post before testing a fresh bulk import.
+Move on to `2026-04-11-fix-review-v0-17-1-followups`. Leave formal duplicate
+image maintenance UI/background coordination to a later DEV-mode or maintenance
+task.
 
 ## Completion Checklist
 - [x] implementation finished

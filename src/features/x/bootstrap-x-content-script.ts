@@ -47,7 +47,7 @@ const VISIBLE_SAVE_MEDIA_RETRY_INTERVAL_MS = 250;
 const VISIBLE_SAVE_MEDIA_MAX_ATTEMPTS = 5;
 const QUOTED_POST_CONTAINER_SELECTOR = 'div[role="link"][tabindex="0"]';
 
-const processedArticles = new WeakSet<HTMLElement>();
+const processedArticlePostIds = new WeakMap<HTMLElement, string>();
 let initialized = false;
 let scheduled = false;
 let bodyObserver: MutationObserver | null = null;
@@ -182,11 +182,19 @@ function scanTweetArticles(): void {
   const articles = findTweetArticles();
 
   for (const article of articles) {
-    if (processedArticles.has(article)) {
+    const xPostId = extractPostIdFromArticle(article);
+
+    if (xPostId === null) {
       continue;
     }
 
-    processedArticles.add(article);
+    const existingButton = article.querySelector<HTMLButtonElement>(SAVE_BUTTON_SELECTOR);
+
+    if (processedArticlePostIds.get(article) === xPostId && existingButton !== null) {
+      continue;
+    }
+
+    processedArticlePostIds.set(article, xPostId);
     void attachSaveButton(article);
   }
 }
