@@ -2,48 +2,69 @@
 
 ## Active
 
-- id: `2026-04-10-investigate-bulk-import-duplicate-images`
-- title: `Investigate Bulk Import Duplicate Images`
-- owner: `Codex`
-- status: `active`
-- branch: `feature/archive-followups`
-- priority: `high`
-- task_file: `ai-handoff/tasks/2026-04-10-investigate-bulk-import-duplicate-images.md`
+- none
 
 ## Scope
-- files_in_scope: `src/features/x/likes-import-controls.ts`, `src/features/x/bookmarks-import-controls.ts`, `src/features/x/bootstrap-x-content-script.ts`, `src/features/archive/archive-service.ts`, `src/db/repositories/media-repository.ts`, `src/features/x/extract-post-from-article.ts`
-- out_of_scope: missing-image cases where no duplicate is saved
-- out_of_scope: video-only duplication unless it shares the same root cause
+- files_in_scope: `src/features/archive/archive-service.ts`, `src/features/archive/archive-maintenance-service.ts`, `src/features/x/likes-import-controls.ts`, `src/features/x/bookmarks-import-controls.ts`, `src/features/x/bootstrap-x-content-script.ts`, `src/db/archive-database.ts`, `src/db/repositories/posts-repository.ts`, `src/db/repositories/post-tags-repository.ts`, `src/types/archive.ts`
 - out_of_scope: broad importer redesign
+- out_of_scope: broad quote extraction selector changes
+- out_of_scope: full backup or restore redesign
+- out_of_scope: changing snapshot-first refetch semantics beyond the quoted-link distinction
 - out_of_scope: push
 
 ## Coordination
 - blocked_by: `none`
-- related_findings: `2026-04-09-refetch-missing-media`, `2026-04-10-zero-engagement-refetch-and-image-investigation`, `2026-04-10-investigate-bulk-import-missing-posts`
-- needs_from_claude: `reproduce at least one concrete duplicate-image case on X and compress the findings if browser-only evidence is needed`
-- handoff_to_codex: investigate why bulk import can persist duplicate image media records for a single saved post, then implement the narrowest safe fix
+- related_findings: `2026-04-10-investigate-bulk-import-duplicate-images`, `2026-04-10-investigate-quoted-nesting-display`
+- needs_from_claude: `none`
+- handoff_to_codex: fix two review findings from the v0.17.1 follow-up review without broad redesign
 
 ## Next Action
-- next_action: run end-to-end browser verification for a fresh bulk-import duplicate-image scenario, then decide whether to close the temporary viewer cleanup hook or promote it to a supported maintenance path
+- next_action: decide whether to split Finding 22 into a dedicated maintenance coordination task or continue with background runtime routing
 
 
-
-
-- acceptance_criteria: at least one concrete duplicate-image scenario is documented with log, DB, or browser evidence
-- acceptance_criteria: the investigation states whether the duplicate is introduced during extraction, duplicate-save handling, or persistence
-- acceptance_criteria: the fix prevents duplicate image persistence for the reproduced case without regressing valid multi-image saves
+- acceptance_criteria: duplicate save with `input.quoted_post_id === null` does not clear an existing non-null `quoted_post_id`
+- acceptance_criteria: duplicate save with a non-null quoted post id still backfills a missing `quoted_post_id`
+- acceptance_criteria: `refetchArchivePost()` behavior is explicitly considered and documented
+- acceptance_criteria: duplicate image cleanup apply handles duplicate pending or failed image rows without failing because OPFS files are absent
+- acceptance_criteria: `npm run typecheck` passes
+- acceptance_criteria: `npm run build` passes
+- acceptance_criteria: task packet is updated with result and verification notes
 
 ## Completion Checklist
 
-- [x] implementation finished
+- [x] Finding 9: backup restore parsePostRecord preserves `quoted_post_id`
+- [x] Finding 1: duplicate-save quoted-link backfill prevents null overwrite
+- [x] Finding 2: maintenance cleanup OPFS partial-failure hardening
+- [x] Finding 3: saveArchivePost post+media write transaction
+- [x] Finding 4: bulkAssignTagApplyBatch carries `system_key` from TagRecord
+- [x] Finding 5: getArchiveObjectStoreNames cache invalidation
+- [x] Finding 6: listPostIdsByDateFilter uses IndexedDB index
+- [x] Finding 7: assignPostTagsDirectly calls deleteOrphanedTag
+- [x] Finding 8: listPostIdsWithZeroEngagementCounts uses Dexie API
+- [x] Finding 9: backup restore parsePostRecord preserves `quoted_post_id`
+- [x] Finding 10: extractQuotedPostFromContainer merges GraphQL image candidates
+- [x] Finding 11: import collection catches per-article extraction failures
+- [x] Finding 12: quote-tweet-only outer posts are not treated as null
+- [x] Finding 13: GraphQL caches have an entry cap
+- [x] Finding 14: processedArticles article DOM reuse risk fixed
+- [x] Finding 15: deleteBlobFromOpfs parent NotFoundError handled in maintenance cleanup
+- [x] Finding 16: buildRetainedRecordUpdate resets failed keepRecord to pending
+- [x] Finding 17: refetch waits for in-flight media persistence before deletion
+- [x] Finding 18: requestSavePost keeps auto_tags in the main save payload
+- [x] Finding 19: runtime client clears settled request timeout timer
+- [x] Finding 20: viewer ignores stale `requestPostsPage` responses
+- [x] Finding 21: video lightbox OPFS-read cancellation revokes object URL
+- [x] Finding 22: route viewer archive maintenance through background coordination
 - [x] `npm run typecheck`
 - [x] `npm run build`
 - [x] task packet `Codex Result` or `Result` updated
-- [x] `task packet \`Verification\` updated`
+- [x] task packet `Verification` updated
 - [x] `ai-handoff/current-task.md` updated
 - [x] `npm run handoff:check`
 
 ## Recent Updates
+- `2026-04-11 Codex`: completed `2026-04-10-investigate-bulk-import-duplicate-images` after fresh bookmarks bulk import verification on shared CDP Chrome showed `collected=4`, `saved=0`, `duplicates=4`, `failed=0`, with all duplicate-save log entries reporting `newMediaCount=0` and `retryMediaCount=0`; the temporary cleanup hook remains dev-only behind `import.meta.env.DEV`.
+- `2026-04-11 Codex`: added waiting review-fix task `2026-04-11-fix-review-v0-17-1-followups` for two v0.17.1 review findings: duplicate save must not clear existing `quoted_post_id`, and duplicate image cleanup must not partially fail after DB deletion when OPFS files are missing.
 - `2026-04-11 Codex`: closed `2026-04-10-investigate-bulk-import-missing-posts` after user confirmed real-device save for `2042731877069656563`, then activated `2026-04-10-investigate-bulk-import-duplicate-images` as the next high-priority follow-up.
 - `2026-04-11 Codex`: investigated the user-provided likes miss around `2042639420353056839` / `2042731877069656563`; confirmed `2042731877069656563` was visible and extractable before reload but absent from DB/importer/save logs, then changed likes/bookmarks traversal from `scrollHeight` jumps to bounded incremental scrolling. Exact post-level verification is pending because reload lost the reproduced X DOM position.
 - `2026-04-11 Codex`: reproduced a bookmarks missing-post case where visible IDs `2016731193367285915` and `2014688978965037378` were absent from both DB and importer/save logs, then fixed likes/bookmarks final-scroll stop handling and verified a post-fix bookmarks run with `15 / 15` independently observed visible posts saved.
@@ -61,10 +82,12 @@
 
 ## Waiting Tasks
 
-- `2026-04-11-investigate-quoted-container-annotation-coverage`: Investigate Quoted Container Annotation Coverage
+- `none`
 
 ## Recently Completed
 
+- `2026-04-11-fix-review-v0-17-1-followups`: implemented all v0.17.1 follow-up fixes including Finding 22 (viewer archive maintenance routed through background runtime); all 22 findings resolved
+- `2026-04-10-investigate-bulk-import-duplicate-images`: duplicate image persistence was fixed by canonical Twitter image URL identity, existing duplicate cleanup was verified, the temporary cleanup hook is dev-only, and a fresh bookmarks bulk import produced duplicate-save logs with no new media rows
 - `2026-04-10-investigate-bulk-import-missing-posts`: bulk import missing-post loss was fixed by bounded incremental timeline scrolling plus final stop-after-scroll collection, and the target likes post was confirmed saved in real-device verification
 - `2026-04-10-investigate-quoted-nesting-display`: quoted nesting now backfills `quoted_post_id` during duplicate save and refetch, with shared-profile runtime and viewer DOM verification
 - `2026-04-10-verify-zero-engagement-refetch-and-visible-save`: shared CDP verification confirmed zero-engagement refetch works from the viewer and visible-page save now waits long enough to persist image media for post `1757243797334094301

@@ -35,7 +35,12 @@ export function extractPostFromArticle(article: HTMLElement): ExtractedPostBundl
     getCachedGraphqlEngagementCounts(permalink.xPostId)
   );
 
-  if (text === "" && media.length === 0 && videoCandidates.length === 0) {
+  if (
+    text === "" &&
+    media.length === 0 &&
+    videoCandidates.length === 0 &&
+    quotedPostContainer === null
+  ) {
     return null;
   }
 
@@ -476,7 +481,10 @@ function extractQuotedPostFromContainer(container: HTMLElement): SavePostInput |
   }
 
   const text = extractPostText(container);
-  const media = extractPostImages(container);
+  const media = mergeImageCandidates(
+    extractPostImages(container),
+    getCachedGraphqlImageCandidates(permalink.xPostId)
+  );
   const videoCandidates = getCachedGraphqlVideoCandidates(permalink.xPostId);
   const engagement = mergeEngagementCounts(
     extractEngagementCounts(container),

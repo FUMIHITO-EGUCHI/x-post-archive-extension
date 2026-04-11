@@ -18,6 +18,10 @@ import {
   saveArchivePost
 } from "../archive/archive-service";
 import {
+  importArchiveBackupZip,
+  resetExtensionState
+} from "../archive/archive-maintenance-service";
+import {
   cancelRefetch,
   clearRefetchQueue,
   completeRefetchFromContentScript,
@@ -50,6 +54,8 @@ import type {
   RefetchCompleteResponse,
   RefetchEnqueueResponse,
   RefetchStatusResponse,
+  ResetArchiveResponse,
+  RestoreArchiveResponse,
   RuntimeErrorResponse,
   RuntimeMessage,
   RuntimeResponse,
@@ -509,6 +515,57 @@ export async function handleRuntimeMessage(
       return response;
     }
 
+    case "archive/reset": {
+      logger.info("archive.reset.started", { requestId });
+      await resetExtensionState();
+      logger.info("archive.reset.completed", { requestId });
+      const response: ResetArchiveResponse = {
+        type: "archive/reset-result"
+      };
+      return response;
+    }
+
+    case "archive/restore": {
+      logger.info("archive.restore.started", { requestId, context: { stagingPath: message.stagingPath } });
+      const root = await navigator.storage.getDirectory();
+      const segments = message.stagingPath.split("/").filter((s) => s.length > 0);
+      const fileName = segments.at(-1);
+
+      if (fileName === undefined) {
+        throw new Error("Invalid restore staging path.");
+      }
+
+      let directory = root;
+
+      for (const segment of segments.slice(0, -1)) {
+        directory = await directory.getDirectoryHandle(segment);
+      }
+
+      const fileHandle = await directory.getFileHandle(fileName);
+      const blob = await fileHandle.getFile();
+      const summary = await importArchiveBackupZip(blob);
+
+      // best-effort staging cleanup
+      try {
+        await directory.removeEntry(fileName);
+      } catch {
+        // staging file cleanup is non-critical
+      }
+
+      logger.info("archive.restore.completed", {
+        requestId,
+        context: {
+          postCount: summary.postCount,
+          mediaCount: summary.mediaCount
+        }
+      });
+      const response: RestoreArchiveResponse = {
+        type: "archive/restore-result",
+        summary
+      };
+      return response;
+    }
+
     case "logs/clear": {
       await clearLogRecords();
       const response: ClearLogsResponse = {
@@ -554,6 +611,8 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "refetch.cancel" ||
     candidate.type === "refetch.clear" ||
     candidate.type === "refetch.complete" ||
+    candidate.type === "archive/reset" ||
+    candidate.type === "archive/restore" ||
     candidate.type === "logs/clear" ||
     candidate.type === "debug/log"
   );

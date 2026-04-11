@@ -151,6 +151,7 @@ export function ViewerApp() {
     status: "idle"
   });
   const activeVideoUrlRef = useRef<string | null>(null);
+  const loadArchiveRequestIdRef = useRef(0);
   const shouldPersistSessionRef = useRef(false);
   const restoreScrollTopRef = useRef<number | null>(null);
   const previousRefetchStatusRef = useRef<RefetchStatusRecord>(DEFAULT_REFETCH_STATUS);
@@ -558,15 +559,19 @@ export function ViewerApp() {
       try {
         const blob = await readBlobFromOpfs(currentVideo.media.opfs_path);
         const createdUrl = URL.createObjectURL(blob);
+
+        if (cancelled) {
+          URL.revokeObjectURL(createdUrl);
+          return;
+        }
+
         activeVideoUrlRef.current = createdUrl;
 
-        if (!cancelled) {
-          setActiveVideo({
-            media: currentVideo.media,
-            objectUrl: createdUrl,
-            status: "ready"
-          });
-        }
+        setActiveVideo({
+          media: currentVideo.media,
+          objectUrl: createdUrl,
+          status: "ready"
+        });
       } catch (error) {
         logger.error("video.load.failed", {
           message: "Failed to load video from OPFS.",
@@ -796,6 +801,8 @@ export function ViewerApp() {
     dateTo: string | null;
     append: boolean;
   }): Promise<void> {
+    const requestId = (loadArchiveRequestIdRef.current += 1);
+
     if (input.append) {
       setIsLoadingMore(true);
     } else {
@@ -816,6 +823,10 @@ export function ViewerApp() {
         ...buildDateFilterRequest(input.dateFilterTarget, input.dateFrom, input.dateTo)
       });
 
+      if (requestId !== loadArchiveRequestIdRef.current) {
+        return;
+      }
+
       if (input.append) {
         setPosts((current) => [...current, ...response.posts]);
       } else {
@@ -826,6 +837,10 @@ export function ViewerApp() {
       setHasMorePosts(response.hasMore);
       setStatus("ready");
     } catch (error) {
+      if (requestId !== loadArchiveRequestIdRef.current) {
+        return;
+      }
+
       logger.error(input.append ? "posts.load_more.failed" : "posts.load.failed", {
         message: input.append ? "Failed to load more posts." : "Failed to load posts.",
         context: {
