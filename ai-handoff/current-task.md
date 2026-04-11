@@ -6,28 +6,25 @@
 - title: `Investigate Bulk Import Duplicate Images`
 - owner: `Codex`
 - status: `active`
-- branch: `master`
+- branch: `feature/archive-followups`
 - priority: `high`
 - task_file: `ai-handoff/tasks/2026-04-10-investigate-bulk-import-duplicate-images.md`
 
 ## Scope
-- files_in_scope: `src/features/refetch/refetch-coordinator.ts`, `src/features/x/bootstrap-x-content-script.ts`, `src/features/x/extract-post-from-article.ts`, `src/features/x/likes-import-controls.ts`, `src/services/archive-service.ts`
-- out_of_scope: full refetch redesign
-- out_of_scope: non-image media fixes unless directly related
+- files_in_scope: `src/features/x/likes-import-controls.ts`, `src/features/x/bookmarks-import-controls.ts`, `src/features/x/bootstrap-x-content-script.ts`, `src/features/archive/archive-service.ts`, `src/db/repositories/media-repository.ts`, `src/features/x/extract-post-from-article.ts`
+- out_of_scope: missing-image cases where no duplicate is saved
+- out_of_scope: video-only duplication unless it shares the same root cause
+- out_of_scope: broad importer redesign
 - out_of_scope: push
 
 ## Coordination
 - blocked_by: `none`
-- related_findings: shared CDP Chrome port `9223`, DB name `x-post-archive-posts-v1`
-- needs_from_claude: `none`
-- handoff_to_codex: add zero-engagement-only refetch task and investigate zero counts plus intermittent missing-image capture
+- related_findings: `2026-04-09-refetch-missing-media`, `2026-04-10-zero-engagement-refetch-and-image-investigation`, `2026-04-10-investigate-bulk-import-missing-posts`
+- needs_from_claude: `reproduce at least one concrete duplicate-image case on X and compress the findings if browser-only evidence is needed`
+- handoff_to_codex: investigate why bulk import can persist duplicate image media records for a single saved post, then implement the narrowest safe fix
 
 ## Next Action
-- next_action: run the remaining shared-CDP visible-save media-wait verification against a reproducible X post with image media, and document the result or remaining failure mode
-
-
-
-
+- next_action: run end-to-end browser verification for a fresh bulk-import duplicate-image scenario, then decide whether to close the temporary viewer cleanup hook or promote it to a supported maintenance path
 
 
 
@@ -38,15 +35,20 @@
 
 ## Completion Checklist
 
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
 - [x] task packet `Codex Result` or `Result` updated
 - [x] `task packet \`Verification\` updated`
-- [ ] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] `ai-handoff/current-task.md` updated
+- [x] `npm run handoff:check`
 
 ## Recent Updates
+- `2026-04-11 Codex`: closed `2026-04-10-investigate-bulk-import-missing-posts` after user confirmed real-device save for `2042731877069656563`, then activated `2026-04-10-investigate-bulk-import-duplicate-images` as the next high-priority follow-up.
+- `2026-04-11 Codex`: investigated the user-provided likes miss around `2042639420353056839` / `2042731877069656563`; confirmed `2042731877069656563` was visible and extractable before reload but absent from DB/importer/save logs, then changed likes/bookmarks traversal from `scrollHeight` jumps to bounded incremental scrolling. Exact post-level verification is pending because reload lost the reproduced X DOM position.
+- `2026-04-11 Codex`: reproduced a bookmarks missing-post case where visible IDs `2016731193367285915` and `2014688978965037378` were absent from both DB and importer/save logs, then fixed likes/bookmarks final-scroll stop handling and verified a post-fix bookmarks run with `15 / 15` independently observed visible posts saved.
+- `2026-04-11 Codex`: closed `2026-04-10-investigate-quoted-nesting-display` and activated `2026-04-10-investigate-bulk-import-missing-posts` as the next investigation task.
+- `2026-04-11 Codex`: split quoted-container annotation coverage into waiting follow-up task `2026-04-11-investigate-quoted-container-annotation-coverage`; current quoted nesting task now remains focused on the fixed `quoted_post_id` persistence and viewer rendering path.
 - `2026-04-10 Codex`: shared CDP Chrome で viewer settings の `反応数 0 の投稿だけ再取得` を実行し、queue が `running` に入り `pendingCount = 827`, `totalCount = 827` となること、`Stop after current` -> `stopped` -> `Clear queue` が通ることを確認した
 - `2026-04-10 Codex`: direct runtime `enqueueZeroEngagement` は shared profile 上で引き続き `0` 件のままだったため、viewer 側で zero-count post IDs を列挙して explicit enqueue する workaround に切り替え、shared profile 上で実動確認した
 - `2026-04-10 Codex`: shared CDP verification seeded 3 archive posts for reproducible testing and confirmed that regular archive runtime requests still work, but the real `refetch.status` / `refetch.enqueue` path currently resolves to `null` and leaves `refetch_queue` empty even after a full Chrome restart.
@@ -59,11 +61,12 @@
 
 ## Waiting Tasks
 
-- `2026-04-10-investigate-quoted-nesting-display`: Investigate Quoted Nesting Display
-- `2026-04-10-investigate-bulk-import-missing-posts`: Investigate Bulk Import Missing Posts
+- `2026-04-11-investigate-quoted-container-annotation-coverage`: Investigate Quoted Container Annotation Coverage
 
 ## Recently Completed
 
+- `2026-04-10-investigate-bulk-import-missing-posts`: bulk import missing-post loss was fixed by bounded incremental timeline scrolling plus final stop-after-scroll collection, and the target likes post was confirmed saved in real-device verification
+- `2026-04-10-investigate-quoted-nesting-display`: quoted nesting now backfills `quoted_post_id` during duplicate save and refetch, with shared-profile runtime and viewer DOM verification
 - `2026-04-10-verify-zero-engagement-refetch-and-visible-save`: shared CDP verification confirmed zero-engagement refetch works from the viewer and visible-page save now waits long enough to persist image media for post `1757243797334094301
 - `2026-04-10-enforce-content-safe-boundaries`: ESLint boundary rules and a built content-script guard now prevent Dexie-backed DB code from re-entering content-safe modules or shipping inside content script bundles
 - `2026-04-10-zero-engagement-refetch-and-image-investigation`: zero-engagement-only refetch was added, GraphQL engagement fallback now reduces false 0-count saves, and visible-page save waits briefly for media before persisting

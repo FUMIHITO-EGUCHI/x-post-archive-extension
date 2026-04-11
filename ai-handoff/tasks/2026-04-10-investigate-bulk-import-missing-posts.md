@@ -1,16 +1,16 @@
 # Task Packet: Investigate Bulk Import Missing Posts
 
 ## Meta
-- status: waiting
-- owner: Claude
-- branch: master
+- status: done
+- owner: Codex
+- branch: feature/archive-followups
 - priority: high
 - files_in_scope: src/features/x/likes-import-controls.ts, src/features/x/bookmarks-import-controls.ts, src/features/x/bootstrap-x-content-script.ts, src/features/x/find-tweet-articles.ts, src/features/x/extract-post-from-article.ts, src/features/archive/archive-service.ts, src/db/repositories/posts-repository.ts
-- blocked_by: active task `2026-04-10-verify-zero-engagement-refetch-and-visible-save`
+- blocked_by: none
 - related_findings: `docs/likes-import-handover-2026-04-01.md`, duplicate-threshold auto-stop added in `2026-04-07-bulk-import-auto-stop-on-duplicates`, visible-save media wait improved in `2026-04-10-zero-engagement-refetch-and-image-investigation`
-- needs_from_claude: reproduce a concrete missing-post case on X and compress the findings
+- needs_from_claude: none
 - handoff_to_codex: implement the selected fix after root cause and acceptance criteria are clarified
-- summary:
+- summary: bulk import missing-post loss was fixed by bounded incremental timeline scrolling plus final stop-after-scroll collection, and the target likes post was confirmed saved in real-device verification
 
 ## Goal
 
@@ -95,6 +95,13 @@ saving some posts that should have been included in the run.
 
 - `2026-04-10 Codex`: created this waiting investigation task from the user
   report that bulk import can miss posts that should have been saved.
+- `2026-04-11 Codex`: activated this task after closing `2026-04-10-investigate-quoted-nesting-display`; starting from log artifact review and importer control-flow inspection before any code changes.
+- `2026-04-11 Codex`: resumed with the user account CDP profile on port `9223`; confirmed bookmarks import saved all 15 independently observed visible posts in that run, then patched the shared likes/bookmarks collector loop to do one final visible-post collection when duplicate-threshold or another stop is observed immediately after an importer-driven scroll.
+- `2026-04-11 Codex`: after reloading the built extension, reproduced a concrete bookmarks miss: stopped run showed visible post IDs `2016731193367285915` and `2014688978965037378` still unsaved and absent from `post.save` / `bookmarks.import.inspect`, so the loss point is collector coverage after stop; added a short render-grace collect after the immediate final collect.
+- `2026-04-11 Codex`: ran additional likes verification with `bulkImportDuplicateBatchThreshold` temporarily raised from `10` to `20` and restored afterward; likes run completed with `7 / 7` independently observed posts saved, but X did not render more than 7 articles even after a 15s reload wait and repeated bottom scrolls.
+- `2026-04-11 Codex`: investigated the user-provided likes case where `2042731877069656563` below `2042639420353056839` was not imported; before reload, the post was visible and extractable in the likes DOM but had no `likes.import.inspect` or `post.save` logs, confirming a collector traversal miss; after extension reload, X lost the reproduced DOM state and only rendered 1-7 earlier articles, so exact post-level verification needs the page repositioned again.
+- `2026-04-11 Codex`: updated likes/bookmarks traversal to use bounded incremental viewport scrolling instead of jumping to `scrollHeight`, and expanded the final stop-after-scroll collection into repeated short collect passes.
+- `2026-04-11 Codex`: user performed the remaining real-device check around `2042639420353056839` / `2042731877069656563` and confirmed the previously missed post is now saved.
 
 ## Codex Plan
 
@@ -106,31 +113,139 @@ saving some posts that should have been included in the run.
 
 ## Codex Result
 
-Pending investigation.
+Root cause narrowed to collector coverage and timeline traversal, not
+persistence.
+
+Findings:
+
+- the log artifact
+  `C:\Users\kurah\Downloads\x-post-archive-logs-2026-04-10T03-37-10.734Z.json`
+  contains archive/runtime save logs, but not importer collector traces
+- the sample `x_post_id` `1892093150115790966` is a control case, not a miss:
+  it has `post.save.succeeded`, `post.save.persisted`, tag assignment, and
+  `media.persist.succeeded` logs
+- shared CDP bookmarks import first reproduced no miss: independently observed
+  visible posts were all saved
+- after reloading the built extension, a later bookmarks duplicate-threshold
+  run reproduced the failure:
+  - stopped run showed visible post IDs `2016731193367285915` and
+    `2014688978965037378`
+  - both were absent from the `posts` table
+  - both had no `post.save` logs
+  - both had no `bookmarks.import.inspect` logs
+
+That means the posts were lost before save/persistence: they were visible in
+the X page after the importer stopped, but never reached the importer
+collector/queue.
+
+The later likes case with `2042731877069656563` confirmed the same class of
+loss:
+
+- `2042639420353056839` was already saved
+- `2042731877069656563` was visible on the likes page before reload and had a
+  normal `/status/2042731877069656563` permalink extractable from the article
+- `2042731877069656563` was absent from the `posts` table
+- logs had repeated `post.has.completed` with `exists: false`, but no
+  `likes.import.inspect` or `post.save` for that ID
+
+Additional cause found during this reproduction: the importer scrolled directly
+to `document.scrollHeight`. On X's virtualized timeline this can jump past the
+currently rendered list into bottom spacer/blank area, leaving the same earlier
+articles in the DOM and never exposing the next posts below them.
+
+Implemented fix:
+
+- in both likes and bookmarks import loops, track whether the current pass
+  performed an importer-driven scroll
+- if `run.stopRequested` is observed immediately after that scroll wait, do
+  repeated short final `collectVisiblePosts()` passes before breaking, because
+  X can render the bottom of the current viewport slightly after the stop
+  condition is detected
+- change likes and bookmarks timeline scrolling from a direct
+  `scrollHeight` jump to bounded incremental viewport scrolling, so the importer
+  walks the virtualized timeline instead of skipping past the next rendered
+  articles
+
+This keeps the duplicate-threshold heuristic intact while preventing the
+importer from dropping posts already exposed by its own final scroll or
+skipping posts by jumping past X's render window.
 
 ## Changed Files
 
-- `ai-handoff/tasks/2026-04-10-investigate-bulk-import-missing-posts.md`
+- `src/features/x/bookmarks-import-controls.ts`
+- `src/features/x/likes-import-controls.ts`
 
 ## Verification
 
-- pending
+- code inspection of:
+  - `src/features/x/likes-import-controls.ts`
+  - `src/features/x/bookmarks-import-controls.ts`
+  - `src/features/x/extract-post-from-article.ts`
+  - `src/features/x/find-tweet-articles.ts`
+- log artifact review:
+  - confirmed `1892093150115790966` was saved and persisted, so it is a control
+    case
+- shared CDP Chrome, port `9223`, user account profile:
+  - passive scan found bookmarks and likes contain interleaved saved/unsaved
+    posts, so duplicate-threshold can encounter saved regions before all
+    unsaved posts are exhausted
+  - pre-fix bookmarks check: `15 / 15` independently observed visible posts
+    were saved
+  - reproduced concrete miss after extension reload:
+    - visible unsaved post IDs after stopped bookmarks run:
+      `2016731193367285915`, `2014688978965037378`
+    - DB: both absent from `posts`
+    - logs: no `post.save` or `bookmarks.import.inspect` entries for those IDs
+  - after final-scroll render-grace fix and extension reload:
+    - bookmarks run stopped by duplicate threshold
+    - independently observed visible posts: `15`
+    - DB saved count for those visible posts: `15`
+    - missing count: `0`
+  - additional likes verification:
+    - temporarily changed `bulkImportDuplicateBatchThreshold` from `10` to
+      `20`, then restored it to `10`
+    - run completed normally with `collected = 7`, `saved = 2`,
+      `duplicates = 5`, `failed = 0`
+    - independently observed visible posts: `7`
+    - DB saved count for those visible posts: `7`
+    - missing count: `0`
+    - deeper long-run likes verification could not be completed because the X
+      page stayed at `articleCount = 7` / `scrollHeight = 7055` after a 15s
+      reload wait and repeated bottom scrolls
+  - user-provided likes case:
+    - before extension reload, `2042731877069656563` was visible and
+      extractable below `2042639420353056839`
+    - DB: `2042639420353056839` saved, `2042731877069656563` absent
+    - logs: no `likes.import.inspect` or `post.save` for
+      `2042731877069656563`
+    - after reloading the extension/page to test the fix, X no longer restored
+      the same DOM state and only rendered 1-7 earlier articles, so Codex could
+      not complete exact verification in that session
+    - user later repositioned/re-ran the real-device check and confirmed
+      `2042731877069656563` is saved
+- `npm run typecheck`
+- `npm run build`
+- `npm run lint`
+- `npm run check:content-script-bundle`
 
 ## Remaining Issues
 
-- root cause not yet investigated
+- duplicate-threshold remains a heuristic: it can still intentionally stop
+  before scanning the entire bookmarks or likes history. This fix improves
+  traversal and final visible collection, but it is not an exhaustive
+  full-history crawl.
+- none for this task; duplicate-threshold remains a non-exhaustive scan
+  heuristic by design.
 
 ## Suggested Next Action
 
-After the active verification task is closed, reproduce a bulk import run with
-at least one confirmed missed `x_post_id` and compare collector logs against the
-saved `posts` table.
+Move on to the next waiting follow-up task.
 
 ## Completion Checklist
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
 - [x] task packet `Codex Result` or `Result` updated
 - [x] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] `ai-handoff/current-task.md` updated
+- [x] `npm run handoff:check`
