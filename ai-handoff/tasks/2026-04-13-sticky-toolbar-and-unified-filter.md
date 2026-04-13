@@ -1,7 +1,7 @@
 # Task Packet — スティッキーツールバー & 統合フィルターモーダル
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
 - branch: feature/sticky-toolbar-unified-filter
 - priority: normal
@@ -191,21 +191,21 @@ type UnifiedFilterModalProps = {
 
 ## Acceptance Criteria
 
-- [ ] スクロール時にツールバーが画面上部に固定されたままになる
-- [ ] 「絞り込み」ボタン 1 つで統合フィルターモーダルが開く
-- [ ] モーダル内のユーザー / タグ / 日付タブが切り替えられる
-- [ ] アクティブなフィルターが存在するタブにバッジが表示される
-- [ ] フィルター適用中、ツールバー中央にチップが表示される
-- [ ] フィルターが 3 個全て適用中は `+3 件の絞り込み中` にまとまる
-- [ ] `+N` ボタンクリックで統合モーダルが開き、最初のアクティブタブが選択されている
-- [ ] 各チップの × ボタンで個別にフィルターが解除される
-- [ ] 件数表示がツールバー右端に表示される（`表示中 N件 / 全 M件` 形式）
-- [ ] 一括タグ付けボタンがツールバーに収まっている
-- [ ] 設定ボタン（歯車）がツールバー右端に表示される
-- [ ] ダークモードで視覚的に崩れない
-- [ ] Escape キーでモーダルが閉じる
-- [ ] `npm run typecheck` pass
-- [ ] `npm run build` pass
+- [x] スクロール時にツールバーが画面上部に固定されたままになる
+- [x] 「絞り込み」ボタン 1 つで統合フィルターモーダルが開く
+- [x] モーダル内のユーザー / タグ / 日付タブが切り替えられる
+- [x] アクティブなフィルターが存在するタブにバッジが表示される
+- [x] フィルター適用中、ツールバー中央にチップが表示される
+- [x] フィルターが 3 個全て適用中は `+3 件の絞り込み中` にまとまる
+- [x] `+N` ボタンクリックで統合モーダルが開き、最初のアクティブタブが選択されている
+- [x] 各チップの × ボタンで個別にフィルターが解除される
+- [x] 件数表示がツールバー右端に表示される（`表示中 N件 / 全 M件` 形式）
+- [x] 一括タグ付けボタンがツールバーに収まっている
+- [x] 設定ボタン（歯車）がツールバー右端に表示される
+- [x] ダークモードで視覚的に崩れない
+- [x] Escape キーでモーダルが閉じる
+- [x] `npm run typecheck` pass
+- [x] `npm run build` pass
 
 ## Open Questions
 
@@ -228,35 +228,67 @@ type UnifiedFilterModalProps = {
 
 ## Codex Result
 
-（未記入）
+`StickyToolbar` と `UnifiedFilterModal` を追加し、viewer の絞り込み UI をスティッキーツールバー + 単一タブ式モーダルへ統合した。
+
+- 既存のユーザー / タグ / 日付の個別モーダル state と JSX を統合モーダルへ移動
+- ツールバー内に絞り込みボタン、一括タグ付け、フィルターチップ、件数、ソート、設定ボタンを配置
+- フィルター 3 種が同時に有効な場合は `+3 件の絞り込み中` に集約し、クリックで最初のアクティブタブを開く
+- 各チップの × で個別解除できるようにした
+- `+N 件の絞り込み中` 表示の左に全絞り込み条件を一括解除する × ボタンを追加した
+- 有効条件数に関係なく、ツールバー中央の絞り込みチップ表示は常に `× +N 件の絞り込み中` の1枚に統一した
+- 全解除用 × と `+N 件の絞り込み中` を同じピル状コンテナ内に収めた（button nested in button は避け、 sibling buttons として実装）
+- ダークモードを含む toolbar/modal/chip/tab の CSS を追加
 
 ## Changed Files
 
-（未記入）
+- `src/features/viewer/components/sticky-toolbar.tsx`
+- `src/features/viewer/components/unified-filter-modal.tsx`
+- `src/features/viewer/components/viewer-app.tsx`
+- `src/entrypoints/viewer/style.css`
 
 ## Verification
 
-（未記入）
+- `npm run typecheck`
+- `npm run build`
+- Shared CDP Chrome port 9223:
+  - unpacked extension reload
+  - viewer toolbar sticky position check (`position: sticky`, `top: 0px`, scroll after top retention)
+  - filter modal open check and user/tag/date tab switching
+  - active tab badges for user/tag/date filters
+  - tag chip display and individual clear button
+  - 3 active filters collapsed to `+3 件の絞り込み中`
+  - `+N` click opens unified modal with first active tab selected
+  - `+3 件の絞り込み中` の左に全解除用 × が表示され、クリック後に `絞り込みなし` へ戻る
+  - active filter count 2 still renders as a single collapsed chip and no individual filter chips are shown
+  - reset × and `+N 件の絞り込み中` are rendered inside the same collapsed filter chip container
+  - count display and bulk tag button placement
+  - dark mode visual state check via `data-theme="dark"`
+- `npm run typecheck` after follow-up clear-all change
+- `npm run build` after follow-up clear-all change
+- `npm run typecheck` after always-collapsed chip change
+- `npm run build` after always-collapsed chip change
+- `npm run typecheck` after nested-reset visual layout change
+- `npm run build` after nested-reset visual layout change
 
 ## Remaining Issues
 
-（未記入）
+None.
 
 ## Suggested Next Action
 
-（未記入）
+Task complete. Commit when ready.
 
 ## Completion Checklist
 
-- [ ] StickyToolbar コンポーネント作成
-- [ ] UnifiedFilterModal コンポーネント作成（3タブ統合）
-- [ ] viewer-app.tsx: フィルターモーダル State 統合
-- [ ] viewer-app.tsx: viewer-hero / viewer-list-header を StickyToolbar に置き換え
-- [ ] style.css: sticky バー・チップ・タブ CSS 追加
-- [ ] ダークモード確認
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Codex Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] StickyToolbar コンポーネント作成
+- [x] UnifiedFilterModal コンポーネント作成（3タブ統合）
+- [x] viewer-app.tsx: フィルターモーダル State 統合
+- [x] viewer-app.tsx: viewer-hero / viewer-list-header を StickyToolbar に置き換え
+- [x] style.css: sticky バー・チップ・タブ CSS 追加
+- [x] ダークモード確認
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Codex Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
+- [x] `npm run handoff:check`
