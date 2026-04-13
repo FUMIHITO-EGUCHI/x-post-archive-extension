@@ -1538,11 +1538,76 @@ export function ViewerApp() {
               </div>
               <div className="viewer-list-controls">
                 <div
+                  className="viewer-filter-controls"
+                  aria-label={language === "ja" ? "投稿の絞り込み" : "Filter posts"}
+                >
+                  {userSummaries.length > 0 && (
+                    <button
+                      className={
+                        activeAuthorFilter === null
+                          ? "viewer-secondary-button"
+                          : "viewer-secondary-button viewer-secondary-button-active"
+                      }
+                      type="button"
+                      aria-pressed={activeAuthorFilter !== null}
+                      onClick={() => {
+                        setIsAuthorFilterModalOpen(true);
+                      }}
+                    >
+                      {language === "ja" ? "ユーザー絞り込み" : "User filter"}
+                    </button>
+                  )}
+                  {availableTags.length > 0 && (
+                    <button
+                      className={
+                        activeTagFilter === null
+                          ? "viewer-secondary-button"
+                          : "viewer-secondary-button viewer-secondary-button-active"
+                      }
+                      type="button"
+                      aria-pressed={activeTagFilter !== null}
+                      onClick={() => {
+                        setIsTagFilterModalOpen(true);
+                      }}
+                    >
+                      {language === "ja" ? "タグ絞り込み" : "Tag filter"}
+                    </button>
+                  )}
+                  <button
+                    className={
+                      hasActiveDateFilter
+                        ? "viewer-secondary-button viewer-secondary-button-active"
+                        : "viewer-secondary-button"
+                    }
+                    type="button"
+                    aria-pressed={hasActiveDateFilter}
+                    onClick={() => {
+                      openDateFilterModal();
+                    }}
+                  >
+                    {language === "ja" ? "日付絞り込み" : "Date filter"}
+                  </button>
+                  <button
+                    className="viewer-secondary-button"
+                    type="button"
+                    onClick={() => {
+                      setIsBulkTagModalOpen(true);
+                    }}
+                    disabled={status !== "ready" || archiveTotalCount === 0}
+                  >
+                    {language === "ja"
+                      ? `一括タグ付け (${formatCount(archiveTotalCount, language)}件)`
+                      : `Bulk tag (${formatCount(archiveTotalCount, language)})`}
+                  </button>
+                </div>
+                <div
                   className="viewer-sort-controls"
                   aria-label={language === "ja" ? "投稿の並び替え" : "Sort posts"}
                 >
-                  <label className="viewer-sort-label">
-                    <span>{language === "ja" ? "並び順" : "Sort"}</span>
+                  <label className="viewer-sort-label viewer-sort-label-inline">
+                    <span className="viewer-visually-hidden">
+                      {language === "ja" ? "並び順" : "Sort"}
+                    </span>
                     <select
                       className="viewer-sort-select"
                       value={sortField}
@@ -1594,54 +1659,6 @@ export function ViewerApp() {
                           : "Asc"}
                     </button>
                   )}
-                </div>
-                <div
-                  className="viewer-filter-controls"
-                  aria-label={language === "ja" ? "投稿の絞り込み" : "Filter posts"}
-                >
-                  {userSummaries.length > 0 && (
-                    <button
-                      className="viewer-secondary-button"
-                      type="button"
-                      onClick={() => {
-                        setIsAuthorFilterModalOpen(true);
-                      }}
-                    >
-                      {language === "ja" ? "ユーザー絞り込み" : "User filter"}
-                    </button>
-                  )}
-                  {availableTags.length > 0 && (
-                    <button
-                      className="viewer-secondary-button"
-                      type="button"
-                      onClick={() => {
-                        setIsTagFilterModalOpen(true);
-                      }}
-                    >
-                      {language === "ja" ? "タグ絞り込み" : "Tag filter"}
-                    </button>
-                  )}
-                  <button
-                    className="viewer-secondary-button"
-                    type="button"
-                    onClick={() => {
-                      openDateFilterModal();
-                    }}
-                  >
-                    {language === "ja" ? "日付絞り込み" : "Date filter"}
-                  </button>
-                  <button
-                    className="viewer-secondary-button"
-                    type="button"
-                    onClick={() => {
-                      setIsBulkTagModalOpen(true);
-                    }}
-                    disabled={status !== "ready" || archiveTotalCount === 0}
-                  >
-                    {language === "ja"
-                      ? `一括タグ付け (${formatCount(archiveTotalCount, language)}件)`
-                      : `Bulk tag (${formatCount(archiveTotalCount, language)})`}
-                  </button>
                 </div>
               </div>
             </div>
@@ -1923,7 +1940,7 @@ export function ViewerApp() {
                             {post.tags.map((tag) => (
                               <span
                                 className={
-                                  tag.source === "manual"
+                                  tag.system_key === null
                                     ? "tag-chip tag-chip-manual"
                                     : "tag-chip"
                                 }
@@ -1933,11 +1950,11 @@ export function ViewerApp() {
                                   className="tag-chip-button"
                                   type="button"
                                   onClick={() => {
-                                  void handleToggleTagFilter(tag.normalized_name);
-                                }}
-                              >
-                                {getTagDisplayName(tag)}
-                              </button>
+                                    void handleToggleTagFilter(tag.normalized_name);
+                                  }}
+                                >
+                                  {getTagDisplayName(tag)}
+                                </button>
                               </span>
                             ))}
                           </div>
@@ -1991,7 +2008,7 @@ export function ViewerApp() {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      {post.post_url}
+                      {language === "ja" ? "元投稿を開く" : "Open original post"}
                     </a>
                   </article>
                 ))}
@@ -2154,7 +2171,7 @@ export function ViewerApp() {
                 </p>
               </div>
               <button
-                className="viewer-secondary-button"
+                className="viewer-secondary-button viewer-modal-close-button"
                 type="button"
                 onClick={() => {
                   closeTagFilterModal();
@@ -2309,7 +2326,7 @@ export function ViewerApp() {
                 </p>
               </div>
               <button
-                className="viewer-secondary-button"
+                className="viewer-secondary-button viewer-modal-close-button"
                 type="button"
                 onClick={() => {
                   closeAuthorFilterModal();
@@ -2442,7 +2459,7 @@ export function ViewerApp() {
                 </p>
               </div>
               <button
-                className="viewer-secondary-button"
+                className="viewer-secondary-button viewer-modal-close-button"
                 type="button"
                 onClick={() => {
                   closeDateFilterModal();
@@ -2849,8 +2866,14 @@ function MediaCard({
 
   if (media.storage_status === "pending" || imageObjectUrl === null) {
     return (
-      <div className="post-media-status" ref={setContainerRef}>
-        {language === "ja" ? "画像を準備中です。" : "Image is still being prepared."}
+      <div
+        className="post-media-status post-media-skeleton"
+        ref={setContainerRef}
+        aria-label={language === "ja" ? "画像を準備中" : "Image is being prepared"}
+      >
+        <span className="viewer-visually-hidden">
+          {language === "ja" ? "画像を準備中です。" : "Image is still being prepared."}
+        </span>
       </div>
     );
   }
@@ -3185,18 +3208,18 @@ function formatArchiveCountLabel(
   language: ArchiveLanguage
 ): string {
   if (totalCount === 0) {
-    return language === "ja" ? "0件" : "0 posts";
+    return language === "ja" ? "表示中 0件 / 全 0件" : "Showing 0 / 0 posts";
   }
 
   if (hasMorePosts) {
     return language === "ja"
-      ? `${formatCount(loadedCount, language)} / ${formatCount(totalCount, language)}件`
-      : `${formatCount(loadedCount, language)} / ${formatCount(totalCount, language)} posts`;
+      ? `表示中 ${formatCount(loadedCount, language)}件 / 全 ${formatCount(totalCount, language)}件`
+      : `Showing ${formatCount(loadedCount, language)} / ${formatCount(totalCount, language)} posts`;
   }
 
   return language === "ja"
-    ? `${formatCount(totalCount, language)}件`
-    : `${formatCount(totalCount, language)} posts`;
+    ? `表示中 ${formatCount(totalCount, language)}件 / 全 ${formatCount(totalCount, language)}件`
+    : `Showing ${formatCount(totalCount, language)} / ${formatCount(totalCount, language)} posts`;
 }
 
 function findPostCardElement(xPostId: string): HTMLElement | null {

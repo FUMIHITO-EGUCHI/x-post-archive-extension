@@ -244,7 +244,7 @@ export function TagPickerOverlay({
             </p>
           </div>
           <button
-            className="viewer-secondary-button"
+            className="viewer-secondary-button viewer-modal-close-button"
             type="button"
             onClick={() => {
               onClose();
