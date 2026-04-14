@@ -13,7 +13,7 @@
 ## Scope
 
 - Start with `MAX_SESSION_RESTORE_LIMIT = 200` cap for session restore `initialLimit`
-- Continue safe decomposition steps; `PostCard`, `SettingsScreen`, media lightbox, refetch controls, viewer preferences, and tag operations extraction are now done
+- Continue safe decomposition steps; `PostCard`, `SettingsScreen`, media lightbox, refetch controls, viewer preferences, tag operations, and archive loader extraction are now done
 - Keep data loading, filter/sort behavior, and viewer UI behavior unchanged
 
 ## Coordination
@@ -25,7 +25,7 @@
 
 ## Next Action
 
-- next_action: `Continue decomposition with the next safe slice, likely archive loader extraction.`
+- next_action: `Continue decomposition with the next safe slice, likely sort/filter extraction.`
 
 ## Acceptance Criteria
 
@@ -57,6 +57,7 @@
 - `2026-04-15 Codex`: extracted viewer preferences, preference persistence, theme side effect, and storage estimate state into `use-viewer-preferences.ts`; typecheck/build passed; task remains active for further decomposition
 - `2026-04-15 Codex`: committed `315c8a7 Extract viewer preferences`
 - `2026-04-15 Codex`: extracted per-post tag picker/action state and tag add/remove handlers into `use-tag-operations.ts`; typecheck/build passed; task remains active for further decomposition
+- `2026-04-15 Codex`: extracted archive post list/loading state and `loadArchivePage` into `use-archive-loader.ts`; typecheck/build passed; task remains active for further decomposition
 
 ## Waiting Tasks
 
