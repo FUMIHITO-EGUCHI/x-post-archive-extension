@@ -1323,8 +1323,27 @@ async function listRandomPostsPage(
     return [];
   }
 
-  shuffleIdsInPlace(orderedIds, randomSeed);
-  return getPostsByIds(orderedIds.slice(offset, offset + limit));
+  const quotedPostIds = await getQuotedPostIdSet();
+  const candidateIds = orderedIds.filter((postId) => !quotedPostIds.has(postId));
+
+  if (candidateIds.length === 0) {
+    return [];
+  }
+
+  shuffleIdsInPlace(candidateIds, randomSeed);
+  return getPostsByIds(candidateIds.slice(offset, offset + limit));
+}
+
+async function getQuotedPostIdSet(): Promise<Set<string>> {
+  const quotingPosts = await archiveDb.posts.where("quoted_post_id").above("").toArray();
+
+  return new Set(
+    quotingPosts.flatMap((post) =>
+      typeof post.quoted_post_id === "string" && post.quoted_post_id.trim() !== ""
+        ? [post.quoted_post_id]
+        : []
+    )
+  );
 }
 
 async function resolveFilteredPostIds(input: ListPostsPageInput): Promise<Set<string> | null> {
