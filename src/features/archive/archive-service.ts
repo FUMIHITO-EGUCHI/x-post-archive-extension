@@ -1237,7 +1237,8 @@ export async function refetchArchivePost(
   const existingMedia = await listMediaByPostId(xPostId);
   const preparedMediaUpdate = prepareRefetchedMediaUpdate(xPostId, input, existingMedia);
   await waitForInactiveMediaPersistence(preparedMediaUpdate.removedRecords);
-  const normalizedQuotedPostId = normalizeQuotedPostId(input.quoted_post_id);
+  const normalizedQuotedPostId =
+    normalizeQuotedPostId(input.quoted_post_id) ?? existingPost.quoted_post_id ?? null;
   const removedMediaPaths = preparedMediaUpdate.removedRecords.flatMap((record) =>
     [record.opfs_path, record.preview_image_opfs_path].filter(
       (path): path is string => typeof path === "string" && path.trim() !== ""
