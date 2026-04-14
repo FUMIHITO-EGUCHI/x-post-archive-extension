@@ -3,7 +3,7 @@
 ## Meta
 - status: waiting
 - owner: Codex
-- branch: feature/remove-dead-code-archive
+- branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: normal
 - files_in_scope: src/features/archive/archive-service.ts, src/features/archive/archive-maintenance-service.ts
 - blocked_by: none

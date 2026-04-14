@@ -3,7 +3,7 @@
 ## Meta
 - status: waiting
 - owner: Codex
-- branch: feature/fix-path-filter-and-refetch-typing
+- branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: normal
 - files_in_scope: src/features/runtime/handle-runtime-message.ts, src/features/runtime/client.ts, src/features/x/bootstrap-x-content-script.ts
 - blocked_by: none

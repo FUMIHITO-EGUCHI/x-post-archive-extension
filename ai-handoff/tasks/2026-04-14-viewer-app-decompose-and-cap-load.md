@@ -3,7 +3,7 @@
 ## Meta
 - status: waiting
 - owner: Codex
-- branch: feature/viewer-app-decompose
+- branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: low
 - files_in_scope: src/features/viewer/components/viewer-app.tsx, src/features/viewer/components/
 - blocked_by: none

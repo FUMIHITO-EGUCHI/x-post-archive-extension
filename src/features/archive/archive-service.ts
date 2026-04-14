@@ -809,18 +809,14 @@ export async function bulkAssignTagPreview(
   const resolvedPostIds = matchingPostIds === null ? await listPostIds() : [...matchingPostIds];
   const totalMatchCount = resolvedPostIds.length;
 
-  let tag = await getTagByNormalizedName(normalizedName);
-
-  if (tag === undefined) {
-    tag = {
+  const tag =
+    (await getTagByNormalizedName(normalizedName)) ?? {
       tag_id: crypto.randomUUID(),
       normalized_name: normalizedName,
       display_name: cleanedDisplayName,
       system_key: null,
       created_at: Date.now()
     };
-    await addTag(tag);
-  }
 
   const alreadyTaggedIds = new Set(await listPostIdsByTagId(tag.tag_id));
   const candidatePostIds = resolvedPostIds.filter((postId) => !alreadyTaggedIds.has(postId));
@@ -850,19 +846,38 @@ export async function bulkAssignTagApplyBatch(
   }
 
   const now = Date.now();
-  const targetTag = await getTagById(targetTagId);
-  const records: PostTagRecord[] = postIds.map((postId) => ({
-    post_tag_id: crypto.randomUUID(),
-    x_post_id: postId,
-    tag_id: targetTagId,
-    normalized_name: targetNormalizedName,
-    display_name: targetDisplayName,
-    system_key: targetTag?.system_key ?? null,
-    source: "manual",
-    assigned_at: now
-  }));
+  const tagged = await archiveDb.transaction("rw", archiveDb.tags, archiveDb.post_tags, async () => {
+    let targetTag = await getTagById(targetTagId);
 
-  const tagged = await bulkAddPostTagRecords(records);
+    if (targetTag === undefined) {
+      targetTag = await getTagByNormalizedName(targetNormalizedName);
+    }
+
+    if (targetTag === undefined) {
+      targetTag = {
+        tag_id: targetTagId,
+        normalized_name: targetNormalizedName,
+        display_name: targetDisplayName,
+        system_key: null,
+        created_at: now
+      };
+      await addTag(targetTag);
+    }
+
+    const records: PostTagRecord[] = postIds.map((postId) => ({
+      post_tag_id: crypto.randomUUID(),
+      x_post_id: postId,
+      tag_id: targetTag.tag_id,
+      normalized_name: targetTag.normalized_name,
+      display_name: targetTag.display_name,
+      system_key: targetTag.system_key,
+      source: "manual",
+      assigned_at: now
+    }));
+
+    return bulkAddPostTagRecords(records);
+  });
+
   return {
     tagged
   };
