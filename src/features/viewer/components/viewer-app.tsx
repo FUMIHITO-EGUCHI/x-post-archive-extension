@@ -15,11 +15,9 @@ import type {
   UserSummary,
 } from "../../../types/viewer";
 import {
-  requestAddPostTagByName,
   requestArchiveSummary,
   requestDeletePost,
   requestPostsPage,
-  requestRemovePostTagByName,
   requestTagSummaries,
   requestUserSummaries
 } from "../../runtime/client";
@@ -50,6 +48,7 @@ import {
 } from "./media-lightbox";
 import { useRefetchControls } from "./use-refetch-controls";
 import { useViewerPreferences } from "./use-viewer-preferences";
+import { useTagOperations } from "./use-tag-operations";
 
 type ViewerStatus = "idle" | "loading" | "ready";
 type ViewerScreen = "archive" | "settings";
@@ -98,8 +97,6 @@ export function ViewerApp() {
   const [dateFilterDraftTo, setDateFilterDraftTo] = useState("");
   const [tagSortOption, setTagSortOption] = useState<TagSortOption>("count");
   const [userSummaries, setUserSummaries] = useState<UserSummary[]>([]);
-  const [tagActionPostId, setTagActionPostId] = useState<string | null>(null);
-  const [tagPickerPostId, setTagPickerPostId] = useState<string | null>(null);
   const mediaLightbox = useMediaLightbox();
   const loadArchiveRequestIdRef = useRef(0);
   const shouldPersistSessionRef = useRef(false);
@@ -145,6 +142,17 @@ export function ViewerApp() {
     handleCancelRefetch,
     handleClearRefetchQueue
   } = refetchControls;
+  const tagOperations = useTagOperations({
+    posts,
+    reloadCurrentArchive
+  });
+  const {
+    tagActionPostId,
+    tagPickerPostId,
+    setTagPickerPostId,
+    handleAddTagToPost,
+    handleRemoveTagFromPost
+  } = tagOperations;
 
   useEffect(() => {
     if (screen === "settings") {
@@ -192,16 +200,6 @@ export function ViewerApp() {
   function closeBulkTagModal() {
     setIsBulkTagModalOpen(false);
   }
-
-  useEffect(() => {
-    if (tagPickerPostId === null) {
-      return;
-    }
-
-    if (!posts.some((post) => post.x_post_id === tagPickerPostId)) {
-      setTagPickerPostId(null);
-    }
-  }, [posts, tagPickerPostId]);
 
   function getTagDisplayName(tag: ArchiveTagRecord): string {
     if (tag.source !== "auto") {
@@ -724,50 +722,6 @@ export function ViewerApp() {
       });
     } finally {
       setDeletingId(null);
-    }
-  }
-
-  async function handleAddTagToPost(xPostId: string, displayName: string) {
-    if (displayName.trim() === "") {
-      return;
-    }
-
-    setTagActionPostId(xPostId);
-
-    try {
-      await requestAddPostTagByName(xPostId, displayName);
-      await reloadCurrentArchive();
-    } catch (error) {
-      logger.error("post.tags.add.failed", {
-        message: "Failed to add tag.",
-        context: {
-          xPostId,
-          displayName,
-          error
-        }
-      });
-    } finally {
-      setTagActionPostId(null);
-    }
-  }
-
-  async function handleRemoveTagFromPost(xPostId: string, normalizedName: string) {
-    setTagActionPostId(xPostId);
-
-    try {
-      await requestRemovePostTagByName(xPostId, normalizedName);
-      await reloadCurrentArchive();
-    } catch (error) {
-      logger.error("post.tags.remove.failed", {
-        message: "Failed to remove tag.",
-        context: {
-          xPostId,
-          normalizedTagName: normalizedName,
-          error
-        }
-      });
-    } finally {
-      setTagActionPostId(null);
     }
   }
 
