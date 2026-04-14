@@ -534,6 +534,7 @@ Do these in order. Each step is independently committable and passses typecheck/
 - `2026-04-15 Codex`: Extracted viewer preference state, preference persistence handlers, theme side effect, storage estimate state, and preference loading into `use-viewer-preferences.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely tag operations or archive loader extraction.
 - `2026-04-15 Codex`: Committed the viewer preferences extraction as `315c8a7 Extract viewer preferences`.
 - `2026-04-15 Codex`: Extracted per-post tag picker/action state and tag add/remove handlers from `viewer-app.tsx` into `use-tag-operations.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely archive loader extraction.
+- `2026-04-15 Codex`: Extracted archive post list/loading state, request-id guard, load notices, and `loadArchivePage` from `viewer-app.tsx` into `use-archive-loader.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely sort/filter extraction.
 
 ## Result
 
@@ -546,7 +547,8 @@ Do these in order. Each step is independently committable and passses typecheck/
   - Refetch status polling and refetch action handlers are now extracted to `src/features/viewer/components/use-refetch-controls.ts`.
   - Viewer preference state, preference persistence handlers, theme side effect, storage estimate state, and preference loading are now extracted to `src/features/viewer/components/use-viewer-preferences.ts`.
   - Per-post tag picker/action state and tag add/remove handlers are now extracted to `src/features/viewer/components/use-tag-operations.ts`.
-  - `viewer-app.tsx` still owns archive loading, filtering, and session state; broader decomposition is still active.
+  - Archive post list/loading state, request-id guard, load notices, and `loadArchivePage` are now extracted to `src/features/viewer/components/use-archive-loader.ts`.
+  - `viewer-app.tsx` still owns filtering and session state; broader decomposition is still active.
 
 ## Verification
 
@@ -564,6 +566,8 @@ Do these in order. Each step is independently committable and passses typecheck/
 - `npm run build` passed after viewer preferences extraction.
 - `npm run typecheck` passed after tag operations extraction.
 - `npm run build` passed after tag operations extraction.
+- `npm run typecheck` passed after archive loader extraction.
+- `npm run build` passed after archive loader extraction.
 
 ## Completion Checklist
 - [x] Claude design review complete (needs_from_claude resolved)

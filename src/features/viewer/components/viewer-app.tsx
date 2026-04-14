@@ -1,14 +1,10 @@
 ﻿import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  ArchivePostRecord,
-  ArchiveTagRecord
-} from "../../../types/archive";
+import type { ArchiveTagRecord } from "../../../types/archive";
 import type {
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
   DateFilterTarget,
-  ListPostsPageInput,
   PostFilterInput,
   PostSortField,
   SortDirection,
@@ -17,7 +13,6 @@ import type {
 import {
   requestArchiveSummary,
   requestDeletePost,
-  requestPostsPage,
   requestTagSummaries,
   requestUserSummaries
 } from "../../runtime/client";
@@ -49,8 +44,8 @@ import {
 import { useRefetchControls } from "./use-refetch-controls";
 import { useViewerPreferences } from "./use-viewer-preferences";
 import { useTagOperations } from "./use-tag-operations";
+import { useArchiveLoader } from "./use-archive-loader";
 
-type ViewerStatus = "idle" | "loading" | "ready";
 type ViewerScreen = "archive" | "settings";
 type TagSortOption = "count" | "name";
 const DEFAULT_PAGE_SIZE = 50;
@@ -61,7 +56,6 @@ const logger = createLogger("viewer");
 
 export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
-  const [posts, setPosts] = useState<ArchivePostRecord[]>([]);
   const [availableTags, setAvailableTags] = useState<ArchiveTagSummaryRecord[]>([]);
   const [archiveSummary, setArchiveSummary] = useState<ArchiveSummaryRecord>({
     postCount: 0,
@@ -72,15 +66,10 @@ export function ViewerApp() {
     tagCount: 0,
     mediaBytes: 0
   });
-  const [archiveTotalCount, setArchiveTotalCount] = useState(0);
-  const [hasMorePosts, setHasMorePosts] = useState(false);
   const [sortField, setSortField] = useState<PostSortField>("saved_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [randomSeed, setRandomSeed] = useState(() => createRandomSeed());
-  const [status, setStatus] = useState<ViewerStatus>("idle");
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [loadNotice, setLoadNotice] = useState<string | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [activeAuthorFilter, setActiveAuthorFilter] = useState<string | null>(null);
   const [activeDateFilterTarget, setActiveDateFilterTarget] = useState<DateFilterTarget | null>(null);
@@ -97,8 +86,8 @@ export function ViewerApp() {
   const [dateFilterDraftTo, setDateFilterDraftTo] = useState("");
   const [tagSortOption, setTagSortOption] = useState<TagSortOption>("count");
   const [userSummaries, setUserSummaries] = useState<UserSummary[]>([]);
+  const archiveLoader = useArchiveLoader();
   const mediaLightbox = useMediaLightbox();
-  const loadArchiveRequestIdRef = useRef(0);
   const shouldPersistSessionRef = useRef(false);
   const restoreScrollTopRef = useRef<number | null>(null);
   const [restoreTargetPostId, setRestoreTargetPostId] = useState<string | null>(null);
@@ -106,6 +95,17 @@ export function ViewerApp() {
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const backToArchiveButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousScreenRef = useRef<ViewerScreen>("archive");
+  const {
+    posts,
+    archiveTotalCount,
+    hasMorePosts,
+    status,
+    isLoadingMore,
+    loadNotice,
+    loadArchivePage,
+    setLoadNotice,
+    setInitialLoadError
+  } = archiveLoader;
 
   const preferences = useViewerPreferences({
     archiveMediaBytes: archiveSummary.mediaBytes,
@@ -383,9 +383,7 @@ export function ViewerApp() {
         });
 
         if (!cancelled) {
-          setPosts([]);
-          setStatus("ready");
-          setLoadNotice("Posts could not be loaded. Showing an empty list.");
+          setInitialLoadError();
         }
       }
     }
@@ -544,88 +542,6 @@ export function ViewerApp() {
       randomSeed:
         nextSortField === "random" ? seedOverride ?? randomSeed : null
     };
-  }
-
-  async function loadArchivePage(input: {
-    offset: number;
-    limit: number;
-    sortField: PostSortField;
-    sortDirection: SortDirection;
-    randomSeed: number | null;
-    tagFilter: string | null;
-    authorFilter: string | null;
-    dateFilterTarget: DateFilterTarget | null;
-    dateFrom: string | null;
-    dateTo: string | null;
-    append: boolean;
-  }): Promise<void> {
-    const requestId = (loadArchiveRequestIdRef.current += 1);
-
-    if (input.append) {
-      setIsLoadingMore(true);
-    } else {
-      setStatus("loading");
-    }
-
-    setLoadNotice(null);
-
-    try {
-      const response = await requestPostsPage({
-        offset: input.offset,
-        limit: input.limit,
-        sortField: input.sortField,
-        sortDirection: input.sortDirection,
-        randomSeed: input.randomSeed,
-        tagFilter: input.tagFilter,
-        authorFilter: input.authorFilter,
-        ...buildDateFilterRequest(input.dateFilterTarget, input.dateFrom, input.dateTo)
-      });
-
-      if (requestId !== loadArchiveRequestIdRef.current) {
-        return;
-      }
-
-      if (input.append) {
-        setPosts((current) => [...current, ...response.posts]);
-      } else {
-        setPosts(response.posts);
-      }
-
-      setArchiveTotalCount(response.totalCount);
-      setHasMorePosts(response.hasMore);
-      setStatus("ready");
-    } catch (error) {
-      if (requestId !== loadArchiveRequestIdRef.current) {
-        return;
-      }
-
-      logger.error(input.append ? "posts.load_more.failed" : "posts.load.failed", {
-        message: input.append ? "Failed to load more posts." : "Failed to load posts.",
-        context: {
-          error,
-          offset: input.offset,
-          limit: input.limit,
-          append: input.append
-        }
-      });
-
-      if (!input.append) {
-        setPosts([]);
-        setArchiveTotalCount(0);
-        setHasMorePosts(false);
-      }
-
-      setStatus("ready");
-      setLoadNotice(
-        input.append
-          ? "More posts could not be loaded."
-          : "Posts could not be loaded. Showing an empty list."
-      );
-    } finally {
-      if (input.append) {
-        setIsLoadingMore(false);
-      }
-    }
   }
 
   async function reloadCurrentArchive(limit = Math.max(posts.length, DEFAULT_PAGE_SIZE)) {
@@ -1345,24 +1261,6 @@ function toDateFilterEndTimestamp(value: string | null): number | null {
 
   date.setHours(23, 59, 59, 999);
   return date.getTime();
-}
-
-function buildDateFilterRequest(
-  dateFilterTarget: DateFilterTarget | null,
-  dateFrom: string | null,
-  dateTo: string | null
-): Pick<ListPostsPageInput, "dateFilterTarget" | "dateFrom" | "dateTo"> {
-  const normalizedDateFrom = normalizeDateInputValue(dateFrom ?? "");
-  const normalizedDateTo = normalizeDateInputValue(dateTo ?? "");
-  const requestDateFrom = toDateFilterStartTimestamp(normalizedDateFrom);
-  const requestDateTo = toDateFilterEndTimestamp(normalizedDateTo);
-  const hasDateRange = requestDateFrom !== null || requestDateTo !== null;
-
-  return {
-    dateFilterTarget: hasDateRange ? dateFilterTarget ?? DEFAULT_DATE_FILTER_TARGET : null,
-    dateFrom: requestDateFrom,
-    dateTo: requestDateTo
-  };
 }
 
 function getDateFilterDraftError(
