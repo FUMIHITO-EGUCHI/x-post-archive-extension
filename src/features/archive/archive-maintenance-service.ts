@@ -899,11 +899,6 @@ function toZipEntryPath(opfsPath: string): string {
   return opfsPath.startsWith("/") ? opfsPath.slice(1) : opfsPath;
 }
 
-function createBackupFilename(timestamp: number): string {
-  const iso = new Date(timestamp).toISOString().replaceAll(":", "-");
-  return `x-post-archive-backup-${iso}.zip`;
-}
-
 function normalizeArchiveTransferError(
   error: unknown,
   operation: "backup" | "restore"

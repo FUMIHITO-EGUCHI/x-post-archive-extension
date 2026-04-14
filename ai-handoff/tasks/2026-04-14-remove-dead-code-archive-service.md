@@ -1,7 +1,7 @@
 # Task Packet: Remove Dead Code from Archive Service and Maintenance Service
 
 ## Meta
-- status: waiting
+- status: done
 - owner: Codex
 - branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: normal
@@ -41,24 +41,39 @@ Grep for all three symbols across the entire `src/` tree confirms they are defin
 
 ## Acceptance Criteria
 
-- [ ] `ensureTagAssignments` is gone from `archive-service.ts`
-- [ ] `assignPostTagsDirectly` is gone from `archive-service.ts`
-- [ ] `createBackupFilename` is gone from `archive-maintenance-service.ts`
-- [ ] `settings-archive-maintenance-panel.tsx` is unchanged
-- [ ] `npm run typecheck` pass
-- [ ] `npm run build` pass
+- [x] `ensureTagAssignments` is gone from `archive-service.ts`
+- [x] `assignPostTagsDirectly` is gone from `archive-service.ts`
+- [x] `createBackupFilename` is gone from `archive-maintenance-service.ts`
+- [x] `settings-archive-maintenance-panel.tsx` is unchanged
+- [x] `npm run typecheck` pass
+- [x] `npm run build` pass
 
 ## Work Log
 
+- `2026-04-14 Codex`: Confirmed the only remaining `createBackupFilename` references are in `settings-archive-maintenance-panel.tsx`, which is in use and intentionally left unchanged.
+- `2026-04-14 Codex`: Removed dead `ensureTagAssignments`, `assignPostTagsDirectly`, and the dead duplicate maintenance-service `createBackupFilename`.
+
 ## Result
+
+Done.
+
+- Removed `ensureTagAssignments` from `src/features/archive/archive-service.ts`.
+- Removed `assignPostTagsDirectly` from `src/features/archive/archive-service.ts`.
+- Removed the dead duplicate `createBackupFilename` from `src/features/archive/archive-maintenance-service.ts`.
+- Left `src/features/viewer/components/settings-archive-maintenance-panel.tsx` unchanged.
 
 ## Verification
 
+- `rg -n "ensureTagAssignments|assignPostTagsDirectly|createBackupFilename" src`
+  - Only the active viewer-side `createBackupFilename` references remain.
+- `npm run typecheck`
+- `npm run build`
+
 ## Completion Checklist
-- [ ] investigation finished
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
+- [x] investigation finished
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
