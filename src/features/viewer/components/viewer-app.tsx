@@ -6,7 +6,6 @@ import type {
   ArchiveTagRecord
 } from "../../../types/archive";
 import { defaultArchiveSettings } from "../../../types/archive";
-import { DEFAULT_REFETCH_STATUS, type RefetchStatusRecord } from "../../../types/refetch";
 import type {
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
@@ -26,12 +25,6 @@ import {
   requestArchiveSummary,
   requestDeletePost,
   requestPostsPage,
-  requestRefetchCancel,
-  requestRefetchClear,
-  requestRefetchEnqueueAll,
-  requestRefetchEnqueueZeroEngagement,
-  requestRefetchEnqueuePosts,
-  requestRefetchStatus,
   requestRemovePostTagByName,
   requestTagSummaries,
   requestUserSummaries
@@ -70,6 +63,7 @@ import {
   VideoLightboxDialog,
   useMediaLightbox
 } from "./media-lightbox";
+import { useRefetchControls } from "./use-refetch-controls";
 
 type ViewerStatus = "idle" | "loading" | "ready";
 type ViewerScreen = "archive" | "settings";
@@ -133,7 +127,6 @@ export function ViewerApp() {
   const [userSummaries, setUserSummaries] = useState<UserSummary[]>([]);
   const [tagActionPostId, setTagActionPostId] = useState<string | null>(null);
   const [tagPickerPostId, setTagPickerPostId] = useState<string | null>(null);
-  const [refetchStatus, setRefetchStatus] = useState<RefetchStatusRecord>(DEFAULT_REFETCH_STATUS);
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState>({
     usage: null,
     quota: null,
@@ -144,7 +137,6 @@ export function ViewerApp() {
   const loadArchiveRequestIdRef = useRef(0);
   const shouldPersistSessionRef = useRef(false);
   const restoreScrollTopRef = useRef<number | null>(null);
-  const previousRefetchStatusRef = useRef<RefetchStatusRecord>(DEFAULT_REFETCH_STATUS);
   const [restoreTargetPostId, setRestoreTargetPostId] = useState<string | null>(null);
   const archiveSectionRef = useRef<HTMLElement | null>(null);
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -152,6 +144,19 @@ export function ViewerApp() {
   const previousScreenRef = useRef<ViewerScreen>("archive");
 
   const viewerScale = FONT_SIZE_SCALE[fontSize];
+  const refetchControls = useRefetchControls({
+    language,
+    onRefetchComplete: refreshArchive,
+    setLoadNotice
+  });
+  const {
+    refetchStatus,
+    handleRefetchPost,
+    handleRefetchAllPosts,
+    handleRefetchZeroEngagementPosts,
+    handleCancelRefetch,
+    handleClearRefetchQueue
+  } = refetchControls;
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", viewerTheme);
@@ -734,62 +739,6 @@ export function ViewerApp() {
     await reloadCurrentArchive();
   }
 
-  useEffect(() => {
-    let cancelled = false;
-    let timeoutId: number | null = null;
-
-    async function pollRefetchStatus() {
-      try {
-        const response = await requestRefetchStatus();
-
-        if (cancelled) {
-          return;
-        }
-
-        const previousStatus = previousRefetchStatusRef.current;
-        const nextStatus = response.status;
-
-        previousRefetchStatusRef.current = nextStatus;
-        setRefetchStatus(nextStatus);
-
-        if (
-          previousStatus.phase === "running" &&
-          nextStatus.phase !== "running" &&
-          (nextStatus.completedCount > 0 || nextStatus.failedCount > 0)
-        ) {
-          void refreshArchive();
-        }
-      } catch (error) {
-        logger.warn("refetch.status.poll_failed", {
-          message: "Failed to poll refetch status.",
-          context: {
-            error
-          }
-        });
-      } finally {
-        if (cancelled) {
-          return;
-        }
-
-        const intervalMs =
-          refetchStatus.phase === "running" || refetchStatus.totalCount > 0 ? 1000 : 5000;
-        timeoutId = window.setTimeout(() => {
-          void pollRefetchStatus();
-        }, intervalMs);
-      }
-    }
-
-    void pollRefetchStatus();
-
-    return () => {
-      cancelled = true;
-
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [refetchStatus.phase, refetchStatus.totalCount]);
-
   async function handleTagRenamed(
     oldNormalizedName: string,
     newNormalizedName: string
@@ -1035,87 +984,6 @@ export function ViewerApp() {
       ...getCurrentDateFilterInput(),
       append: false
     });
-  }
-
-  async function handleRefetchPost(xPostId: string): Promise<void> {
-    try {
-      const response = await requestRefetchEnqueuePosts([xPostId], 1);
-      previousRefetchStatusRef.current = response.status;
-      setRefetchStatus(response.status);
-    } catch (error) {
-      logger.error("refetch.post.enqueue_failed", {
-        message: "Failed to enqueue a post refetch.",
-        context: {
-          xPostId,
-          error
-        }
-      });
-      setLoadNotice(
-        language === "ja"
-          ? "投稿の再取得を開始できませんでした。"
-          : "The post could not be queued for refetch."
-      );
-    }
-  }
-
-  async function handleRefetchAllPosts(): Promise<void> {
-    try {
-      const response = await requestRefetchEnqueueAll(0);
-      previousRefetchStatusRef.current = response.status;
-      setRefetchStatus(response.status);
-    } catch (error) {
-      logger.error("refetch.bulk.enqueue_failed", {
-        message: "Failed to enqueue archive refetch.",
-        context: {
-          error
-        }
-      });
-    }
-  }
-
-  async function handleRefetchZeroEngagementPosts(): Promise<void> {
-    try {
-      const response = await requestRefetchEnqueueZeroEngagement(0);
-      previousRefetchStatusRef.current = response.status;
-      setRefetchStatus(response.status);
-    } catch (error) {
-      logger.error("refetch.zero_engagement.enqueue_failed", {
-        message: "Failed to enqueue zero-engagement refetch.",
-        context: {
-          error
-        }
-      });
-    }
-  }
-
-  async function handleCancelRefetch(): Promise<void> {
-    try {
-      const response = await requestRefetchCancel();
-      previousRefetchStatusRef.current = response.status;
-      setRefetchStatus(response.status);
-    } catch (error) {
-      logger.error("refetch.cancel.failed", {
-        message: "Failed to stop refetch processing.",
-        context: {
-          error
-        }
-      });
-    }
-  }
-
-  async function handleClearRefetchQueue(): Promise<void> {
-    try {
-      const response = await requestRefetchClear();
-      previousRefetchStatusRef.current = response.status;
-      setRefetchStatus(response.status);
-    } catch (error) {
-      logger.error("refetch.clear.failed", {
-        message: "Failed to clear the refetch queue.",
-        context: {
-          error
-        }
-      });
-    }
   }
 
   async function handleSortDirectionToggle() {
