@@ -1678,39 +1678,6 @@ export function ViewerApp() {
 
                     {post.post_text.trim() !== "" && <p className="post-text">{post.post_text}</p>}
 
-                    {post.quoted_post !== undefined && (
-                      <QuotedPostCard
-                        post={post.quoted_post}
-                        language={language}
-                        onOpenMedia={(quotedPost, media) => {
-                          const items = quotedPost.media.filter(
-                            (postMedia) =>
-                              postMedia.media_type === "image" &&
-                              postMedia.storage_status === "ready"
-                          );
-                          const currentIndex = items.findIndex(
-                            (item) => item.media_id === media.media_id
-                          );
-
-                          if (items.length === 0 || currentIndex < 0) {
-                            return;
-                          }
-
-                          setActiveMedia({
-                            items,
-                            currentIndex
-                          });
-                        }}
-                        onOpenVideo={(media) => {
-                          setActiveVideo({
-                            media,
-                            objectUrl: null,
-                            status: "loading"
-                          });
-                        }}
-                      />
-                    )}
-
                     {post.media.length > 0 && (
                       <div className="post-media-grid">
                         {post.media.map((media) => (
@@ -1751,6 +1718,39 @@ export function ViewerApp() {
                           />
                         ))}
                       </div>
+                    )}
+
+                    {post.quoted_post !== undefined && (
+                      <QuotedPostCard
+                        post={post.quoted_post}
+                        language={language}
+                        onOpenMedia={(quotedPost, media) => {
+                          const items = quotedPost.media.filter(
+                            (postMedia) =>
+                              postMedia.media_type === "image" &&
+                              postMedia.storage_status === "ready"
+                          );
+                          const currentIndex = items.findIndex(
+                            (item) => item.media_id === media.media_id
+                          );
+
+                          if (items.length === 0 || currentIndex < 0) {
+                            return;
+                          }
+
+                          setActiveMedia({
+                            items,
+                            currentIndex
+                          });
+                        }}
+                        onOpenVideo={(media) => {
+                          setActiveVideo({
+                            media,
+                            objectUrl: null,
+                            status: "loading"
+                          });
+                        }}
+                      />
                     )}
 
                     <dl
