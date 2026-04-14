@@ -22,6 +22,7 @@ import type {
   RenameTagResponse,
   RefetchCancelResponse,
   RefetchClearResponse,
+  RefetchCompleteResponse,
   RefetchEnqueueResponse,
   RefetchStatusResponse,
   RemovePostTagByNameMessage,
@@ -369,6 +370,25 @@ export async function requestRefetchClear(): Promise<RefetchClearResponse> {
 
   if (response.type !== "refetch.clear") {
     throw new Error("Unexpected runtime response for refetch clear request.");
+  }
+
+  return response;
+}
+
+export async function requestNotifyRefetchComplete(
+  xPostId: string,
+  post: SavePostInput | null,
+  error: string | null
+): Promise<RefetchCompleteResponse> {
+  const response = await sendMessage({
+    type: "refetch.complete",
+    xPostId,
+    post,
+    error
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "refetch.complete") {
+    throw new Error("Unexpected runtime response for refetch complete request.");
   }
 
   return response;

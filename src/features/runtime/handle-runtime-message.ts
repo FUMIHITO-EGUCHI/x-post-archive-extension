@@ -528,7 +528,9 @@ export async function handleRuntimeMessage(
     case "archive/restore": {
       logger.info("archive.restore.started", { requestId, context: { stagingPath: message.stagingPath } });
       const root = await navigator.storage.getDirectory();
-      const segments = message.stagingPath.split("/").filter((s) => s.length > 0);
+      const segments = message.stagingPath
+        .split("/")
+        .filter((s) => s.length > 0 && s !== "..");
       const fileName = segments.at(-1);
 
       if (fileName === undefined) {
