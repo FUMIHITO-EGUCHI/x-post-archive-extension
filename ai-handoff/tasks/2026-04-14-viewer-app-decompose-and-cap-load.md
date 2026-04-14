@@ -1,7 +1,7 @@
 # Task Packet: Decompose ViewerApp and Cap Session Restore Load
 
 ## Meta
-- status: waiting
+- status: active
 - owner: Codex
 - branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: low
@@ -525,16 +525,38 @@ Do these in order. Each step is independently committable and passses typecheck/
 
 ## Work Log
 
+- `2026-04-14 Codex`: Added `MAX_SESSION_RESTORE_LIMIT = 200` and capped session restore `initialLimit`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next step is `PostCard` extraction.
+- `2026-04-14 Codex`: Extracted `PostCard`, `QuotedPostCard`, and `MediaCard` from `viewer-app.tsx` into `post-card.tsx`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely `SettingsScreen`.
+- `2026-04-14 Codex`: Extracted settings page rendering and settings tab state from `viewer-app.tsx` into `settings-screen.tsx`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely media lightbox extraction.
+- `2026-04-15 Codex`: Extracted media lightbox state, OPFS object URL loading, dialog a11y wiring, keyboard navigation, and dialog rendering from `viewer-app.tsx` into `media-lightbox.tsx`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely refetch controls or viewer preferences extraction.
+
 ## Result
+
+- Partial progress:
+  - `initialLimit` session restore is now capped with `MAX_SESSION_RESTORE_LIMIT = 200`.
+  - This prevents restoring arbitrarily large loaded counts on viewer open.
+  - Post rendering is now extracted to `src/features/viewer/components/post-card.tsx`, including quoted post and media card rendering.
+  - Settings page rendering and settings tab state are now extracted to `src/features/viewer/components/settings-screen.tsx`.
+  - Media lightbox state, OPFS object URL loading, dialog a11y wiring, keyboard navigation, and rendering are now extracted to `src/features/viewer/components/media-lightbox.tsx`.
+  - `viewer-app.tsx` still owns refetch, preferences, archive loading, filtering, and session state; broader decomposition is still active.
 
 ## Verification
 
+- `npm run typecheck` passed after `initialLimit` cap.
+- `npm run build` passed after `initialLimit` cap.
+- `npm run typecheck` passed after `PostCard` extraction.
+- `npm run build` passed after `PostCard` extraction.
+- `npm run typecheck` passed after `SettingsScreen` extraction.
+- `npm run build` passed after `SettingsScreen` extraction.
+- `npm run typecheck` passed after media lightbox extraction.
+- `npm run build` passed after media lightbox extraction.
+
 ## Completion Checklist
 - [x] Claude design review complete (needs_from_claude resolved)
-- [ ] investigation finished
+- [x] investigation finished
 - [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated

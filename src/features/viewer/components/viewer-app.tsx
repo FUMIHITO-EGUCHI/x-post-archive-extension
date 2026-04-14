@@ -1,11 +1,9 @@
 ﻿import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type {
   ArchivePostRecord,
   ArchiveSettings,
-  ArchiveTagRecord,
-  MediaRecord
+  ArchiveTagRecord
 } from "../../../types/archive";
 import { defaultArchiveSettings } from "../../../types/archive";
 import { DEFAULT_REFETCH_STATUS, type RefetchStatusRecord } from "../../../types/refetch";
@@ -23,7 +21,6 @@ import type {
   ViewerSessionRestoreMode
 } from "../../../types/viewer";
 import type { ViewerTheme } from "../../../types/viewer";
-import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
 import {
   requestAddPostTagByName,
   requestArchiveSummary,
@@ -40,12 +37,7 @@ import {
   requestUserSummaries
 } from "../../runtime/client";
 import { createLogger } from "../../logging/logger";
-import { SettingsArchiveMaintenancePanel } from "./settings-archive-maintenance-panel";
-import { SettingsBasicPanel } from "./settings-basic-panel";
 import { BulkTagModal } from "./bulk-tag-modal";
-import { SettingsLogPanel } from "./settings-log-panel";
-import { SettingsTagManagementPanel } from "./settings-tag-management-panel";
-import { SettingsTagRedirectsPanel } from "./settings-tag-redirects-panel";
 import {
   loadArchiveLanguage,
   localizeKnownAutoTagDisplayName,
@@ -64,31 +56,27 @@ import {
   persistViewerSession,
   persistViewerSessionRestoreMode
 } from "../viewer-session-storage";
-import { TagPickerOverlay } from "./tag-picker-overlay";
 import { useIncrementalList } from "./use-incremental-list";
-import { useDialogA11y } from "./use-dialog-a11y";
 import {
   StickyToolbar,
   type FilterModalTab,
   type StickyToolbarFilterChip
 } from "./sticky-toolbar";
 import { UnifiedFilterModal } from "./unified-filter-modal";
+import { PostCard } from "./post-card";
+import { SettingsScreen } from "./settings-screen";
+import {
+  ImageLightboxDialog,
+  VideoLightboxDialog,
+  useMediaLightbox
+} from "./media-lightbox";
 
 type ViewerStatus = "idle" | "loading" | "ready";
 type ViewerScreen = "archive" | "settings";
-type SettingsTab = "basic" | "tags" | "tag-rules" | "backup" | "log";
 type TagSortOption = "count" | "name";
-type ActiveMedia = {
-  items: MediaRecord[];
-  currentIndex: number;
-};
-type ActiveVideo = {
-  media: MediaRecord;
-  objectUrl: string | null;
-  status: "loading" | "ready" | "error";
-};
 const VIEWER_FONT_SIZE_STORAGE_KEY = "viewer.fontSize";
 const DEFAULT_PAGE_SIZE = 50;
+const MAX_SESSION_RESTORE_LIMIT = 200;
 const FONT_SIZE_SCALE: Record<FontSizeOption, number> = {
   small: 0.92,
   medium: 1,
@@ -100,7 +88,6 @@ const logger = createLogger("viewer");
 
 export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("basic");
   const [language, setLanguage] = useState<ArchiveLanguage>("ja");
   const [archiveSettings, setArchiveSettings] =
     useState<ArchiveSettings>(defaultArchiveSettings);
@@ -128,8 +115,6 @@ export function ViewerApp() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadNotice, setLoadNotice] = useState<string | null>(null);
-  const [activeMedia, setActiveMedia] = useState<ActiveMedia | null>(null);
-  const [activeVideo, setActiveVideo] = useState<ActiveVideo | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [activeAuthorFilter, setActiveAuthorFilter] = useState<string | null>(null);
   const [activeDateFilterTarget, setActiveDateFilterTarget] = useState<DateFilterTarget | null>(null);
@@ -155,7 +140,7 @@ export function ViewerApp() {
     available: null,
     status: "idle"
   });
-  const activeVideoUrlRef = useRef<string | null>(null);
+  const mediaLightbox = useMediaLightbox();
   const loadArchiveRequestIdRef = useRef(0);
   const shouldPersistSessionRef = useRef(false);
   const restoreScrollTopRef = useRef<number | null>(null);
@@ -165,15 +150,8 @@ export function ViewerApp() {
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const backToArchiveButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousScreenRef = useRef<ViewerScreen>("archive");
-  const imageLightboxRef = useRef<HTMLDivElement | null>(null);
-  const imageLightboxCloseButtonRef = useRef<HTMLButtonElement | null>(null);
-  const videoLightboxRef = useRef<HTMLDivElement | null>(null);
-  const videoLightboxCloseButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const viewerScale = FONT_SIZE_SCALE[fontSize];
-  const settingsTabOptions = getSettingsTabOptions(language);
-  const activeSettingsTabPanelId = getSettingsTabPanelId(settingsTab);
-  const activeSettingsTabButtonId = getSettingsTabButtonId(settingsTab);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", viewerTheme);
@@ -225,27 +203,6 @@ export function ViewerApp() {
   function closeBulkTagModal() {
     setIsBulkTagModalOpen(false);
   }
-
-  function closeImageLightbox() {
-    setActiveMedia(null);
-  }
-
-  function closeVideoLightbox() {
-    setActiveVideo(null);
-  }
-
-  useDialogA11y({
-    isOpen: activeMedia !== null,
-    containerRef: imageLightboxRef,
-    initialFocusRef: imageLightboxCloseButtonRef,
-    onClose: closeImageLightbox
-  });
-  useDialogA11y({
-    isOpen: activeVideo !== null,
-    containerRef: videoLightboxRef,
-    initialFocusRef: videoLightboxCloseButtonRef,
-    onClose: closeVideoLightbox
-  });
 
   useEffect(() => {
     if (tagPickerPostId === null) {
@@ -405,7 +362,10 @@ export function ViewerApp() {
           nextDateTo = savedSession.activeDateTo ?? null;
 
           if (nextSessionRestoreMode === "filters-and-position" && nextSortField !== "random") {
-            initialLimit = Math.max(DEFAULT_PAGE_SIZE, savedSession.loadedCount);
+            initialLimit = Math.min(
+              Math.max(DEFAULT_PAGE_SIZE, savedSession.loadedCount),
+              MAX_SESSION_RESTORE_LIMIT
+            );
             restoreScrollTopRef.current = savedSession.scrollTop;
             setRestoreTargetPostId(savedSession.anchorPostId);
           }
@@ -521,98 +481,6 @@ export function ViewerApp() {
       cancelled = true;
     };
   }, [archiveSummary.mediaBytes, archiveSummary.postCount]);
-
-  useEffect(() => {
-    if (activeVideo === null) {
-      return undefined;
-    }
-
-    const currentVideo = activeVideo;
-    let cancelled = false;
-
-    async function loadVideo() {
-      try {
-        const blob = await readBlobFromOpfs(currentVideo.media.opfs_path);
-        const createdUrl = URL.createObjectURL(blob);
-
-        if (cancelled) {
-          URL.revokeObjectURL(createdUrl);
-          return;
-        }
-
-        activeVideoUrlRef.current = createdUrl;
-
-        setActiveVideo({
-          media: currentVideo.media,
-          objectUrl: createdUrl,
-          status: "ready"
-        });
-      } catch (error) {
-        logger.error("video.load.failed", {
-          message: "Failed to load video from OPFS.",
-          context: {
-            mediaId: currentVideo.media.media_id,
-            error
-          }
-        });
-
-        if (!cancelled) {
-          setActiveVideo({
-            media: currentVideo.media,
-            objectUrl: null,
-            status: "error"
-          });
-        }
-      }
-    }
-
-    if (currentVideo.status === "loading" && currentVideo.objectUrl === null) {
-      if (activeVideoUrlRef.current !== null) {
-        URL.revokeObjectURL(activeVideoUrlRef.current);
-        activeVideoUrlRef.current = null;
-      }
-
-      void loadVideo();
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeVideo]);
-
-  useEffect(() => {
-    if (activeVideo !== null) {
-      return;
-    }
-
-    if (activeVideoUrlRef.current !== null) {
-      URL.revokeObjectURL(activeVideoUrlRef.current);
-      activeVideoUrlRef.current = null;
-    }
-  }, [activeVideo]);
-
-  useEffect(() => {
-    if (activeMedia === null) {
-      return undefined;
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "ArrowLeft") {
-        setActiveMedia((current) => moveActiveMedia(current, -1));
-        return;
-      }
-
-      if (event.key === "ArrowRight") {
-        setActiveMedia((current) => moveActiveMedia(current, 1));
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [activeMedia]);
 
   useEffect(() => {
     if (restoreTargetPostId === null && restoreScrollTopRef.current === null) {
@@ -1475,33 +1343,6 @@ export function ViewerApp() {
     }
   }
 
-  function handleSettingsTabKeyDown(
-    currentIndex: number,
-    event: ReactKeyboardEvent<HTMLButtonElement>
-  ) {
-    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (event.key === "Home") {
-      setSettingsTab(settingsTabOptions[0]?.tab ?? "basic");
-      return;
-    }
-
-    if (event.key === "End") {
-      setSettingsTab(settingsTabOptions[settingsTabOptions.length - 1]?.tab ?? "log");
-      return;
-    }
-
-    const direction = event.key === "ArrowRight" ? 1 : -1;
-    const nextIndex =
-      (currentIndex + direction + settingsTabOptions.length) % settingsTabOptions.length;
-
-    setSettingsTab(settingsTabOptions[nextIndex]?.tab ?? settingsTab);
-  }
-
   const filterChips: StickyToolbarFilterChip[] = [];
 
   if (activeAuthorFilter !== null) {
@@ -1562,7 +1403,6 @@ export function ViewerApp() {
             }}
             onOpenFilter={openFilterModal}
             onOpenSettings={() => {
-              setSettingsTab("basic");
               setScreen("settings");
             }}
             onReshuffle={() => {
@@ -1608,247 +1448,47 @@ export function ViewerApp() {
             {posts.length > 0 && (
               <div className="viewer-list">
                 {posts.map((post) => (
-                  <article className="post-card" data-post-id={post.x_post_id} key={post.x_post_id}>
-                    <div className="post-card-header">
-                      <div>
-                        <p className="post-username">
-                          <span>{post.display_name}</span>
-                          <span className="post-handle">@{post.x_username}</span>
-                        </p>
-                        <div className="post-date-list">
-                          <p className="post-date">
-                            <span className="post-date-label">
-                              {language === "ja" ? "投稿日時" : "Posted"}
-                            </span>
-                            <span>{formatPostedAt(post.posted_at, language)}</span>
-                          </p>
-                          <p className="post-date">
-                            <span className="post-date-label">
-                              {language === "ja" ? "保存日時" : "Saved"}
-                            </span>
-                            <span>{formatSavedAt(post.saved_at, language)}</span>
-                          </p>
-                        </div>
-                      </div>
-                      <div className="post-card-actions">
-                        <button
-                          className="post-refetch-button"
-                          type="button"
-                          aria-label={
-                            language === "ja"
-                              ? `@${post.x_username} の投稿を再取得`
-                              : `Refetch post by @${post.x_username}`
-                          }
-                          onClick={() => {
-                            void handleRefetchPost(post.x_post_id);
-                          }}
-                          disabled={refetchStatus.currentPostId === post.x_post_id}
-                        >
-                          {refetchStatus.currentPostId === post.x_post_id
-                            ? language === "ja"
-                              ? "再取得中..."
-                              : "Refetching..."
-                            : language === "ja"
-                              ? "再取得"
-                              : "Refetch"}
-                        </button>
-                        <button
-                          className="post-delete-button"
-                          type="button"
-                          aria-label={
-                            language === "ja"
-                              ? `@${post.x_username} の投稿を削除`
-                              : `Delete post by @${post.x_username}`
-                          }
-                          onClick={() => {
-                            void handleDelete(post.x_post_id);
-                          }}
-                          disabled={deletingId === post.x_post_id}
-                        >
-                          {deletingId === post.x_post_id
-                            ? language === "ja"
-                              ? "削除中..."
-                              : "Deleting..."
-                            : language === "ja"
-                              ? "削除"
-                              : "Delete"}
-                        </button>
-                      </div>
-                    </div>
-
-                    {post.post_text.trim() !== "" && <p className="post-text">{post.post_text}</p>}
-
-                    {post.media.length > 0 && (
-                      <div className="post-media-grid">
-                        {post.media.map((media) => (
-                          <MediaCard
-                            key={media.media_id}
-                            language={language}
-                            media={media}
-                            onOpen={() => {
-                              if (media.media_type === "video") {
-                                return;
-                              }
-
-                              const items = post.media.filter(
-                                (postMedia) =>
-                                  postMedia.media_type === "image" &&
-                                  postMedia.storage_status === "ready"
-                              );
-                              const currentIndex = items.findIndex(
-                                (item) => item.media_id === media.media_id
-                              );
-
-                              if (items.length === 0 || currentIndex < 0) {
-                                return;
-                              }
-
-                              setActiveMedia({
-                                items,
-                                currentIndex
-                              });
-                            }}
-                            onOpenVideo={() => {
-                              setActiveVideo({
-                                media,
-                                objectUrl: null,
-                                status: "loading"
-                              });
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
-
-                    {post.quoted_post !== undefined && (
-                      <QuotedPostCard
-                        post={post.quoted_post}
-                        language={language}
-                        onOpenMedia={(quotedPost, media) => {
-                          const items = quotedPost.media.filter(
-                            (postMedia) =>
-                              postMedia.media_type === "image" &&
-                              postMedia.storage_status === "ready"
-                          );
-                          const currentIndex = items.findIndex(
-                            (item) => item.media_id === media.media_id
-                          );
-
-                          if (items.length === 0 || currentIndex < 0) {
-                            return;
-                          }
-
-                          setActiveMedia({
-                            items,
-                            currentIndex
-                          });
-                        }}
-                        onOpenVideo={(media) => {
-                          setActiveVideo({
-                            media,
-                            objectUrl: null,
-                            status: "loading"
-                          });
-                        }}
-                      />
-                    )}
-
-                    <dl
-                      className="post-metrics"
-                      aria-label={language === "ja" ? "投稿の反応数" : "Post engagement"}
-                    >
-                      <div className="post-metric">
-                        <dt>{language === "ja" ? "返信" : "Replies"}</dt>
-                        <dd>{formatCount(post.reply_count, language)}</dd>
-                      </div>
-                      <div className="post-metric">
-                        <dt>{language === "ja" ? "リポスト" : "Reposts"}</dt>
-                        <dd>{formatCount(post.repost_count, language)}</dd>
-                      </div>
-                      <div className="post-metric">
-                        <dt>{language === "ja" ? "いいね" : "Likes"}</dt>
-                        <dd>{formatCount(post.like_count, language)}</dd>
-                      </div>
-                    </dl>
-
-                    <div className="post-tag-section">
-                      <div className="post-tag-toolbar">
-                        {post.tags.length > 0 && (
-                          <div className="tag-list">
-                            {post.tags.map((tag) => (
-                              <span
-                                className={
-                                  tag.system_key === null
-                                    ? "tag-chip tag-chip-manual"
-                                    : "tag-chip"
-                                }
-                                key={`${post.x_post_id}-${tag.tag_id}`}
-                              >
-                                <button
-                                  className="tag-chip-button"
-                                  type="button"
-                                  onClick={() => {
-                                    void handleToggleTagFilter(tag.normalized_name);
-                                  }}
-                                >
-                                  {getTagDisplayName(tag)}
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="post-tag-picker-anchor">
-                          <button
-                            className="post-tag-picker-button"
-                            type="button"
-                            aria-label={
-                              language === "ja"
-                                ? `@${post.x_username} の投稿タグを編集`
-                                : `Edit tags for post by @${post.x_username}`
-                            }
-                            aria-haspopup="dialog"
-                            aria-expanded={tagPickerPostId === post.x_post_id}
-                            data-tag-picker-trigger-post-id={post.x_post_id}
-                            onClick={() => {
-                              setTagPickerPostId((current) =>
-                                current === post.x_post_id ? null : post.x_post_id
-                              );
-                            }}
-                            disabled={tagActionPostId === post.x_post_id}
-                          >
-                            +
-                          </button>
-                          {tagPickerPostId === post.x_post_id && (
-                            <TagPickerOverlay
-                              currentPostTags={post.tags}
-                              allTagSummaries={availableTags}
-                              onAdd={async (displayName) => {
-                                await handleAddTagToPost(post.x_post_id, displayName);
-                              }}
-                              onRemove={async (normalizedName) => {
-                                await handleRemoveTagFromPost(post.x_post_id, normalizedName);
-                              }}
-                              onClose={() => {
-                                setTagPickerPostId(null);
-                              }}
-                              language={language}
-                              isPending={tagActionPostId === post.x_post_id}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <a
-                      className="post-link"
-                      href={post.post_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {language === "ja" ? "元投稿を開く" : "Open original post"}
-                    </a>
-                  </article>
+                  <PostCard
+                    key={post.x_post_id}
+                    post={post}
+                    language={language}
+                    deletingId={deletingId}
+                    tagActionPostId={tagActionPostId}
+                    tagPickerPostId={tagPickerPostId}
+                    refetchCurrentPostId={refetchStatus.currentPostId}
+                    availableTags={availableTags}
+                    getTagDisplayName={getTagDisplayName}
+                    onDelete={(xPostId) => {
+                      void handleDelete(xPostId);
+                    }}
+                    onRefetch={(xPostId) => {
+                      void handleRefetchPost(xPostId);
+                    }}
+                    onToggleTagFilter={(normalizedName) => {
+                      void handleToggleTagFilter(normalizedName);
+                    }}
+                    onOpenMedia={(items, currentIndex) => {
+                      mediaLightbox.setActiveMedia({
+                        items,
+                        currentIndex
+                      });
+                    }}
+                    onOpenVideo={(media) => {
+                      mediaLightbox.setActiveVideo({
+                        media,
+                        objectUrl: null,
+                        status: "loading"
+                      });
+                    }}
+                    onToggleTagPicker={(xPostId) => {
+                      setTagPickerPostId((current) => (current === xPostId ? null : xPostId));
+                    }}
+                    onCloseTagPicker={() => {
+                      setTagPickerPostId(null);
+                    }}
+                    onAddTag={handleAddTagToPost}
+                    onRemoveTag={handleRemoveTagFromPost}
+                  />
                 ))}
               </div>
             )}
@@ -1876,108 +1516,33 @@ export function ViewerApp() {
           </section>
         </>
       ) : (
-        <>
-          <section className="viewer-hero viewer-settings-hero">
-            <div className="viewer-hero-header">
-              <button
-                ref={backToArchiveButtonRef}
-                className="viewer-icon-button"
-                type="button"
-                aria-label={language === "ja" ? "一覧へ戻る" : "Back to archive"}
-                onClick={() => {
-                  setScreen("archive");
-                }}
-              >
-                <ArrowLeftIcon />
-              </button>
-            </div>
-          </section>
-
-          <section className="viewer-list-panel viewer-settings-panel">
-            <div className="viewer-list-header">
-              <h2>{language === "ja" ? "設定" : "Options"}</h2>
-            </div>
-            <nav
-              className="viewer-settings-tabs"
-              aria-label={language === "ja" ? "設定ページ" : "Settings pages"}
-              role="tablist"
-            >
-              {settingsTabOptions.map(({ tab, label }, index) => (
-                <button
-                  key={tab}
-                  id={getSettingsTabButtonId(tab)}
-                  type="button"
-                  className={settingsTab === tab ? "viewer-settings-tab viewer-settings-tab-active" : "viewer-settings-tab"}
-                  role="tab"
-                  aria-selected={settingsTab === tab}
-                  aria-controls={settingsTab === tab ? getSettingsTabPanelId(tab) : undefined}
-                  tabIndex={settingsTab === tab ? 0 : -1}
-                  onClick={() => {
-                    setSettingsTab(tab);
-                  }}
-                  onKeyDown={(event) => {
-                    handleSettingsTabKeyDown(index, event);
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
-            <div
-              className="viewer-settings-grid"
-              id={activeSettingsTabPanelId}
-              role="tabpanel"
-              aria-labelledby={activeSettingsTabButtonId}
-            >
-              {settingsTab === "basic" && (
-                <SettingsBasicPanel
-                  language={language}
-                  archiveSettings={archiveSettings}
-                  currentTheme={viewerTheme}
-                  fontSize={fontSize}
-                  sessionRestoreMode={sessionRestoreMode}
-                  storageEstimate={storageEstimate}
-                  archiveSummary={archiveSummary}
-                  onArchiveSettingsChange={handleArchiveSettingsChange}
-                  onThemeChange={handleThemeChange}
-                  onLanguageChange={handleLanguageChange}
-                  onFontSizeChange={handleFontSizeChange}
-                  onSessionRestoreModeChange={handleSessionRestoreModeChange}
-                  onClearSavedSession={handleClearSavedSession}
-                />
-              )}
-
-              {settingsTab === "tags" && (
-                <SettingsTagManagementPanel
-                  language={language}
-                  onTagRenamed={handleTagRenamed}
-                  onTagMerged={handleTagMerged}
-                />
-              )}
-
-              {settingsTab === "tag-rules" && <SettingsTagRedirectsPanel language={language} />}
-
-              {settingsTab === "backup" && (
-                <SettingsArchiveMaintenancePanel
-                  language={language}
-                  archiveSummary={{
-                    postCount: archiveSummary.postCount,
-                    mediaCount: archiveSummary.mediaCount,
-                    tagCount: archiveSummary.tagCount
-                  }}
-                  refetchStatus={refetchStatus}
-                  onRefetchAll={handleRefetchAllPosts}
-                  onRefetchZeroEngagement={handleRefetchZeroEngagementPosts}
-                  onRefetchCancel={handleCancelRefetch}
-                  onRefetchClear={handleClearRefetchQueue}
-                  onArchiveChanged={refreshArchive}
-                />
-              )}
-
-              {settingsTab === "log" && <SettingsLogPanel language={language} />}
-            </div>
-          </section>
-        </>
+        <SettingsScreen
+          language={language}
+          archiveSettings={archiveSettings}
+          viewerTheme={viewerTheme}
+          fontSize={fontSize}
+          sessionRestoreMode={sessionRestoreMode}
+          storageEstimate={storageEstimate}
+          archiveSummary={archiveSummary}
+          refetchStatus={refetchStatus}
+          backToArchiveButtonRef={backToArchiveButtonRef}
+          onBackToArchive={() => {
+            setScreen("archive");
+          }}
+          onArchiveSettingsChange={handleArchiveSettingsChange}
+          onThemeChange={handleThemeChange}
+          onLanguageChange={handleLanguageChange}
+          onFontSizeChange={handleFontSizeChange}
+          onSessionRestoreModeChange={handleSessionRestoreModeChange}
+          onClearSavedSession={handleClearSavedSession}
+          onTagRenamed={handleTagRenamed}
+          onTagMerged={handleTagMerged}
+          onRefetchAll={handleRefetchAllPosts}
+          onRefetchZeroEngagement={handleRefetchZeroEngagementPosts}
+          onRefetchCancel={handleCancelRefetch}
+          onRefetchClear={handleClearRefetchQueue}
+          onArchiveChanged={refreshArchive}
+        />
       )}
 
       {isFilterModalOpen && (
@@ -2044,190 +1609,27 @@ export function ViewerApp() {
         />
       )}
 
-      {activeMedia !== null && (
-        <div
-          ref={imageLightboxRef}
-          className="media-lightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label={language === "ja" ? "画像ビューア" : "Image viewer"}
-          tabIndex={-1}
-          onClick={() => {
-            closeImageLightbox();
-          }}
-        >
-          {activeMedia.items.length > 1 && (
-            <button
-              className="media-lightbox-nav media-lightbox-nav-prev"
-              type="button"
-              aria-label={language === "ja" ? "前の画像を表示" : "Show previous image"}
-              disabled={activeMedia.currentIndex === 0}
-              onClick={(event) => {
-                event.stopPropagation();
-                setActiveMedia((current) => moveActiveMedia(current, -1));
-              }}
-            >
-              {language === "ja" ? "前へ" : "Previous"}
-            </button>
-          )}
-          {activeMedia.items.length > 1 && (
-            <button
-              className="media-lightbox-nav media-lightbox-nav-next"
-              type="button"
-              aria-label={language === "ja" ? "次の画像を表示" : "Show next image"}
-              disabled={activeMedia.currentIndex === activeMedia.items.length - 1}
-              onClick={(event) => {
-                event.stopPropagation();
-                setActiveMedia((current) => moveActiveMedia(current, 1));
-              }}
-            >
-              {language === "ja" ? "次へ" : "Next"}
-            </button>
-          )}
-          <button
-            ref={imageLightboxCloseButtonRef}
-            className="media-lightbox-close"
-            type="button"
-            aria-label={language === "ja" ? "画像ビューアを閉じる" : "Close image viewer"}
-            onClick={() => {
-              closeImageLightbox();
-            }}
-          >
-            {language === "ja" ? "閉じる" : "Close"}
-          </button>
-          <figure
-            className="media-lightbox-panel"
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
-          >
-            <LightboxImage
-              media={activeMedia.items[activeMedia.currentIndex] ?? null}
-              language={language}
-            />
-            {activeMedia.items[activeMedia.currentIndex]?.alt_text !== null && (
-              <figcaption className="media-lightbox-alt">
-                {activeMedia.items[activeMedia.currentIndex]?.alt_text}
-              </figcaption>
-            )}
-          </figure>
-        </div>
+      {mediaLightbox.activeMedia !== null && (
+        <ImageLightboxDialog
+          activeMedia={mediaLightbox.activeMedia}
+          language={language}
+          closeButtonRef={mediaLightbox.imageLightboxCloseButtonRef}
+          dialogRef={mediaLightbox.imageLightboxRef}
+          onClose={mediaLightbox.closeImageLightbox}
+          onMove={mediaLightbox.moveImageLightbox}
+        />
       )}
 
-      {activeVideo !== null && (
-        <div
-          ref={videoLightboxRef}
-          className="media-lightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label={language === "ja" ? "動画ビューア" : "Video viewer"}
-          tabIndex={-1}
-          onClick={() => {
-            closeVideoLightbox();
-          }}
-        >
-          <button
-            ref={videoLightboxCloseButtonRef}
-            className="media-lightbox-close"
-            type="button"
-            aria-label={language === "ja" ? "動画ビューアを閉じる" : "Close video viewer"}
-            onClick={() => {
-              closeVideoLightbox();
-            }}
-          >
-            {language === "ja" ? "閉じる" : "Close"}
-          </button>
-          <figure
-            className="media-lightbox-panel"
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
-          >
-            {activeVideo.status === "loading" && (
-              <div className="post-media-status">
-                {language === "ja" ? "動画を読み込み中..." : "Loading video..."}
-              </div>
-            )}
-            {activeVideo.status === "error" && (
-              <div className="post-media-status post-media-status-error">
-                <strong>
-                  {language === "ja" ? "動画の読み込みに失敗しました。" : "Video load failed."}
-                </strong>
-                <span>
-                  {activeVideo.media.last_error ??
-                    (language === "ja" ? "不明なメディアエラーです。" : "Unknown media error.")}
-                </span>
-              </div>
-            )}
-            {activeVideo.status === "ready" && activeVideo.objectUrl !== null && (
-              <video
-                className="media-lightbox-video"
-                src={activeVideo.objectUrl}
-                controls
-                autoPlay
-                preload="metadata"
-                playsInline
-              />
-            )}
-          </figure>
-        </div>
+      {mediaLightbox.activeVideo !== null && (
+        <VideoLightboxDialog
+          activeVideo={mediaLightbox.activeVideo}
+          language={language}
+          closeButtonRef={mediaLightbox.videoLightboxCloseButtonRef}
+          dialogRef={mediaLightbox.videoLightboxRef}
+          onClose={mediaLightbox.closeVideoLightbox}
+        />
       )}
     </main>
-  );
-}
-
-function QuotedPostCard({
-  post,
-  language,
-  onOpenMedia,
-  onOpenVideo
-}: {
-  post: ArchivePostRecord;
-  language: ArchiveLanguage;
-  onOpenMedia: (post: ArchivePostRecord, media: MediaRecord) => void;
-  onOpenVideo: (media: MediaRecord) => void;
-}) {
-  return (
-    <section
-      className="quoted-post-card"
-      aria-label={language === "ja" ? "引用投稿" : "Quoted post"}
-    >
-      <div className="quoted-post-header">
-        <p className="quoted-post-username">
-          <span>{post.display_name}</span>
-          <span className="post-handle">@{post.x_username}</span>
-        </p>
-        <span className="quoted-post-date">{formatPostedAt(post.posted_at, language)}</span>
-      </div>
-
-      {post.post_text.trim() !== "" && <p className="quoted-post-text">{post.post_text}</p>}
-
-      {post.media.length > 0 && (
-        <div className="quoted-post-media-grid">
-          {post.media.map((media) => (
-            <MediaCard
-              key={media.media_id}
-              language={language}
-              media={media}
-              onOpen={() => {
-                if (media.media_type === "video") {
-                  return;
-                }
-
-                onOpenMedia(post, media);
-              }}
-              onOpenVideo={() => {
-                onOpenVideo(media);
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      <a className="quoted-post-link" href={post.post_url} target="_blank" rel="noreferrer">
-        {language === "ja" ? "引用元を開く" : "Open quoted post"}
-      </a>
-    </section>
   );
 }
 
@@ -2244,149 +1646,6 @@ function createRandomSeed(): number {
   globalThis.crypto.getRandomValues(seed);
   const nextSeed = seed[0];
   return nextSeed === undefined || nextSeed === 0 ? 1 : nextSeed;
-}
-
-function ArrowLeftIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M14.7 5.3a1 1 0 0 1 0 1.4L10.41 11H20a1 1 0 1 1 0 2h-9.59l4.29 4.3a1 1 0 0 1-1.41 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.41 0Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
-function MediaCard({
-  language,
-  media,
-  onOpen,
-  onOpenVideo
-}: {
-  language: ArchiveLanguage;
-  media: MediaRecord;
-  onOpen: () => void;
-  onOpenVideo: () => void;
-}) {
-  const [setContainerRef, isNearViewport] = useDeferredVisibility<HTMLElement>();
-  const imageObjectUrl = useObjectUrl(
-    media.media_type === "image" && media.storage_status === "ready" ? media.opfs_path : null,
-    isNearViewport
-  );
-  const previewObjectUrl = useObjectUrl(
-    media.media_type === "video" &&
-      media.storage_status === "ready" &&
-      (media.preview_image_opfs_path ?? null) !== null
-      ? media.preview_image_opfs_path
-      : null,
-    isNearViewport
-  );
-
-  if (media.storage_status === "failed") {
-    return (
-      <div className="post-media-status post-media-status-error" ref={setContainerRef}>
-        <strong>
-          {media.media_type === "video"
-            ? language === "ja"
-              ? "動画の保存に失敗しました。"
-              : "Video save failed."
-            : language === "ja"
-              ? "画像の保存に失敗しました。"
-              : "Image save failed."}
-        </strong>
-        <span>
-          {media.last_error ??
-            (language === "ja" ? "不明なメディアエラーです。" : "Unknown media error.")}
-        </span>
-      </div>
-    );
-  }
-
-  if (media.media_type === "video") {
-    const previewSource = previewObjectUrl ?? media.preview_image_url ?? null;
-
-    return (
-      <figure className="post-media-card post-media-card-video" ref={setContainerRef}>
-        <button
-          className="post-media-button post-media-video-button"
-          type="button"
-          aria-label={language === "ja" ? "動画を再生" : "Play video"}
-          onClick={() => {
-            onOpenVideo();
-          }}
-        >
-          {previewSource !== null ? (
-            <img
-              className="post-media-image"
-              src={previewSource}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              width={media.width ?? undefined}
-              height={media.height ?? undefined}
-            />
-          ) : (
-            <div className="post-media-video-fallback">{language === "ja" ? "動画" : "Video"}</div>
-          )}
-          <span className="post-media-video-badge">
-            {language === "ja" ? "動画を再生" : "Play video"}
-          </span>
-        </button>
-      </figure>
-    );
-  }
-
-  if (media.storage_status === "pending" || imageObjectUrl === null) {
-    return (
-      <div
-        className="post-media-status post-media-skeleton"
-        ref={setContainerRef}
-        aria-label={language === "ja" ? "画像を準備中" : "Image is being prepared"}
-      >
-        <span className="viewer-visually-hidden">
-          {language === "ja" ? "画像を準備中です。" : "Image is still being prepared."}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <figure className="post-media-card" ref={setContainerRef}>
-      <button
-        className="post-media-button"
-        type="button"
-        aria-label={language === "ja" ? "画像を拡大表示" : "Open image"}
-        onClick={() => {
-          onOpen();
-        }}
-      >
-        <img
-          className="post-media-image"
-          src={imageObjectUrl}
-          alt={media.alt_text ?? ""}
-          loading="lazy"
-          decoding="async"
-          width={media.width ?? undefined}
-          height={media.height ?? undefined}
-        />
-      </button>
-      {media.alt_text !== null && <figcaption className="post-media-alt">{media.alt_text}</figcaption>}
-    </figure>
-  );
-}
-
-function formatPostedAt(postedAt: number, language: ArchiveLanguage): string {
-  return new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "en-US", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(postedAt);
-}
-
-function formatSavedAt(savedAt: number, language: ArchiveLanguage): string {
-  return new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "en-US", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(savedAt);
 }
 
 function formatUserSummaryLabel(user: UserSummary): string {
@@ -2694,160 +1953,3 @@ function findCurrentAnchorPostId(): string | null {
   return bestMatch?.xPostId ?? null;
 }
 
-function moveActiveMedia(activeMedia: ActiveMedia | null, delta: number): ActiveMedia | null {
-  if (activeMedia === null || activeMedia.items.length <= 1) {
-    return activeMedia;
-  }
-
-  const nextIndex = Math.min(
-    activeMedia.items.length - 1,
-    Math.max(0, activeMedia.currentIndex + delta)
-  );
-
-  return {
-    ...activeMedia,
-    currentIndex: nextIndex
-  };
-}
-
-function LightboxImage({
-  media,
-  language
-}: {
-  media: MediaRecord | null;
-  language: ArchiveLanguage;
-}) {
-  const objectUrl = useObjectUrl(media?.opfs_path ?? null, media !== null);
-
-  if (media === null || objectUrl === null) {
-    return (
-      <div className="post-media-status">
-        {language === "ja" ? "画像を読み込み中..." : "Loading image..."}
-      </div>
-    );
-  }
-
-  return (
-    <img
-      className="media-lightbox-image"
-      src={objectUrl}
-      alt={media.alt_text ?? ""}
-      decoding="async"
-    />
-  );
-}
-
-function getSettingsTabOptions(language: ArchiveLanguage) {
-  return [
-    {
-      tab: "basic" as const,
-      label: language === "ja" ? "基本設定" : "General"
-    },
-    {
-      tab: "tags" as const,
-      label: language === "ja" ? "タグ管理" : "Tags"
-    },
-    {
-      tab: "tag-rules" as const,
-      label: language === "ja" ? "自動タグ変換" : "Redirects"
-    },
-    {
-      tab: "backup" as const,
-      label: language === "ja" ? "バックアップ" : "Backup"
-    },
-    {
-      tab: "log" as const,
-      label: language === "ja" ? "ログ" : "Log"
-    }
-  ];
-}
-
-function getSettingsTabButtonId(tab: SettingsTab): string {
-  return `viewer-settings-tab-${tab}`;
-}
-
-function getSettingsTabPanelId(tab: SettingsTab): string {
-  return `viewer-settings-panel-${tab}`;
-}
-
-function useDeferredVisibility<T extends Element>(): [(node: T | null) => void, boolean] {
-  const [node, setNode] = useState<T | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    if (node === null || isVisible) {
-      return undefined;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setIsVisible(true);
-          observer.disconnect();
-        }
-      },
-      {
-        rootMargin: "300px 0px"
-      }
-    );
-
-    observer.observe(node);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [isVisible, node]);
-
-  return [setNode, isVisible];
-}
-
-function useObjectUrl(opfsPath: string | null, enabled: boolean): string | null {
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!enabled || opfsPath === null) {
-      setObjectUrl(null);
-      return undefined;
-    }
-
-    const targetPath = opfsPath;
-    let cancelled = false;
-    let createdUrl: string | null = null;
-
-    setObjectUrl(null);
-
-    async function loadObjectUrl() {
-      try {
-        const blob = await readBlobFromOpfs(targetPath);
-        createdUrl = URL.createObjectURL(blob);
-
-        if (!cancelled) {
-          setObjectUrl(createdUrl);
-          return;
-        }
-
-        URL.revokeObjectURL(createdUrl);
-      } catch (error) {
-        logger.error("media.object_url.load_failed", {
-          message: "Failed to load media from OPFS.",
-          context: {
-            opfsPath: targetPath,
-            error
-          }
-        });
-      }
-    }
-
-    void loadObjectUrl();
-
-    return () => {
-      cancelled = true;
-
-      if (createdUrl !== null) {
-        URL.revokeObjectURL(createdUrl);
-      }
-    };
-  }, [enabled, opfsPath]);
-
-  return objectUrl;
-}
