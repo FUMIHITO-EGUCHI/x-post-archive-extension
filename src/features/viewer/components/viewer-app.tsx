@@ -2,24 +2,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ArchivePostRecord,
-  ArchiveSettings,
   ArchiveTagRecord
 } from "../../../types/archive";
-import { defaultArchiveSettings } from "../../../types/archive";
 import type {
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
   DateFilterTarget,
-  FontSizeOption,
   ListPostsPageInput,
   PostFilterInput,
   PostSortField,
-  StorageEstimateState,
   SortDirection,
   UserSummary,
-  ViewerSessionRestoreMode
 } from "../../../types/viewer";
-import type { ViewerTheme } from "../../../types/viewer";
 import {
   requestAddPostTagByName,
   requestArchiveSummary,
@@ -32,22 +26,13 @@ import {
 import { createLogger } from "../../logging/logger";
 import { BulkTagModal } from "./bulk-tag-modal";
 import {
-  loadArchiveLanguage,
   localizeKnownAutoTagDisplayName,
-  persistArchiveLanguage,
   type ArchiveLanguage
 } from "../../settings/archive-language";
 import {
-  loadArchiveSettings,
-  persistArchiveSettings
-} from "../../settings/archive-settings";
-import { loadViewerTheme, persistViewerTheme } from "../../settings/viewer-theme";
-import {
   clearViewerSession,
   loadViewerSession,
-  loadViewerSessionRestoreMode,
-  persistViewerSession,
-  persistViewerSessionRestoreMode
+  persistViewerSession
 } from "../viewer-session-storage";
 import { useIncrementalList } from "./use-incremental-list";
 import {
@@ -64,31 +49,19 @@ import {
   useMediaLightbox
 } from "./media-lightbox";
 import { useRefetchControls } from "./use-refetch-controls";
+import { useViewerPreferences } from "./use-viewer-preferences";
 
 type ViewerStatus = "idle" | "loading" | "ready";
 type ViewerScreen = "archive" | "settings";
 type TagSortOption = "count" | "name";
-const VIEWER_FONT_SIZE_STORAGE_KEY = "viewer.fontSize";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_SESSION_RESTORE_LIMIT = 200;
-const FONT_SIZE_SCALE: Record<FontSizeOption, number> = {
-  small: 0.92,
-  medium: 1,
-  large: 1.12
-};
 const FILTER_MODAL_LIST_SIZE = 40;
 const DEFAULT_DATE_FILTER_TARGET: DateFilterTarget = "saved_at";
 const logger = createLogger("viewer");
 
 export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
-  const [language, setLanguage] = useState<ArchiveLanguage>("ja");
-  const [archiveSettings, setArchiveSettings] =
-    useState<ArchiveSettings>(defaultArchiveSettings);
-  const [viewerTheme, setViewerTheme] = useState<ViewerTheme>("light");
-  const [fontSize, setFontSize] = useState<FontSizeOption>("medium");
-  const [sessionRestoreMode, setSessionRestoreMode] =
-    useState<ViewerSessionRestoreMode>("filters");
   const [posts, setPosts] = useState<ArchivePostRecord[]>([]);
   const [availableTags, setAvailableTags] = useState<ArchiveTagSummaryRecord[]>([]);
   const [archiveSummary, setArchiveSummary] = useState<ArchiveSummaryRecord>({
@@ -127,12 +100,6 @@ export function ViewerApp() {
   const [userSummaries, setUserSummaries] = useState<UserSummary[]>([]);
   const [tagActionPostId, setTagActionPostId] = useState<string | null>(null);
   const [tagPickerPostId, setTagPickerPostId] = useState<string | null>(null);
-  const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState>({
-    usage: null,
-    quota: null,
-    available: null,
-    status: "idle"
-  });
   const mediaLightbox = useMediaLightbox();
   const loadArchiveRequestIdRef = useRef(0);
   const shouldPersistSessionRef = useRef(false);
@@ -143,7 +110,28 @@ export function ViewerApp() {
   const backToArchiveButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousScreenRef = useRef<ViewerScreen>("archive");
 
-  const viewerScale = FONT_SIZE_SCALE[fontSize];
+  const preferences = useViewerPreferences({
+    archiveMediaBytes: archiveSummary.mediaBytes,
+    archivePostCount: archiveSummary.postCount,
+    persistCurrentViewerSession
+  });
+  const {
+    language,
+    archiveSettings,
+    viewerTheme,
+    fontSize,
+    sessionRestoreMode,
+    storageEstimate,
+    viewerScale,
+    loadViewerPreferences,
+    applyViewerPreferences,
+    handleLanguageChange,
+    handleThemeChange,
+    handleFontSizeChange,
+    handleArchiveSettingsChange,
+    handleSessionRestoreModeChange,
+    handleClearSavedSession
+  } = preferences;
   const refetchControls = useRefetchControls({
     language,
     onRefetchComplete: refreshArchive,
@@ -157,10 +145,6 @@ export function ViewerApp() {
     handleCancelRefetch,
     handleClearRefetchQueue
   } = refetchControls;
-
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", viewerTheme);
-  }, [viewerTheme]);
 
   useEffect(() => {
     if (screen === "settings") {
@@ -317,18 +301,10 @@ export function ViewerApp() {
     async function initializeViewer() {
       try {
         const [
-          storedFont,
-          nextLanguage,
-          nextArchiveSettings,
-          nextSessionRestoreMode,
-          nextTheme,
+          preferences,
           savedSession
         ] = await Promise.all([
-          browser.storage.local.get(VIEWER_FONT_SIZE_STORAGE_KEY),
-          loadArchiveLanguage(),
-          loadArchiveSettings(),
-          loadViewerSessionRestoreMode(),
-          loadViewerTheme(),
+          loadViewerPreferences(),
           loadViewerSession()
         ]);
 
@@ -336,16 +312,8 @@ export function ViewerApp() {
           return;
         }
 
-        const storedFontValue = storedFont[VIEWER_FONT_SIZE_STORAGE_KEY];
-
-        if (isFontSizeOption(storedFontValue)) {
-          setFontSize(storedFontValue);
-        }
-
-        setLanguage(nextLanguage);
-        setArchiveSettings(nextArchiveSettings);
-        setSessionRestoreMode(nextSessionRestoreMode);
-        setViewerTheme(nextTheme);
+        const nextSessionRestoreMode = preferences.sessionRestoreMode;
+        applyViewerPreferences(preferences);
 
         let nextSortField: PostSortField = "saved_at";
         let nextSortDirection: SortDirection = "desc";
@@ -430,62 +398,6 @@ export function ViewerApp() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadStorageEstimate() {
-      if (typeof navigator.storage?.estimate !== "function") {
-        if (!cancelled) {
-          setStorageEstimate({
-            usage: null,
-            quota: null,
-            available: null,
-            status: "unsupported"
-          });
-        }
-
-        return;
-      }
-
-      try {
-        const result = await navigator.storage.estimate();
-        const usage = typeof result.usage === "number" ? result.usage : null;
-        const quota = typeof result.quota === "number" ? result.quota : null;
-
-        if (!cancelled) {
-          setStorageEstimate({
-            usage,
-            quota,
-            available: usage !== null && quota !== null ? Math.max(quota - usage, 0) : null,
-            status: "ready"
-          });
-        }
-      } catch (error) {
-        logger.warn("storage.estimate.unavailable", {
-          message: "Storage estimate is unavailable.",
-          context: {
-            error
-          }
-        });
-
-        if (!cancelled) {
-          setStorageEstimate({
-            usage: null,
-            quota: null,
-            available: null,
-            status: "unsupported"
-          });
-        }
-      }
-    }
-
-    void loadStorageEstimate();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [archiveSummary.mediaBytes, archiveSummary.postCount]);
 
   useEffect(() => {
     if (restoreTargetPostId === null && restoreScrollTopRef.current === null) {
@@ -856,111 +768,6 @@ export function ViewerApp() {
       });
     } finally {
       setTagActionPostId(null);
-    }
-  }
-
-  async function handleSessionRestoreModeChange(nextValue: ViewerSessionRestoreMode) {
-    setSessionRestoreMode(nextValue);
-
-    try {
-      await persistViewerSessionRestoreMode(nextValue);
-
-      if (nextValue === "off") {
-        await clearViewerSession();
-        return;
-      }
-
-      await persistCurrentViewerSession({
-        anchorPostId: nextValue === "filters-and-position" ? findCurrentAnchorPostId() : null,
-        scrollTop: nextValue === "filters-and-position" ? window.scrollY : 0
-      });
-    } catch (error) {
-      logger.error("viewer.session_restore_mode.persist_failed", {
-        message: "Failed to persist the session restore preference.",
-        context: {
-          nextValue,
-          error
-        }
-      });
-    }
-  }
-
-  async function handleClearSavedSession() {
-    try {
-      await clearViewerSession();
-    } catch (error) {
-      logger.error("viewer.session.clear_failed", {
-        message: "Failed to clear the saved viewer session.",
-        context: {
-          error
-        }
-      });
-    }
-  }
-
-  async function handleFontSizeChange(nextValue: FontSizeOption) {
-    setFontSize(nextValue);
-
-    try {
-      await browser.storage.local.set({
-        [VIEWER_FONT_SIZE_STORAGE_KEY]: nextValue
-      });
-    } catch (error) {
-      logger.error("viewer.font_size.persist_failed", {
-        message: "Failed to persist viewer font size.",
-        context: {
-          nextValue,
-          error
-        }
-      });
-    }
-  }
-
-  async function handleLanguageChange(nextValue: ArchiveLanguage) {
-    setLanguage(nextValue);
-
-    try {
-      await persistArchiveLanguage(nextValue);
-    } catch (error) {
-      logger.error("viewer.language.persist_failed", {
-        message: "Failed to persist archive language.",
-        context: {
-          nextValue,
-          error
-        }
-      });
-    }
-  }
-
-  async function handleThemeChange(nextValue: ViewerTheme) {
-    setViewerTheme(nextValue);
-
-    try {
-      await persistViewerTheme(nextValue);
-    } catch (error) {
-      logger.error("viewer.theme.persist_failed", {
-        message: "Failed to persist viewer theme.",
-        context: {
-          nextValue,
-          error
-        }
-      });
-    }
-  }
-
-  async function handleArchiveSettingsChange(nextValue: ArchiveSettings) {
-    setArchiveSettings(nextValue);
-
-    try {
-      await persistArchiveSettings(nextValue);
-    } catch (error) {
-      logger.error("viewer.archive_settings.persist_failed", {
-        message: "Failed to persist archive settings.",
-        context: {
-          nextValue,
-          error
-        }
-      });
     }
   }
 
@@ -1499,10 +1306,6 @@ export function ViewerApp() {
       )}
     </main>
   );
-}
-
-function isFontSizeOption(value: unknown): value is FontSizeOption {
-  return value === "small" || value === "medium" || value === "large";
 }
 
 function formatCount(value: number, language: ArchiveLanguage = "en"): string {
