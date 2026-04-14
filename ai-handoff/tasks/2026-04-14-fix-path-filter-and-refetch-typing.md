@@ -1,7 +1,7 @@
 # Task Packet: Fix Path Traversal Filter and Typed Refetch Complete Message
 
 ## Meta
-- status: waiting
+- status: done
 - owner: Codex
 - branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: normal
@@ -70,23 +70,36 @@ to:
 
 ## Acceptance Criteria
 
-- [ ] `archive/restore` path filter rejects `".."` segments explicitly
-- [ ] `bootstrap-x-content-script.ts` no longer uses a raw `chrome.runtime.sendMessage` for `refetch.complete`
-- [ ] `client.ts` exports a `requestNotifyRefetchComplete` (or equivalent named) function
-- [ ] `npm run typecheck` pass
-- [ ] `npm run build` pass
+- [x] `archive/restore` path filter rejects `".."` segments explicitly
+- [x] `bootstrap-x-content-script.ts` no longer uses a raw `chrome.runtime.sendMessage` for `refetch.complete`
+- [x] `client.ts` exports a `requestNotifyRefetchComplete` (or equivalent named) function
+- [x] `npm run typecheck` pass
+- [x] `npm run build` pass
 
 ## Work Log
 
+- `2026-04-14 Codex`: Added explicit `s !== ".."` filtering for archive restore staging path segments.
+- `2026-04-14 Codex`: Added `requestNotifyRefetchComplete()` to the typed runtime client and replaced the raw `chrome.runtime.sendMessage` call in the X content script.
+
 ## Result
+
+Done.
+
+- `archive/restore` now explicitly filters out `..` path segments before walking OPFS handles.
+- `bootstrap-x-content-script.ts` now sends `refetch.complete` through `requestNotifyRefetchComplete()`.
+- `client.ts` exports `requestNotifyRefetchComplete()`.
 
 ## Verification
 
+- `rg -n "refetch.complete|chrome.runtime.sendMessage|filter\\(\\(s\\)" src/features/runtime/handle-runtime-message.ts src/features/runtime/client.ts src/features/x/bootstrap-x-content-script.ts`
+- `npm run typecheck`
+- `npm run build`
+
 ## Completion Checklist
-- [ ] investigation finished
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
+- [x] investigation finished
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
