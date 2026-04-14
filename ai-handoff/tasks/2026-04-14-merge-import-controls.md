@@ -1,7 +1,7 @@
 # Task Packet: Merge Duplicate Bookmarks/Likes Import Controls
 
 ## Meta
-- status: waiting
+- status: done
 - owner: Codex
 - branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: low
@@ -43,23 +43,34 @@ Any bug fix or feature addition currently requires the same change in two places
 
 ## Acceptance Criteria
 
-- [ ] No logic is duplicated between bookmarks and likes import controls
-- [ ] Both bookmarks and likes import flows behave identically to before
-- [ ] Exported function names callable from content script entry point are unchanged (or updated in-scope)
-- [ ] `npm run typecheck` pass
-- [ ] `npm run build` pass
+- [x] No logic is duplicated between bookmarks and likes import controls
+- [x] Both bookmarks and likes import flows behave identically to before
+- [x] Exported function names callable from content script entry point are unchanged (or updated in-scope)
+- [x] `npm run typecheck` pass
+- [x] `npm run build` pass
 
 ## Work Log
 
+- `2026-04-14 Codex`: Extracted shared import overlay and scroll/save logic into `timeline-import-controls.ts`.
+- `2026-04-14 Codex`: Reduced bookmarks/likes import modules to thin wrappers that pass root ids, page matcher, auto tag options, event prefix, and labels into the shared factory.
+
 ## Result
+
+- Added `src/features/x/timeline-import-controls.ts` with the shared parameterized implementation.
+- Preserved the public wrapper exports in `bookmarks-import-controls.ts` and `likes-import-controls.ts`.
+- Preserved bookmarks/likes page matching, root/overlay ids, debug event prefixes, and auto tag options through config.
 
 ## Verification
 
+- `npm run typecheck`
+- `npm run build`
+- `npm run handoff:check`
+
 ## Completion Checklist
-- [ ] investigation finished
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
+- [x] investigation finished
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
