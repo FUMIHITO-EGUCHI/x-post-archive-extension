@@ -1,9 +1,9 @@
 # Task Packet: Fix Orphaned Tag Creation on Preview Cancel
 
 ## Meta
-- status: waiting
+- status: done
 - owner: Codex
-- branch: feature/fix-orphaned-tag-on-preview-cancel
+- branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: high
 - files_in_scope: src/features/archive/archive-service.ts
 - blocked_by: none
@@ -61,24 +61,36 @@ Prefer the simpler alternative unless it requires more code.
 
 ## Acceptance Criteria
 
-- [ ] `bulkAssignTagPreview` does not call `addTag()` or any other DB write
-- [ ] `bulkAssignTagApplyBatch` creates new tags before assigning them
-- [ ] Cancelling after preview leaves no new tag rows in the DB
-- [ ] Confirming after preview still creates all expected tag rows and assignments
-- [ ] `npm run typecheck` pass
-- [ ] `npm run build` pass
+- [x] `bulkAssignTagPreview` does not call `addTag()` or any other DB write
+- [x] `bulkAssignTagApplyBatch` creates new tags before assigning them
+- [x] Cancelling after preview leaves no new tag rows in the DB
+- [x] Confirming after preview still creates all expected tag rows and assignments
+- [x] `npm run typecheck` pass
+- [x] `npm run build` pass
 
 ## Work Log
 
+- `2026-04-14 Codex`: Removed `addTag()` from `bulkAssignTagPreview`. Preview now returns either the existing tag or a provisional tag object without persisting it.
+- `2026-04-14 Codex`: Updated `bulkAssignTagApplyBatch` to resolve the target tag by id/name and create it in the apply transaction before adding `post_tags`.
+
 ## Result
+
+Done.
+
+- `bulkAssignTagPreview` no longer writes a new tag row when the user opens a preview for a new tag name.
+- `bulkAssignTagApplyBatch` now creates the missing tag inside the write transaction before creating assignment rows.
+- The runtime/UI request and response shape did not change.
 
 ## Verification
 
+- `npm run typecheck`
+- `npm run build`
+
 ## Completion Checklist
-- [ ] investigation finished
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
+- [x] investigation finished
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
