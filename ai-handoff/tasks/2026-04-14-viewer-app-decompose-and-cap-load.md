@@ -531,6 +531,7 @@ Do these in order. Each step is independently committable and passses typecheck/
 - `2026-04-15 Codex`: Extracted media lightbox state, OPFS object URL loading, dialog a11y wiring, keyboard navigation, and dialog rendering from `viewer-app.tsx` into `media-lightbox.tsx`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely refetch controls or viewer preferences extraction.
 - `2026-04-15 Codex`: Committed the cap, `PostCard`, `SettingsScreen`, and media lightbox extraction as `be3716d Decompose viewer app sections`.
 - `2026-04-15 Codex`: Extracted refetch status polling and refetch action handlers from `viewer-app.tsx` into `use-refetch-controls.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely viewer preferences extraction.
+- `2026-04-15 Codex`: Extracted viewer preference state, preference persistence handlers, theme side effect, storage estimate state, and preference loading into `use-viewer-preferences.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely tag operations or archive loader extraction.
 
 ## Result
 
@@ -541,7 +542,8 @@ Do these in order. Each step is independently committable and passses typecheck/
   - Settings page rendering and settings tab state are now extracted to `src/features/viewer/components/settings-screen.tsx`.
   - Media lightbox state, OPFS object URL loading, dialog a11y wiring, keyboard navigation, and rendering are now extracted to `src/features/viewer/components/media-lightbox.tsx`.
   - Refetch status polling and refetch action handlers are now extracted to `src/features/viewer/components/use-refetch-controls.ts`.
-  - `viewer-app.tsx` still owns preferences, archive loading, filtering, and session state; broader decomposition is still active.
+  - Viewer preference state, preference persistence handlers, theme side effect, storage estimate state, and preference loading are now extracted to `src/features/viewer/components/use-viewer-preferences.ts`.
+  - `viewer-app.tsx` still owns tag operations, archive loading, filtering, and session state; broader decomposition is still active.
 
 ## Verification
 
@@ -555,6 +557,8 @@ Do these in order. Each step is independently committable and passses typecheck/
 - `npm run build` passed after media lightbox extraction.
 - `npm run typecheck` passed after refetch controls extraction.
 - `npm run build` passed after refetch controls extraction.
+- `npm run typecheck` passed after viewer preferences extraction.
+- `npm run build` passed after viewer preferences extraction.
 
 ## Completion Checklist
 - [x] Claude design review complete (needs_from_claude resolved)
