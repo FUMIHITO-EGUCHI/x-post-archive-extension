@@ -3,12 +3,10 @@ import type { ArchiveBackupSummary } from "../../../types/archive-backup";
 import type { RefetchStatusRecord } from "../../../types/refetch";
 import {
   type ArchiveTransferProgress,
+  importArchiveBackupZip,
   streamArchiveBackupZip
 } from "../../archive/archive-maintenance-service";
-import {
-  requestResetArchive,
-  requestRestoreArchive
-} from "../../runtime/client";
+import { requestResetArchive } from "../../runtime/client";
 import { createLogger } from "../../logging/logger";
 import type { ArchiveLanguage } from "../../settings/archive-language";
 
@@ -148,16 +146,11 @@ export function SettingsArchiveMaintenancePanel({
     setRestoreTone("neutral");
     setRestoreProgress(null);
 
-    const stagingPath = "restore-staging/backup.zip";
-
     try {
       const restoreFile = await readRestoreFileWithRetry(restoreHandle, language);
-
-      setRestoreStatus(isJapanese ? "バックアップを準備中..." : "Preparing backup...");
-      await writeRestoreStagingFile(restoreFile);
-
-      setRestoreStatus(isJapanese ? "バックグラウンドで復元中..." : "Restoring in background...");
-      const summary = await requestRestoreArchive(stagingPath);
+      const summary = await importArchiveBackupZip(restoreFile, (progress) => {
+        setRestoreProgress(progress);
+      });
       await onArchiveChanged();
 
       setRestoreTone("success");
@@ -177,7 +170,6 @@ export function SettingsArchiveMaintenancePanel({
         }
       });
 
-      await cleanupRestoreStagingFile(stagingPath);
       setRestoreTone("error");
       setRestoreStatus(getErrorMessage(error, isJapanese ? "復元に失敗しました。" : "Restore failed."));
     } finally {
@@ -666,41 +658,6 @@ function formatDurationLabel(valueMs: number, language: ArchiveLanguage): string
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
-}
-
-async function writeRestoreStagingFile(blob: Blob): Promise<void> {
-  const root = await navigator.storage.getDirectory();
-  const stagingDir = await root.getDirectoryHandle("restore-staging", { create: true });
-  const fileHandle = await stagingDir.getFileHandle("backup.zip", { create: true });
-  const writable = await fileHandle.createWritable();
-
-  try {
-    await writable.write(blob);
-  } finally {
-    await writable.close();
-  }
-}
-
-async function cleanupRestoreStagingFile(stagingPath: string): Promise<void> {
-  try {
-    const root = await navigator.storage.getDirectory();
-    const segments = stagingPath.split("/").filter((s) => s.length > 0);
-    const fileName = segments.at(-1);
-
-    if (fileName === undefined) {
-      return;
-    }
-
-    let directory = root;
-
-    for (const segment of segments.slice(0, -1)) {
-      directory = await directory.getDirectoryHandle(segment);
-    }
-
-    await directory.removeEntry(fileName);
-  } catch {
-    // best-effort cleanup; file may not exist if staging write failed
-  }
 }
 
 async function handleOpenFilePicker(language: ArchiveLanguage): Promise<FileSystemFileHandle | null> {

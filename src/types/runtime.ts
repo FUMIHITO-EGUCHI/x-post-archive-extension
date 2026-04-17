@@ -5,7 +5,6 @@ import type {
   SavePostInput,
   TagRecord
 } from "./archive";
-import type { ArchiveBackupSummary } from "./archive-backup";
 import type { LogLevel } from "./logger";
 import type {
   RefetchQueuePriority,
@@ -139,12 +138,6 @@ export type ResetArchiveMessage = {
   type: "archive/reset";
 };
 
-export type RestoreArchiveMessage = {
-  type: "archive/restore";
-  /** OPFS path where the viewer staged the backup zip (e.g. "restore-staging/backup.zip") */
-  stagingPath: string;
-};
-
 export type ClearLogsMessage = {
   type: "logs/clear";
 };
@@ -181,7 +174,6 @@ export type RuntimeMessage =
   | RefetchClearMessage
   | RefetchCompleteMessage
   | ResetArchiveMessage
-  | RestoreArchiveMessage
   | ClearLogsMessage
   | DebugLogMessage;
 
@@ -330,11 +322,6 @@ export type ResetArchiveResponse = {
   type: "archive/reset-result";
 };
 
-export type RestoreArchiveResponse = {
-  type: "archive/restore-result";
-  summary: ArchiveBackupSummary;
-};
-
 export type ClearLogsResponse = {
   type: "logs/clear-result";
   deleted: boolean;
@@ -368,6 +355,5 @@ export type RuntimeResponse =
   | RefetchClearResponse
   | RefetchCompleteResponse
   | ResetArchiveResponse
-  | RestoreArchiveResponse
   | ClearLogsResponse
   | RuntimeErrorResponse;

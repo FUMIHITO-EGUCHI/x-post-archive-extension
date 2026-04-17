@@ -2,32 +2,44 @@
 
 ## Active
 
-- none
+- task_file: `ai-handoff/tasks/2026-04-17-fix-large-backup-restore-timeout.md`
 
 ## Scope
 
-- No active task.
+- Viewer で `importArchiveBackupZip` を直接呼び、Background 経由の staging / sendMessage を廃止
 
 ## Coordination
 
 - blocked_by: `none`
 - related_findings: `none`
 - needs_from_claude: `none`
-- handoff_to_codex: `none`
+- handoff_to_codex: 設計完了 (2026-04-17)
 
 ## Next Action
 
-- next_action: `Review remaining findings or prepare merge when requested.`
+- next_action: `Manual verify: 大容量バックアップ復元と progress 表示を実機確認`
 
 ## Acceptance Criteria
 
-- [ ] No active task.
+- [ ] 大容量バックアップ（例: 15GB超）が Viewer で直接復元できる
+- [ ] 復元中に progress バーが更新される
+- [x] `npm run typecheck` pass
+- [x] `npm run build` pass
 
 ## Completion Checklist
-- [ ] No active task.
+
+- [x] investigation finished
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
 
 ## Recent Updates
 
+- `2026-04-17 Claude`: started `2026-04-17-fix-large-backup-restore-timeout`; 15.6GB バックアップが 10分タイムアウトで失敗する問題を調査。Viewer で直接復元するよう設計完了。
+- `2026-04-17 Codex`: implemented `2026-04-17-fix-large-backup-restore-timeout`; Viewer restore now calls `importArchiveBackupZip` directly and `archive/restore` runtime staging path was removed. `npm run typecheck` / `npm run build` passed. Manual large-backup verification remains.
 - `2026-04-17 Codex`: completed `2026-04-17-integrity-media-checksum-and-quota`; media writes now store SHA-256 checksums and quota failures are logged distinctly.
 - `2026-04-17 Codex`: completed `2026-04-17-integrity-post-tag-atomicity`; new post save now assigns auto-tags inside the create transaction.
 - `2026-04-17 Codex`: completed `2026-04-17-perf-keyset-pagination`; added cursor pagination for unfiltered `saved_at` / `posted_at` load-more while preserving offset fallback.
