@@ -734,6 +734,10 @@ function parseMediaRecord(value: unknown): MediaRecord {
     height: requireNullableFiniteNumberValue(value.height, "media.height"),
     mime_type: requireNullableString(value.mime_type, "media.mime_type"),
     byte_size: requireNullableFiniteNumberValue(value.byte_size, "media.byte_size"),
+    checksum:
+      value.checksum === undefined
+        ? null
+        : requireNullableString(value.checksum, "media.checksum"),
     storage_status: storageStatus,
     saved_at: requireFiniteNumberValue(value.saved_at, "media.saved_at"),
     last_error: requireNullableString(value.last_error, "media.last_error")

@@ -50,6 +50,7 @@ export type MediaRecord = {
   height: number | null;
   mime_type: string | null;
   byte_size: number | null;
+  checksum: string | null;
   storage_status: MediaStorageStatus;
   saved_at: number;
   last_error: string | null;
