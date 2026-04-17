@@ -76,6 +76,7 @@ import type {
   ArchiveTagSummaryRecord,
   DateFilterTarget,
   ListPostsPageInput,
+  PostPageCursor,
   PostFilterInput,
   UserSummary
 } from "../../types/viewer";
@@ -247,6 +248,7 @@ export async function listArchivePostsPage(
   totalCount: number;
   hasMore: boolean;
   nextOffset: number;
+  nextCursor: PostPageCursor | null;
 }> {
   const normalizedOffset = normalizePageOffset(input.offset);
   const normalizedLimit = normalizePageLimit(input.limit);
@@ -258,32 +260,46 @@ export async function listArchivePostsPage(
       posts: [],
       totalCount: 0,
       hasMore: false,
-      nextOffset: normalizedOffset
+      nextOffset: normalizedOffset,
+      nextCursor: null
     };
   }
 
-  const pagePosts =
+  const pageResult =
     input.sortField === "random"
-      ? await listRandomPostsPage(
-          matchingPostIds,
-          normalizedOffset,
-          normalizedLimit,
-          normalizeRandomSeed(input.randomSeed)
-        )
+      ? {
+          posts: await listRandomPostsPage(
+            matchingPostIds,
+            normalizedOffset,
+            normalizedLimit,
+            normalizeRandomSeed(input.randomSeed)
+          ),
+          nextCursor: null
+        }
       : matchingPostIds === null
       ? await listPostsSliceBySort(
           input.sortField,
           input.sortDirection,
           normalizedOffset,
-          normalizedLimit
+          normalizedLimit,
+          normalizePostPageCursor(input.cursor)
         )
-      : await listFilteredPostsPage(input, matchingPostIds, normalizedOffset, normalizedLimit);
+      : {
+          posts: await listFilteredPostsPage(
+            input,
+            matchingPostIds,
+            normalizedOffset,
+            normalizedLimit
+          ),
+          nextCursor: null
+        };
 
   return {
-    posts: await hydrateArchivePosts(pagePosts),
+    posts: await hydrateArchivePosts(pageResult.posts),
     totalCount,
-    hasMore: normalizedOffset + pagePosts.length < totalCount,
-    nextOffset: normalizedOffset + pagePosts.length
+    hasMore: normalizedOffset + pageResult.posts.length < totalCount,
+    nextOffset: normalizedOffset + pageResult.posts.length,
+    nextCursor: pageResult.nextCursor
   };
 }
 
@@ -1202,12 +1218,13 @@ async function listFilteredPostsPage(
   let scanOffset = 0;
 
   while (results.length < limit) {
-    const chunk = await listPostsSliceBySort(
+    const chunkResult = await listPostsSliceBySort(
       input.sortField,
       input.sortDirection,
       scanOffset,
       scanChunkSize
     );
+    const chunk = chunkResult.posts;
 
     if (chunk.length === 0) {
       break;
@@ -1458,6 +1475,29 @@ function selectSeededRandomIds(
   }
 
   return ids.slice(offset, selectionEnd);
+}
+
+function normalizePostPageCursor(value: PostPageCursor | null | undefined): PostPageCursor | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (
+    (value.sortField !== "saved_at" && value.sortField !== "posted_at") ||
+    (value.sortDirection !== "asc" && value.sortDirection !== "desc") ||
+    !Number.isFinite(value.value) ||
+    typeof value.xPostId !== "string" ||
+    value.xPostId.trim() === ""
+  ) {
+    return null;
+  }
+
+  return {
+    sortField: value.sortField,
+    sortDirection: value.sortDirection,
+    value: value.value,
+    xPostId: value.xPostId
+  };
 }
 
 function createSeededRandom(seed: number): () => number {

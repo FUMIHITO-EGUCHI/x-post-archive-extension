@@ -16,6 +16,7 @@ import type {
   ArchiveTagRedirectSummaryRecord,
   ArchiveTagSummaryRecord,
   ListPostsPageInput,
+  PostPageCursor,
   PostFilterInput,
   UserSummary
 } from "./viewer";
@@ -207,6 +208,7 @@ export type ListPostsPageResponse = {
   posts: ArchivePostRecord[];
   totalCount: number;
   nextOffset: number;
+  nextCursor: PostPageCursor | null;
   hasMore: boolean;
 };
 

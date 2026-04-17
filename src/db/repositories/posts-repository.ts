@@ -1,7 +1,7 @@
 import { archiveDb } from "../archive-database";
 import Dexie from "dexie";
 import type { PostRecord } from "../../types/archive";
-import type { PostSortField, SortDirection } from "../../types/viewer";
+import type { PostPageCursor, PostSortField, SortDirection } from "../../types/viewer";
 
 export async function getPost(xPostId: string): Promise<PostRecord | undefined> {
   return archiveDb.posts.get(xPostId);
@@ -72,18 +72,60 @@ export async function listPostsSliceBySort(
   sortField: PostSortField,
   sortDirection: SortDirection,
   offset: number,
-  limit: number
-): Promise<PostRecord[]> {
+  limit: number,
+  cursor: PostPageCursor | null = null
+): Promise<{
+  posts: PostRecord[];
+  nextCursor: PostPageCursor | null;
+}> {
   if (sortField === "random") {
     throw new Error("Random ordering requires a viewer-provided seed and should be resolved upstream.");
   }
 
-  const ordered =
-    sortDirection === "desc"
-      ? archiveDb.posts.orderBy(sortField).reverse()
-      : archiveDb.posts.orderBy(sortField);
+  const canUseCursor =
+    cursor !== null &&
+    cursor.sortField === sortField &&
+    cursor.sortDirection === sortDirection &&
+    (sortField === "saved_at" || sortField === "posted_at");
 
-  return ordered.offset(offset).limit(limit).toArray();
+  const ordered = canUseCursor
+    ? sortDirection === "desc"
+      ? archiveDb.posts.where(sortField).below(cursor.value).reverse()
+      : archiveDb.posts.where(sortField).above(cursor.value)
+    : sortDirection === "desc"
+      ? archiveDb.posts.orderBy(sortField).reverse().offset(offset)
+      : archiveDb.posts.orderBy(sortField).offset(offset);
+
+  const posts = await ordered.limit(limit).toArray();
+
+  return {
+    posts,
+    nextCursor: buildPostPageCursor(posts, sortField, sortDirection, limit)
+  };
+}
+
+function buildPostPageCursor(
+  posts: PostRecord[],
+  sortField: PostSortField,
+  sortDirection: SortDirection,
+  limit: number
+): PostPageCursor | null {
+  if (posts.length < limit || (sortField !== "saved_at" && sortField !== "posted_at")) {
+    return null;
+  }
+
+  const lastPost = posts[posts.length - 1];
+
+  if (lastPost === undefined) {
+    return null;
+  }
+
+  return {
+    sortField,
+    sortDirection,
+    value: lastPost[sortField],
+    xPostId: lastPost.x_post_id
+  };
 }
 
 export async function deletePostRecord(xPostId: string): Promise<void> {

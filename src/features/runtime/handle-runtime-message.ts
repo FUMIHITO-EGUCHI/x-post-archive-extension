@@ -205,6 +205,7 @@ export async function handleRuntimeMessage(
         posts: result.posts,
         totalCount: result.totalCount,
         nextOffset: result.nextOffset,
+        nextCursor: result.nextCursor,
         hasMore: result.hasMore
       };
       return response;

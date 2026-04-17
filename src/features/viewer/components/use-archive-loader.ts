@@ -3,6 +3,7 @@ import type { ArchivePostRecord } from "../../../types/archive";
 import type {
   DateFilterTarget,
   ListPostsPageInput,
+  PostPageCursor,
   PostSortField,
   SortDirection
 } from "../../../types/viewer";
@@ -34,6 +35,7 @@ export function useArchiveLoader() {
   const [status, setStatus] = useState<ViewerStatus>("idle");
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadNotice, setLoadNotice] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<PostPageCursor | null>(null);
   const loadArchiveRequestIdRef = useRef(0);
 
   async function loadArchivePage(input: LoadArchivePageInput): Promise<void> {
@@ -53,6 +55,7 @@ export function useArchiveLoader() {
         limit: input.limit,
         sortField: input.sortField,
         sortDirection: input.sortDirection,
+        cursor: input.append ? nextCursor : null,
         randomSeed: input.randomSeed,
         tagFilter: input.tagFilter,
         authorFilter: input.authorFilter,
@@ -71,6 +74,7 @@ export function useArchiveLoader() {
 
       setArchiveTotalCount(response.totalCount);
       setHasMorePosts(response.hasMore);
+      setNextCursor(response.nextCursor);
       setStatus("ready");
     } catch (error) {
       if (requestId !== loadArchiveRequestIdRef.current) {
@@ -91,6 +95,7 @@ export function useArchiveLoader() {
         setPosts([]);
         setArchiveTotalCount(0);
         setHasMorePosts(false);
+        setNextCursor(null);
       }
 
       setStatus("ready");
