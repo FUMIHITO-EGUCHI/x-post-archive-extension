@@ -13,7 +13,7 @@
 ## Scope
 
 - Start with `MAX_SESSION_RESTORE_LIMIT = 200` cap for session restore `initialLimit`
-- Continue safe decomposition steps; `PostCard`, `SettingsScreen`, media lightbox, refetch controls, viewer preferences, tag operations, archive loader, and sort/filter extraction are now done
+- Continue safe decomposition steps; `PostCard`, `SettingsScreen`, media lightbox, refetch controls, viewer preferences, tag operations, archive loader, sort/filter, and filter modal extraction are now done
 - Keep data loading, filter/sort behavior, and viewer UI behavior unchanged
 
 ## Coordination
@@ -25,7 +25,7 @@
 
 ## Next Action
 
-- next_action: `Continue decomposition with the next safe slice, likely filter modal or viewer session extraction.`
+- next_action: `Continue decomposition with the next safe slice, likely viewer session extraction.`
 
 ## Acceptance Criteria
 
@@ -59,6 +59,8 @@
 - `2026-04-15 Codex`: extracted per-post tag picker/action state and tag add/remove handlers into `use-tag-operations.ts`; typecheck/build passed; task remains active for further decomposition
 - `2026-04-15 Codex`: extracted archive post list/loading state and `loadArchivePage` into `use-archive-loader.ts`; typecheck/build passed; task remains active for further decomposition
 - `2026-04-17 Codex`: extracted sort/filter state, random seed handling, filter request helpers, and sort/filter reload handlers into `use-sort-filter.ts`; typecheck/build passed; task remains active for further decomposition
+- `2026-04-17 Codex`: committed `ba5ee2e refactor: extract viewer sort filter`
+- `2026-04-17 Codex`: extracted filter modal state, draft date validation, search state, and incremental tag/user option lists into `use-filter-modal.ts`; typecheck/build passed; task remains active for further decomposition
 
 ## Waiting Tasks
 

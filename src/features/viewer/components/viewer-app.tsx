@@ -26,7 +26,6 @@ import {
   loadViewerSession,
   persistViewerSession
 } from "../viewer-session-storage";
-import { useIncrementalList } from "./use-incremental-list";
 import {
   StickyToolbar,
   type FilterModalTab,
@@ -49,12 +48,11 @@ import {
   DEFAULT_DATE_FILTER_TARGET,
   useSortFilter
 } from "./use-sort-filter";
+import { useFilterModal } from "./use-filter-modal";
 
 type ViewerScreen = "archive" | "settings";
-type TagSortOption = "count" | "name";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_SESSION_RESTORE_LIMIT = 200;
-const FILTER_MODAL_LIST_SIZE = 40;
 const logger = createLogger("viewer");
 
 export function ViewerApp() {
@@ -70,20 +68,12 @@ export function ViewerApp() {
     mediaBytes: 0
   });
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const [filterModalActiveTab, setFilterModalActiveTab] = useState<FilterModalTab>("user");
   const [isBulkTagModalOpen, setIsBulkTagModalOpen] = useState(false);
-  const [tagSearchQuery, setTagSearchQuery] = useState("");
-  const [userSearchQuery, setUserSearchQuery] = useState("");
-  const [dateFilterDraftTarget, setDateFilterDraftTarget] =
-    useState<DateFilterTarget>(DEFAULT_DATE_FILTER_TARGET);
-  const [dateFilterDraftFrom, setDateFilterDraftFrom] = useState("");
-  const [dateFilterDraftTo, setDateFilterDraftTo] = useState("");
-  const [tagSortOption, setTagSortOption] = useState<TagSortOption>("count");
   const [userSummaries, setUserSummaries] = useState<UserSummary[]>([]);
   const archiveLoader = useArchiveLoader();
   const mediaLightbox = useMediaLightbox();
   const shouldPersistSessionRef = useRef(false);
+  const closeFilterModalRef = useRef<() => void>(() => {});
   const restoreScrollTopRef = useRef<number | null>(null);
   const [restoreTargetPostId, setRestoreTargetPostId] = useState<string | null>(null);
   const archiveSectionRef = useRef<HTMLElement | null>(null);
@@ -103,7 +93,9 @@ export function ViewerApp() {
   } = archiveLoader;
   const sortFilter = useSortFilter({
     loadArchivePage,
-    closeFilterModal
+    closeFilterModal: () => {
+      closeFilterModalRef.current();
+    }
   });
   const {
     sortField,
@@ -134,7 +126,6 @@ export function ViewerApp() {
     handleClearAllFilters: clearAllFilters,
     handleLoadMore: loadMorePosts
   } = sortFilter;
-
   const preferences = useViewerPreferences({
     archiveMediaBytes: archiveSummary.mediaBytes,
     archivePostCount: archiveSummary.postCount,
@@ -157,6 +148,47 @@ export function ViewerApp() {
     handleSessionRestoreModeChange,
     handleClearSavedSession
   } = preferences;
+  const filterModal = useFilterModal({
+    activeAuthorFilter,
+    activeDateFilterTarget,
+    activeDateFrom,
+    activeDateTo,
+    activeTagFilter,
+    availableTags,
+    getTagDisplayName,
+    language,
+    userSummaries
+  });
+  closeFilterModalRef.current = filterModal.closeFilterModal;
+  const {
+    isFilterModalOpen,
+    filterModalActiveTab,
+    tagSearchQuery,
+    setTagSearchQuery,
+    userSearchQuery,
+    setUserSearchQuery,
+    dateFilterDraftTarget,
+    setDateFilterDraftTarget,
+    dateFilterDraftFrom,
+    setDateFilterDraftFrom,
+    dateFilterDraftTo,
+    setDateFilterDraftTo,
+    dateFilterDraftError,
+    tagSortOption,
+    setTagSortOption,
+    visibleTagOptions,
+    displayedTagOptions,
+    remainingTagOptionCount,
+    hasMoreTagOptions,
+    loadMoreTagOptions,
+    displayedUserOptions,
+    remainingUserOptionCount,
+    hasMoreUserOptions,
+    loadMoreUserOptions,
+    openFilterModal,
+    closeFilterModal,
+    resetDateFilterDraft
+  } = filterModal;
   const refetchControls = useRefetchControls({
     language,
     onRefetchComplete: refreshArchive,
@@ -206,24 +238,6 @@ export function ViewerApp() {
   );
   const hasActiveDateFilter =
     activeDateFilterTarget !== null && (activeDateFrom !== null || activeDateTo !== null);
-  const dateFilterDraftError = getDateFilterDraftError(
-    dateFilterDraftFrom,
-    dateFilterDraftTo,
-    language
-  );
-
-  function openFilterModal(tab: FilterModalTab) {
-    setDateFilterDraftTarget(activeDateFilterTarget ?? DEFAULT_DATE_FILTER_TARGET);
-    setDateFilterDraftFrom(activeDateFrom ?? "");
-    setDateFilterDraftTo(activeDateTo ?? "");
-
-    setFilterModalActiveTab(tab);
-    setIsFilterModalOpen(true);
-  }
-
-  function closeFilterModal() {
-    setIsFilterModalOpen(false);
-  }
 
   function closeBulkTagModal() {
     setIsBulkTagModalOpen(false);
@@ -241,85 +255,6 @@ export function ViewerApp() {
       tag.display_name
     );
   }
-
-  const visibleTagOptions = useMemo(() => {
-    const normalizedQuery = normalizeTagSearchQuery(tagSearchQuery);
-    const filtered = availableTags.filter(({ tag }) => {
-      if (normalizedQuery === "") {
-        return true;
-      }
-
-      const displayName = getTagDisplayName(tag).toLocaleLowerCase("ja-JP");
-      return (
-        displayName.includes(normalizedQuery) || tag.normalized_name.includes(normalizedQuery)
-      );
-    });
-
-    return filtered.sort((left, right) => {
-      if (tagSortOption === "count") {
-        const countDifference = right.postCount - left.postCount;
-
-        if (countDifference !== 0) {
-          return countDifference;
-        }
-      }
-
-      return getTagDisplayName(left.tag).localeCompare(getTagDisplayName(right.tag), "ja-JP");
-    });
-  }, [availableTags, language, tagSearchQuery, tagSortOption]);
-
-  const visibleUserOptions = useMemo(() => {
-    const normalizedQuery = normalizeUserSearchQuery(userSearchQuery);
-
-    if (normalizedQuery === "") {
-      return userSummaries;
-    }
-
-    return userSummaries.filter((user) => {
-      return (
-        user.display_name.toLocaleLowerCase("ja-JP").includes(normalizedQuery) ||
-        user.screen_name.includes(normalizedQuery)
-      );
-    });
-  }, [userSearchQuery, userSummaries]);
-  const requiredVisibleTagOptionCount = useMemo(() => {
-    if (activeTagFilter === null) {
-      return 0;
-    }
-
-    const index = visibleTagOptions.findIndex(
-      ({ tag }) => tag.normalized_name === activeTagFilter
-    );
-    return index < 0 ? 0 : index + 1;
-  }, [activeTagFilter, visibleTagOptions]);
-  const {
-    visibleItems: displayedTagOptions,
-    remainingCount: remainingTagOptionCount,
-    hasMore: hasMoreTagOptions,
-    loadMore: loadMoreTagOptions
-  } = useIncrementalList(visibleTagOptions, {
-    initialCount: FILTER_MODAL_LIST_SIZE,
-    step: FILTER_MODAL_LIST_SIZE,
-    requiredCount: requiredVisibleTagOptionCount
-  });
-  const requiredVisibleUserOptionCount = useMemo(() => {
-    if (activeAuthorFilter === null) {
-      return 0;
-    }
-
-    const index = visibleUserOptions.findIndex((user) => user.screen_name === activeAuthorFilter);
-    return index < 0 ? 0 : index + 1;
-  }, [activeAuthorFilter, visibleUserOptions]);
-  const {
-    visibleItems: displayedUserOptions,
-    remainingCount: remainingUserOptionCount,
-    hasMore: hasMoreUserOptions,
-    loadMore: loadMoreUserOptions
-  } = useIncrementalList(visibleUserOptions, {
-    initialCount: FILTER_MODAL_LIST_SIZE,
-    step: FILTER_MODAL_LIST_SIZE,
-    requiredCount: requiredVisibleUserOptionCount
-  });
 
   useEffect(() => {
     let cancelled = false;
@@ -645,9 +580,7 @@ export function ViewerApp() {
   }
 
   async function handleApplyDateFilter() {
-    const validationError = getDateFilterDraftError(dateFilterDraftFrom, dateFilterDraftTo, language);
-
-    if (validationError !== null) {
+    if (dateFilterDraftError !== null) {
       return;
     }
 
@@ -664,16 +597,12 @@ export function ViewerApp() {
   }
 
   async function handleClearDateFilter() {
-    setDateFilterDraftTarget(DEFAULT_DATE_FILTER_TARGET);
-    setDateFilterDraftFrom("");
-    setDateFilterDraftTo("");
+    resetDateFilterDraft();
     await clearDateFilter();
   }
 
   async function handleClearAllFilters() {
-    setDateFilterDraftTarget(DEFAULT_DATE_FILTER_TARGET);
-    setDateFilterDraftFrom("");
-    setDateFilterDraftTo("");
+    resetDateFilterDraft();
     await clearAllFilters();
   }
 
@@ -1018,14 +947,6 @@ function formatUserSummaryLabel(user: UserSummary): string {
   return `${user.display_name} (@${user.screen_name})`;
 }
 
-function normalizeTagSearchQuery(value: string): string {
-  return value.trim().toLocaleLowerCase("ja-JP");
-}
-
-function normalizeUserSearchQuery(value: string): string {
-  return value.trim().replace(/^@+/, "").toLocaleLowerCase("ja-JP");
-}
-
 function normalizeDateInputValue(value: string): string | null {
   const trimmedValue = value.trim();
 
@@ -1063,42 +984,6 @@ function parseLocalDateInput(value: string): Date | null {
   }
 
   return date;
-}
-
-function getDateFilterDraftError(
-  dateFrom: string,
-  dateTo: string,
-  language: ArchiveLanguage
-): string | null {
-  const normalizedDateFrom = normalizeDateInputValue(dateFrom);
-  const normalizedDateTo = normalizeDateInputValue(dateTo);
-
-  if (dateFrom !== "" && normalizedDateFrom === null) {
-    return language === "ja"
-      ? "開始日に有効な日付を入力してください。"
-      : "Enter a valid start date.";
-  }
-
-  if (dateTo !== "" && normalizedDateTo === null) {
-    return language === "ja"
-      ? "終了日に有効な日付を入力してください。"
-      : "Enter a valid end date.";
-  }
-
-  const fromDate = normalizedDateFrom === null ? null : parseLocalDateInput(normalizedDateFrom);
-  const toDate = normalizedDateTo === null ? null : parseLocalDateInput(normalizedDateTo);
-
-  if (fromDate === null || toDate === null) {
-    return null;
-  }
-
-  if (fromDate.getTime() > toDate.getTime()) {
-    return language === "ja"
-      ? "開始日は終了日以前にしてください。"
-      : "Start date must be on or before the end date.";
-  }
-
-  return null;
 }
 
 function formatDateFilterTargetLabel(
