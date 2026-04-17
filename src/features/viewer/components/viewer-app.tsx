@@ -2,18 +2,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArchiveTagRecord } from "../../../types/archive";
 import type {
-  ArchiveSummaryRecord,
-  ArchiveTagSummaryRecord,
   DateFilterTarget,
   PostSortField,
-  SortDirection,
-  UserSummary,
+  SortDirection
 } from "../../../types/viewer";
 import {
-  requestArchiveSummary,
-  requestDeletePost,
-  requestTagSummaries,
-  requestUserSummaries
+  requestDeletePost
 } from "../../runtime/client";
 import { createLogger } from "../../logging/logger";
 import { BulkTagModal } from "./bulk-tag-modal";
@@ -46,6 +40,12 @@ import {
 } from "./use-sort-filter";
 import { useFilterModal } from "./use-filter-modal";
 import { useViewerSession } from "./use-viewer-session";
+import { useArchiveMetadata } from "./use-archive-metadata";
+import {
+  formatArchiveCountLabel,
+  formatEmptyArchiveMessage,
+  normalizeDateInputValue
+} from "./viewer-formatters";
 
 type ViewerScreen = "archive" | "settings";
 const DEFAULT_PAGE_SIZE = 50;
@@ -54,19 +54,9 @@ const logger = createLogger("viewer");
 
 export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
-  const [availableTags, setAvailableTags] = useState<ArchiveTagSummaryRecord[]>([]);
-  const [archiveSummary, setArchiveSummary] = useState<ArchiveSummaryRecord>({
-    postCount: 0,
-    imageCount: 0,
-    videoCount: 0,
-    mediaCount: 0,
-    accountCount: 0,
-    tagCount: 0,
-    mediaBytes: 0
-  });
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isBulkTagModalOpen, setIsBulkTagModalOpen] = useState(false);
-  const [userSummaries, setUserSummaries] = useState<UserSummary[]>([]);
+  const archiveMetadata = useArchiveMetadata();
   const archiveLoader = useArchiveLoader();
   const mediaLightbox = useMediaLightbox();
   const closeFilterModalRef = useRef<() => void>(() => {});
@@ -74,6 +64,12 @@ export function ViewerApp() {
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const backToArchiveButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousScreenRef = useRef<ViewerScreen>("archive");
+  const {
+    archiveSummary,
+    availableTags,
+    refreshArchiveMetadata,
+    userSummaries
+  } = archiveMetadata;
   const {
     posts,
     archiveTotalCount,
@@ -366,27 +362,6 @@ export function ViewerApp() {
       cancelled = true;
     };
   }, []);
-
-  async function refreshArchiveMetadata(): Promise<void> {
-    try {
-      const [summaryResponse, tagsResponse, usersResponse] = await Promise.all([
-        requestArchiveSummary(),
-        requestTagSummaries(),
-        requestUserSummaries()
-      ]);
-
-      setArchiveSummary(summaryResponse.summary);
-      setAvailableTags(tagsResponse.tags);
-      setUserSummaries(usersResponse.users);
-    } catch (error) {
-      logger.error("archive.metadata.load.failed", {
-        message: "Failed to load archive metadata.",
-        context: {
-          error
-        }
-      });
-    }
-  }
 
   async function reloadCurrentArchive(limit = Math.max(posts.length, DEFAULT_PAGE_SIZE)) {
     await Promise.all([
@@ -806,185 +781,6 @@ export function ViewerApp() {
       )}
     </main>
   );
-}
-
-function formatCount(value: number, language: ArchiveLanguage = "en"): string {
-  return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
-}
-
-function formatUserSummaryLabel(user: UserSummary): string {
-  return `${user.display_name} (@${user.screen_name})`;
-}
-
-function normalizeDateInputValue(value: string): string | null {
-  const trimmedValue = value.trim();
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedValue)) {
-    return null;
-  }
-
-  return trimmedValue;
-}
-
-function parseLocalDateInput(value: string): Date | null {
-  const normalizedValue = normalizeDateInputValue(value);
-
-  if (normalizedValue === null) {
-    return null;
-  }
-
-  const [yearText, monthText, dayText] = normalizedValue.split("-");
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-    return null;
-  }
-
-  const date = new Date(year, month - 1, day, 0, 0, 0, 0);
-
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return null;
-  }
-
-  return date;
-}
-
-function formatDateFilterTargetLabel(
-  dateFilterTarget: DateFilterTarget,
-  language: ArchiveLanguage
-): string {
-  if (dateFilterTarget === "posted_at") {
-    return language === "ja" ? "投稿日時" : "Posted at";
-  }
-
-  return language === "ja" ? "保存日時" : "Saved at";
-}
-
-function formatDateInputLabel(value: string, language: ArchiveLanguage): string {
-  const date = parseLocalDateInput(value);
-
-  if (date === null) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "en-US", {
-    dateStyle: "medium"
-  }).format(date);
-}
-
-function formatDateFilterConditionLabel(
-  dateFilterTarget: DateFilterTarget,
-  dateFrom: string | null,
-  dateTo: string | null,
-  language: ArchiveLanguage
-): string {
-  const targetLabel = formatDateFilterTargetLabel(dateFilterTarget, language);
-  const fromLabel = dateFrom === null ? null : formatDateInputLabel(dateFrom, language);
-  const toLabel = dateTo === null ? null : formatDateInputLabel(dateTo, language);
-
-  if (fromLabel !== null && toLabel !== null) {
-    return language === "ja"
-      ? `${targetLabel}: ${fromLabel} - ${toLabel}`
-      : `${targetLabel}: ${fromLabel} to ${toLabel}`;
-  }
-
-  if (fromLabel !== null) {
-    return language === "ja"
-      ? `${targetLabel}: ${fromLabel} 以降`
-      : `${targetLabel}: from ${fromLabel}`;
-  }
-
-  if (toLabel !== null) {
-    return language === "ja"
-      ? `${targetLabel}: ${toLabel} 以前`
-      : `${targetLabel}: until ${toLabel}`;
-  }
-
-  return targetLabel;
-}
-
-function formatEmptyArchiveMessage(input: {
-  language: ArchiveLanguage;
-  selectedTagFilter: ArchiveTagSummaryRecord | null;
-  activeAuthorFilter: string | null;
-  activeDateFilterTarget: DateFilterTarget | null;
-  activeDateFrom: string | null;
-  activeDateTo: string | null;
-  selectedAuthorFilter: UserSummary | null;
-  getTagDisplayName: (tag: ArchiveTagRecord) => string;
-}): string {
-  const {
-    language,
-    selectedTagFilter,
-    activeAuthorFilter,
-    activeDateFilterTarget,
-    activeDateFrom,
-    activeDateTo,
-    selectedAuthorFilter,
-    getTagDisplayName
-  } = input;
-  const activeFilters: string[] = [];
-
-  if (selectedTagFilter === null && activeAuthorFilter === null && activeDateFilterTarget === null) {
-    return language === "ja" ? "保存済み投稿はありません。" : "No saved posts.";
-  }
-
-  if (selectedTagFilter !== null) {
-    activeFilters.push(getTagDisplayName(selectedTagFilter.tag));
-  }
-
-  if (activeAuthorFilter !== null) {
-    activeFilters.push(
-      selectedAuthorFilter === null
-        ? `@${activeAuthorFilter}`
-        : formatUserSummaryLabel(selectedAuthorFilter)
-    );
-  }
-
-  if (
-    activeDateFilterTarget !== null &&
-    (activeDateFrom !== null || activeDateTo !== null)
-  ) {
-    activeFilters.push(
-      formatDateFilterConditionLabel(
-        activeDateFilterTarget,
-        activeDateFrom,
-        activeDateTo,
-        language
-      )
-    );
-  }
-
-  return language === "ja"
-    ? `次の条件に一致する保存済み投稿はありません: ${activeFilters.join(" / ")}`
-    : `No saved posts match: ${activeFilters.join(" / ")}.`;
-}
-
-function formatArchiveCountLabel(
-  loadedCount: number,
-  totalCount: number,
-  hasMorePosts: boolean,
-  language: ArchiveLanguage
-): string {
-  if (totalCount === 0) {
-    return language === "ja" ? "表示中 0件 / 全 0件" : "Showing 0 / 0 posts";
-  }
-
-  if (hasMorePosts) {
-    return language === "ja"
-      ? `表示中 ${formatCount(loadedCount, language)}件 / 全 ${formatCount(totalCount, language)}件`
-      : `Showing ${formatCount(loadedCount, language)} / ${formatCount(totalCount, language)} posts`;
-  }
-
-  return language === "ja"
-    ? `表示中 ${formatCount(totalCount, language)}件 / 全 ${formatCount(totalCount, language)}件`
-    : `Showing ${formatCount(totalCount, language)} / ${formatCount(totalCount, language)} posts`;
 }
 
 

@@ -30,22 +30,23 @@
 
 ## Acceptance Criteria
 
-- [ ] Pure formatter/date helpers are moved out of `viewer-app.tsx`
-- [ ] Archive metadata state and refresh function are moved to `use-archive-metadata.ts`
-- [ ] `npm run typecheck` pass
-- [ ] `npm run build` pass
+- [x] Pure formatter/date helpers are moved out of `viewer-app.tsx`
+- [x] Archive metadata state and refresh function are moved to `use-archive-metadata.ts`
+- [x] `npm run typecheck` pass
+- [x] `npm run build` pass
 
 ## Completion Checklist
-- [ ] investigation finished
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
+- [x] investigation finished
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
 
 ## Recent Updates
 
+- `2026-04-17 Codex`: extracted viewer formatters/date helpers to `viewer-formatters.ts` and archive metadata state/refresh to `use-archive-metadata.ts`; typecheck/build passed.
 - `2026-04-17 Codex`: completed `2026-04-17-investigate-handoff-mojibake`; 2026-04-17 handoff files are valid UTF-8 and the mojibake is display-path related.
 - `2026-04-17 Codex`: started `2026-04-17-viewer-app-second-pass`.
 - `2026-04-17 Codex`: closed `2026-04-17-perf-fix-full-scans`; P1-P3 archive full-scan performance fixes are complete.
