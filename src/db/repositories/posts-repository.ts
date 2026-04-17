@@ -31,10 +31,6 @@ export async function updatePostFields(
   await archiveDb.posts.update(xPostId, update);
 }
 
-export async function listPosts(): Promise<PostRecord[]> {
-  return archiveDb.posts.orderBy("saved_at").reverse().toArray();
-}
-
 export async function countPosts(): Promise<number> {
   return archiveDb.posts.count();
 }
