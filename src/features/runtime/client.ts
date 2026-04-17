@@ -1,5 +1,4 @@
 import type { SavePostInput } from "../../types/archive";
-import type { ArchiveBackupSummary } from "../../types/archive-backup";
 import type {
   AddPostTagByNameMessage,
   AddPostTagByNameResponse,
@@ -39,7 +38,6 @@ const DEFAULT_RUNTIME_TIMEOUT_MS = 30000;
 const SAVE_RUNTIME_TIMEOUT_MS = 180000;
 const SAVE_BATCH_RUNTIME_TIMEOUT_MS = 300000;
 const RESET_RUNTIME_TIMEOUT_MS = 60000;
-const RESTORE_RUNTIME_TIMEOUT_MS = 600000;
 
 export async function requestSavePost(
   post: SavePostInput,
@@ -389,19 +387,6 @@ export async function requestResetArchive(): Promise<void> {
   if (response.type !== "archive/reset-result") {
     throw new Error("Unexpected runtime response for archive reset request.");
   }
-}
-
-export async function requestRestoreArchive(stagingPath: string): Promise<ArchiveBackupSummary> {
-  const response = await sendMessage({
-    type: "archive/restore",
-    stagingPath
-  }, RESTORE_RUNTIME_TIMEOUT_MS);
-
-  if (response.type !== "archive/restore-result") {
-    throw new Error("Unexpected runtime response for archive restore request.");
-  }
-
-  return response.summary;
 }
 
 async function sendMessage(
