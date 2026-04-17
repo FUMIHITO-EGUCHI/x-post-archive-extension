@@ -1,7 +1,7 @@
 # Task Packet: Investigate 2026-04-17 Handoff Mojibake
 
 ## Meta
-- status: waiting
+- status: active
 - owner: Codex
 - branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: medium
