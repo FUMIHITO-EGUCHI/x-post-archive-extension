@@ -2,41 +2,50 @@
 
 ## Active
 
-- none
+- id: `2026-04-17-perf-fix-full-scans`
+- title: `パフォーマンス修正 — 全件スキャン排除（High Priority）`
+- owner: `Codex`
+- status: `active`
+- branch: `feature/full-codebase-review-2026-04-14-fixes`
+- priority: `high`
+- task_file: `ai-handoff/tasks/2026-04-17-perf-fix-full-scans.md`
 
 ## Scope
 
-- Start with `MAX_SESSION_RESTORE_LIMIT = 200` cap for session restore `initialLimit`
-- Continue safe decomposition steps; `PostCard`, `SettingsScreen`, media lightbox, refetch controls, viewer preferences, tag operations, archive loader, sort/filter, filter modal, and viewer session extraction are now done
-- Keep data loading, filter/sort behavior, and viewer UI behavior unchanged
+- Replace `getArchiveSummary()` 3-parallel full scans with count queries (P1)
+- Replace `listArchiveUserSummaries()` full scan with indexed query (P2)
+- Replace `listPostIdsByAuthorFilter()` full scan with indexed query (P3)
+- Add `x_username` index to posts table (required for P2/P3)
+- Keep display behavior unchanged
 
 ## Coordination
 
 - blocked_by: `none`
-- related_findings: `full-codebase-review-2026-04-14 P4-001, P4-002`
+- related_findings: `2026-04-17-cia-perf-audit`
 - needs_from_claude: `none`
-- handoff_to_codex: `design complete (2026-04-14); implement decomposition per design section; start with initialLimit cap, then PostCard extraction`
+- handoff_to_codex: `design complete (2026-04-17); implement per task packet design section`
 
 ## Next Action
 
-- next_action: `Pick up the next waiting task when requested.`
+- next_action: `Implement P1-P3 performance fixes per task packet design.`
 
 ## Acceptance Criteria
 
-- [x] `initialLimit` session restore is capped at `MAX_SESSION_RESTORE_LIMIT = 200`
-- [x] Viewer decomposition is advanced without behavior changes
-- [x] `npm run typecheck` pass
-- [x] `npm run build` pass
+- [ ] `getArchiveSummary()` uses count queries instead of `listPosts()` full scan
+- [ ] `listArchiveUserSummaries()` uses `x_username` index instead of full scan
+- [ ] `listPostIdsByAuthorFilter()` uses indexed query instead of full scan
+- [ ] `npm run typecheck` pass
+- [ ] `npm run build` pass
 
 ## Completion Checklist
 
-- [x] investigation finished
-- [x] implementation finished
-- [x] `npm run typecheck`
-- [x] `npm run build`
-- [x] task packet `Result` updated
-- [x] task packet `Verification` updated
-- [x] `ai-handoff/current-task.md` updated
+- [ ] investigation finished
+- [ ] implementation finished
+- [ ] `npm run typecheck`
+- [ ] `npm run build`
+- [ ] task packet `Result` updated
+- [ ] task packet `Verification` updated
+- [ ] `ai-handoff/current-task.md` updated
 
 ## Recent Updates
 
@@ -58,10 +67,12 @@
 - `2026-04-17 Codex`: extracted filter modal state, draft date validation, search state, and incremental tag/user option lists into `use-filter-modal.ts`; typecheck/build passed; task remains active for further decomposition
 - `2026-04-17 Codex`: committed `57576d7 refactor: extract viewer filter modal`
 - `2026-04-17 Codex`: extracted viewer session persistence, restore effects, scroll-position persistence, and anchor lookup into `use-viewer-session.ts`; typecheck/build passed
+- `2026-04-17 Claude`: CIA トライアド・パフォーマンス監査完了 → findings: `2026-04-17-cia-perf-audit`; 全件スキャン修正タスク `2026-04-17-perf-fix-full-scans` をアクティブ化
 
 ## Waiting Tasks
 
-- `none`
+- `2026-04-17-investigate-handoff-mojibake`: investigate whether the new 2026-04-17 handoff mojibake is persisted corruption or display-path decoding, then repair or request source text
+- `2026-04-17-viewer-app-second-pass`: ViewerApp 二次分解（メタデータ hook + フォーマッター分離）
 
 ## Recently Completed
 
