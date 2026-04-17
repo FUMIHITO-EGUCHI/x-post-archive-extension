@@ -17,7 +17,7 @@
 
 ## Next Action
 
-- next_action: `Start P7 post/tag save atomicity next.`
+- next_action: `Start P8/P9 media checksum and OPFS quota handling next.`
 
 ## Acceptance Criteria
 
@@ -28,19 +28,18 @@
 
 ## Recent Updates
 
+- `2026-04-17 Codex`: completed `2026-04-17-integrity-post-tag-atomicity`; new post save now assigns auto-tags inside the create transaction.
 - `2026-04-17 Codex`: completed `2026-04-17-perf-keyset-pagination`; added cursor pagination for unfiltered `saved_at` / `posted_at` load-more while preserving offset fallback.
 - `2026-04-17 Codex`: completed `2026-04-17-perf-random-sort-and-dead-code`; removed `posts/list` dead code and changed random ordering to seeded partial shuffle for the requested page window.
-- `2026-04-17 Codex`: completed `2026-04-11-investigate-quoted-container-annotation-coverage`; current live unannotated quote-like containers inspected were false positives, real quote cards were annotated, and the saved/runtime path hydrates the reproduced quoted post.
 
 ## Waiting Tasks
 
-- `2026-04-17-integrity-post-tag-atomicity`: post/tag save atomicity gap fix (P7 Low)
 - `2026-04-17-integrity-media-checksum-and-quota`: media checksum + OPFS quota graceful handling (P8/P9 Low)
 
 ## Recently Completed
 
+- `2026-04-17-integrity-post-tag-atomicity`: New post save now assigns auto-tags inside the create transaction; typecheck/build passed
 - `2026-04-17-perf-keyset-pagination`: Added cursor pagination for unfiltered `saved_at` / `posted_at` load-more; typecheck/build passed
 - `2026-04-17-perf-random-sort-and-dead-code`: Removed `posts/list` dead code and replaced full random shuffle with seeded partial shuffle through the requested page window; typecheck/build passed
 - `2026-04-11-investigate-quoted-container-annotation-coverage`: Current live X real quote cards are annotated correctly; unannotated candidates observed were empty false-positive link/icon containers; no code fix required
 - `2026-04-17-viewer-app-second-pass`: ViewerApp second-pass decomposition is complete; typecheck, build, and handoff check passed
-- `2026-04-17-investigate-handoff-mojibake`: 2026-04-17 handoff mojibake was confirmed as display-path related; no source-text recovery needed; finding added
