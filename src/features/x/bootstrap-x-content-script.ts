@@ -1,5 +1,5 @@
 import type { ContentScriptContext } from "#imports";
-import { requestHasPost, requestSavePost } from "../runtime/client";
+import { requestHasPost, requestNotifyRefetchComplete, requestSavePost } from "../runtime/client";
 import type {
   RefetchCheckMessage,
   RefetchCheckResponse
@@ -488,12 +488,11 @@ async function handleRefetchCheck(message: RefetchCheckMessage): Promise<Refetch
     };
   }
 
-  await chrome.runtime.sendMessage({
-    type: "refetch.complete",
-    xPostId: message.xPostId,
-    post: extracted?.post ?? null,
-    error: extracted === null ? "Post extraction failed." : null
-  });
+  await requestNotifyRefetchComplete(
+    message.xPostId,
+    extracted?.post ?? null,
+    extracted === null ? "Post extraction failed." : null
+  );
 
   return {
     found: true,

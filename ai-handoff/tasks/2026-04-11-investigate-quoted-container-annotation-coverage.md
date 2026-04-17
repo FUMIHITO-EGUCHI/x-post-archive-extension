@@ -1,9 +1,9 @@
 # Task Packet: Investigate Quoted Container Annotation Coverage
 
 ## Meta
-- status: waiting
+- status: done
 - owner: Codex
-- branch: feature/archive-followups
+- branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: medium
 - files_in_scope: src/features/x/annotate-quoted-post-containers.ts, src/features/x/extract-post-from-article.ts, src/entrypoints/x-main.content.ts, src/features/x/bootstrap-x-content-script.ts
 - blocked_by: none
@@ -94,6 +94,9 @@ persistence on duplicate save and refetch paths.
 ## Work Log
 
 - `2026-04-11 Codex`: created this follow-up from the quoted nesting display task so annotation coverage can be investigated separately from the persistence fix.
+- `2026-04-17 Codex`: inspected current live X DOM via shared CDP Chrome. On `https://x.com/home`, the only unannotated `div[role="link"][tabindex="0"]` candidate was an empty 16x16 link/icon container with no tweet text, time, username, media, direct status anchor, or React fiber permalink.
+- `2026-04-17 Codex`: inspected real quote-card examples on `https://x.com/jack_s_daniel/status/2039017934933368904` and `https://x.com/Link_2011A/status/2038919309360275653`. Real quote cards had tweet text, user/time metadata, normal card-sized rects, and `data-xpa-quoted-permalink` from the MAIN-world fiber annotator.
+- `2026-04-17 Codex`: verified the save/runtime path using the extension origin. IndexedDB contains main post `2038919309360275653` with `quoted_post_id = 2038625286254997621`, and `posts/list-page` with `authorFilter = "Link_2011A"` hydrates `quoted_post.x_post_id = 2038625286254997621`.
 
 ## Codex Plan
 
@@ -106,29 +109,55 @@ persistence on duplicate save and refetch paths.
 
 ## Codex Result
 
-Pending.
+- Current X DOM still exposes false-positive `div[role="link"][tabindex="0"]` elements inside articles, but the reproduced unannotated cases were not real quoted-post cards.
+- The real quoted-post cards inspected in current live DOM were annotated correctly with `data-xpa-quoted-permalink`.
+- No narrow annotation or extraction code fix was needed for this task.
+- The real saved quote-card case confirms the extraction/save path produced a non-null quote relationship: main post `2038919309360275653` stores `quoted_post_id = 2038625286254997621`, and runtime hydration returns the quoted post.
 
 ## Changed Files
 
 - `ai-handoff/tasks/2026-04-11-investigate-quoted-container-annotation-coverage.md`
+- `ai-handoff/current-task.md`
 
 ## Verification
 
-Pending.
+- CDP live DOM scan, `https://x.com/home`:
+  - `articleCount = 6`
+  - `quoteLikeArticleCount = 1`
+  - `containerCount = 1`
+  - `annotatedCount = 0`
+  - unannotated candidate had empty text, no direct permalink, no fiber permalink, no tweet text/time/username/media, and a 16x16 rect; treated as a false-positive link/icon container.
+- CDP live DOM scan, `https://x.com/jack_s_daniel/status/2039017934933368904`:
+  - `articleCount = 15`
+  - `containerCount = 2`
+  - `annotatedCount = 1`
+  - real quote card on main article annotated as `/YahooNewsTopics/status/2038898845472731157`; second unannotated container was an empty 16x16 false positive.
+- CDP live DOM scan, `https://x.com/Link_2011A/status/2038919309360275653`:
+  - `articleCount = 14`
+  - `containerCount = 2`
+  - `annotatedCount = 2`
+  - real quote card on main article annotated as `/k50_8/status/2038625286254997621`.
+- Extension IndexedDB check:
+  - main post `2038919309360275653` has `quoted_post_id = 2038625286254997621`.
+  - quoted post `2038625286254997621` exists.
+- Extension runtime `posts/list-page` check with `authorFilter = "Link_2011A"`:
+  - returned post `2038919309360275653`.
+  - `has_quoted_post = true`.
+  - `quoted_post.x_post_id = 2038625286254997621`.
 
 ## Remaining Issues
 
-- Pending investigation.
+- None for current annotation coverage. If a future live DOM sample shows a real quote card without tweet text/time/username markers or without a fiber permalink, capture that specific DOM shape before widening selectors.
 
 ## Suggested Next Action
 
-Pick up this task after closing the quoted nesting persistence fix.
+No active handoff task remains. Pick the next review finding or product task before opening a new branch/task.
 
 ## Completion Checklist
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Codex Result` or `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Codex Result` or `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
+- [x] `npm run handoff:check`

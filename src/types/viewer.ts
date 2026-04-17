@@ -11,6 +11,13 @@ export type PostSortField =
 export type SortDirection = "desc" | "asc";
 export type DateFilterTarget = "saved_at" | "posted_at";
 
+export type PostPageCursor = {
+  sortField: "saved_at" | "posted_at";
+  sortDirection: SortDirection;
+  value: number;
+  xPostId: string;
+};
+
 export type ArchiveTagSummaryRecord = {
   tag: ArchiveTagRecord;
   postCount: number;
@@ -47,6 +54,7 @@ export type ListPostsPageInput = {
   limit: number;
   sortField: PostSortField;
   sortDirection: SortDirection;
+  cursor?: PostPageCursor | null;
   randomSeed?: number | null;
   tagFilter: string | null;
   authorFilter: string | null;
