@@ -1,7 +1,7 @@
 # Task Packet: Investigate 2026-04-17 Handoff Mojibake
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
 - branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: medium
@@ -45,19 +45,27 @@ An older task, `2026-04-06-investigate-handoff-encoding.md`, also appears mojiba
 ## Work Log
 
 - `2026-04-17 Codex`: Created as a follow-up before starting `2026-04-17-perf-fix-full-scans`.
+- `2026-04-17 Codex`: Confirmed the affected 2026-04-17 handoff files are valid UTF-8 and render readable Japanese through Node/Git UTF-8 paths; plain PowerShell `Get-Content` is the mojibake display path.
 
 ## Result
 
-Pending.
+- The 2026-04-17 mojibake is display-path related, not persisted file corruption.
+- No original source text is needed from Claude/user for the inspected 2026-04-17 files.
+- No repair was needed for `2026-04-17-perf-fix-full-scans.md`, `2026-04-17-viewer-app-second-pass.md`, or `2026-04-17-cia-perf-audit.md`; they decode correctly as UTF-8.
+- Added `ai-handoff/findings/2026-04-17-handoff-mojibake-display-path.md` with evidence and read-path recommendations.
 
 ## Verification
 
-Pending.
+- Node `fs.readFileSync(path, "utf8")` displayed readable Japanese for affected 2026-04-17 files and the older encoding investigation packet.
+- UTF-8 round-trip checks passed for inspected files.
+- Raw byte inspection showed valid UTF-8 Japanese bytes.
+- `git show 7c8c604:ai-handoff/tasks/2026-04-17-perf-fix-full-scans.md` displayed readable Japanese.
+- `npm run handoff:check` passed.
 
 ## Completion Checklist
-- [ ] investigation finished
-- [ ] implementation finished
-- [ ] task packet `Result` updated
-- [ ] task packet `Verification` updated
+- [x] investigation finished
+- [x] implementation finished
+- [x] task packet `Result` updated
+- [x] task packet `Verification` updated
 - [ ] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] `npm run handoff:check`

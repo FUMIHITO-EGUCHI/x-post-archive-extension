@@ -1,7 +1,7 @@
 # Task Packet: ViewerApp 二次分解（メタデータ hook + フォーマッター分離）
 
 ## Meta
-- status: waiting
+- status: active
 - owner: Codex
 - branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: low
