@@ -14,7 +14,6 @@ import type {
   ListTagRedirectsResponse,
   ListPostTagSummariesResponse,
   ListPostsPageResponse,
-  ListPostsResponse,
   UserSummariesResponse,
   MergeTagsMessage,
   MergeTagsResponse,
@@ -72,18 +71,6 @@ export async function requestHasPost(xPostId: string): Promise<boolean> {
   }
 
   return response.exists;
-}
-
-export async function requestPosts(): Promise<ListPostsResponse> {
-  const response = await sendMessage({
-    type: "posts/list"
-  }, DEFAULT_RUNTIME_TIMEOUT_MS);
-
-  if (response.type !== "posts/list-result") {
-    throw new Error("Unexpected runtime response for list request.");
-  }
-
-  return response;
 }
 
 export async function requestPostsPage(

@@ -23,7 +23,6 @@ import {
   listPostUsernames,
   getPostsByIds,
   hasPost,
-  listPosts,
   listPostsSliceBySort,
   updatePostFields
 } from "../../db/repositories/posts-repository";
@@ -239,16 +238,6 @@ export async function saveArchivePost(
     status: "saved",
     post
   };
-}
-
-export async function listArchivePosts(): Promise<ArchivePostRecord[]> {
-  const posts = await listPosts();
-
-  if (posts.length === 0) {
-    return [];
-  }
-
-  return hydrateArchivePosts(posts);
 }
 
 export async function listArchivePostsPage(
@@ -1363,8 +1352,7 @@ async function listRandomPostsPage(
     return [];
   }
 
-  shuffleIdsInPlace(candidateIds, randomSeed);
-  return getPostsByIds(candidateIds.slice(offset, offset + limit));
+  return getPostsByIds(selectSeededRandomIds(candidateIds, offset, limit, randomSeed));
 }
 
 async function getQuotedPostIdSet(): Promise<Set<string>> {
@@ -1442,11 +1430,22 @@ function normalizeRandomSeed(value: number | null | undefined): number {
   return normalized === 0 ? 1 : normalized;
 }
 
-function shuffleIdsInPlace(ids: string[], randomSeed: number): void {
+function selectSeededRandomIds(
+  ids: string[],
+  offset: number,
+  limit: number,
+  randomSeed: number
+): string[] {
+  const selectionEnd = Math.min(ids.length, offset + limit);
+
+  if (offset >= selectionEnd) {
+    return [];
+  }
+
   const random = createSeededRandom(randomSeed);
 
-  for (let index = ids.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(random() * (index + 1));
+  for (let index = 0; index < selectionEnd; index += 1) {
+    const swapIndex = index + Math.floor(random() * (ids.length - index));
     const current = ids[index];
     const target = ids[swapIndex];
 
@@ -1457,6 +1456,8 @@ function shuffleIdsInPlace(ids: string[], randomSeed: number): void {
     ids[index] = target;
     ids[swapIndex] = current;
   }
+
+  return ids.slice(offset, selectionEnd);
 }
 
 function createSeededRandom(seed: number): () => number {

@@ -37,10 +37,6 @@ export type HasPostMessage = {
   xPostId: string;
 };
 
-export type ListPostsMessage = {
-  type: "posts/list";
-};
-
 export type ListPostsPageMessage = {
   type: "posts/list-page";
   input: ListPostsPageInput;
@@ -165,7 +161,6 @@ export type RuntimeMessage =
   | SavePostMessage
   | SavePostsBatchMessage
   | HasPostMessage
-  | ListPostsMessage
   | ListPostsPageMessage
   | ListPostTagSummariesMessage
   | RequestUserSummariesMessage
@@ -205,11 +200,6 @@ export type SavePostsBatchResponse = {
 export type HasPostResponse = {
   type: "posts/has-result";
   exists: boolean;
-};
-
-export type ListPostsResponse = {
-  type: "posts/list-result";
-  posts: ArchivePostRecord[];
 };
 
 export type ListPostsPageResponse = {
@@ -357,7 +347,6 @@ export type RuntimeResponse =
   | SavePostResponse
   | SavePostsBatchResponse
   | HasPostResponse
-  | ListPostsResponse
   | ListPostsPageResponse
   | ListPostTagSummariesResponse
   | UserSummariesResponse

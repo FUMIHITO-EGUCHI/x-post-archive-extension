@@ -10,7 +10,6 @@ import {
   hasSavedPost,
   listArchivePostsPage,
   listArchiveTagSummaries,
-  listArchivePosts,
   mergeTags,
   renameTag,
   removePostTagByName,
@@ -44,7 +43,6 @@ import type {
   ListTagRedirectsResponse,
   ListPostTagSummariesResponse,
   ListPostsPageResponse,
-  ListPostsResponse,
   UserSummariesResponse,
   MergeTagsResponse,
   RenameTagResponse,
@@ -185,22 +183,6 @@ export async function handleRuntimeMessage(
       const response: HasPostResponse = {
         type: "posts/has-result",
         exists
-      };
-      return response;
-    }
-
-    case "posts/list": {
-      const posts = await listArchivePosts();
-      logger.debug("posts.list.completed", {
-        requestId,
-        context: {
-          type: message.type,
-          count: posts.length
-        }
-      });
-      const response: ListPostsResponse = {
-        type: "posts/list-result",
-        posts
       };
       return response;
     }
@@ -594,7 +576,6 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/save" ||
     candidate.type === "posts/save-batch" ||
     candidate.type === "posts/has" ||
-    candidate.type === "posts/list" ||
     candidate.type === "posts/list-page" ||
     candidate.type === "posts/tags/list" ||
     candidate.type === "users/summaries" ||
