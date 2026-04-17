@@ -2,13 +2,7 @@
 
 ## Active
 
-- id: `2026-04-14-viewer-app-decompose-and-cap-load`
-- title: `Decompose ViewerApp and Cap Session Restore Load`
-- owner: `Codex`
-- status: `active`
-- branch: `feature/full-codebase-review-2026-04-14-fixes`
-- priority: `low`
-- task_file: `ai-handoff/tasks/2026-04-14-viewer-app-decompose-and-cap-load.md`
+- none
 
 ## Scope
 
@@ -25,7 +19,7 @@
 
 ## Next Action
 
-- next_action: `Close this task or pick up the next waiting task.`
+- next_action: `Pick up the next waiting task when requested.`
 
 ## Acceptance Criteria
 
@@ -46,6 +40,7 @@
 
 ## Recent Updates
 
+- `2026-04-17 Codex`: closed `2026-04-14-viewer-app-decompose-and-cap-load`; all planned decomposition slices are complete; typecheck/build/handoff check passed
 - `2026-04-14 Codex`: committed `2026-04-14-merge-import-controls` as `a790ca3 Merge timeline import controls`
 - `2026-04-14 Codex`: started `2026-04-14-viewer-app-decompose-and-cap-load` on `feature/full-codebase-review-2026-04-14-fixes`
 - `2026-04-14 Codex`: added `MAX_SESSION_RESTORE_LIMIT = 200` and capped session restore `initialLimit`; typecheck/build passed; PostCard extraction remains next
@@ -70,6 +65,7 @@
 
 ## Recently Completed
 
+- `2026-04-14-viewer-app-decompose-and-cap-load`: ViewerApp decomposition and capped session restore load are complete; typecheck, build, and handoff check passed
 - `2026-04-14-merge-import-controls`: bookmarks/likes import controls now share a single parameterized implementation; typecheck and build passed
 - `2026-04-14-fix-path-filter-and-refetch-typing`: archive restore now filters out `..` segments and refetch.complete uses the typed runtime client; typecheck and build passed
 - `2026-04-14-remove-dead-code-archive-service`: removed dead archive service and maintenance service helper functions; typecheck and build passed
