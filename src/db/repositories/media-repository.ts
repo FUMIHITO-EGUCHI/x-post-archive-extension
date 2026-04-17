@@ -9,6 +9,20 @@ export async function addMediaRecords(records: MediaRecord[]): Promise<void> {
   await archiveDb.media.bulkAdd(records);
 }
 
+export async function countMediaByType(mediaType: MediaRecord["media_type"]): Promise<number> {
+  return archiveDb.media.where("media_type").equals(mediaType).count();
+}
+
+export async function sumMediaByteSize(): Promise<number> {
+  let total = 0;
+
+  await archiveDb.media.each((record) => {
+    total += record.byte_size ?? 0;
+  });
+
+  return total;
+}
+
 export async function listMediaByPostId(xPostId: string): Promise<MediaRecord[]> {
   const media = await archiveDb.media.where("x_post_id").equals(xPostId).toArray();
   return sortMediaByPosition(media);

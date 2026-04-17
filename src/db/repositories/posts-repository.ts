@@ -1,4 +1,5 @@
 import { archiveDb } from "../archive-database";
+import Dexie from "dexie";
 import type { PostRecord } from "../../types/archive";
 import type { PostSortField, SortDirection } from "../../types/viewer";
 
@@ -40,6 +41,27 @@ export async function countPosts(): Promise<number> {
 
 export async function listPostIds(): Promise<string[]> {
   return archiveDb.posts.toCollection().primaryKeys();
+}
+
+export async function listPostUsernames(): Promise<string[]> {
+  return (await archiveDb.posts.orderBy("x_username").uniqueKeys()).map(String);
+}
+
+export async function countPostsByUsername(username: string): Promise<number> {
+  return archiveDb.posts.where("x_username").equals(username).count();
+}
+
+export async function getLatestPostByUsername(
+  username: string
+): Promise<PostRecord | undefined> {
+  return archiveDb.posts
+    .where("[x_username+saved_at]")
+    .between([username, Dexie.minKey], [username, Dexie.maxKey])
+    .last();
+}
+
+export async function listPostIdsByUsername(username: string): Promise<string[]> {
+  return (await archiveDb.posts.where("x_username").equals(username).primaryKeys()).map(String);
 }
 
 export async function listPostIdsWithZeroEngagementCounts(): Promise<string[]> {

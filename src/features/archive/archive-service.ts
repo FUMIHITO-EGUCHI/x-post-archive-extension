@@ -1,20 +1,26 @@
 import { archiveDb } from "../../db/archive-database";
 import {
   addMediaRecords,
+  countMediaByType,
   listMediaByStorageStatus,
   deleteMediaRecordsByPostId,
   listMediaByPostId,
   listMediaByPostIds,
   markMediaPending,
+  sumMediaByteSize,
   updateMediaAfterWrite,
   updateMediaPreview
 } from "../../db/repositories/media-repository";
 import {
   addPost,
+  countPostsByUsername,
   countPosts,
   deletePostRecord,
   getPost,
+  getLatestPostByUsername,
   listPostIds,
+  listPostIdsByUsername,
+  listPostUsernames,
   getPostsByIds,
   hasPost,
   listPosts,
@@ -24,6 +30,7 @@ import {
 import {
   addPostTag,
   bulkAddPostTagRecords,
+  countAssignedTagNames,
   countPostTagLinksByTagId,
   deletePostTag,
   deletePostTagsByPostId,
@@ -327,35 +334,66 @@ export async function listArchiveTagSummaries(): Promise<ArchiveTagSummaryRecord
 }
 
 export async function listArchiveUserSummaries(): Promise<UserSummary[]> {
-  const posts = await listPosts();
+  const usernames = await listPostUsernames();
   const summaryMap = new Map<
     string,
     {
       display_name: string;
       screen_name: string;
       post_count: number;
+      latest_saved_at: number;
     }
   >();
 
-  for (const post of posts) {
-    const normalizedScreenName = normalizeAuthorFilter(post.x_username);
+  const summaries = await Promise.all(
+    usernames.map(async (username) => {
+      const normalizedScreenName = normalizeAuthorFilter(username);
 
-    if (normalizedScreenName === null) {
+      if (normalizedScreenName === null) {
+        return null;
+      }
+
+      const [postCount, latestPost] = await Promise.all([
+        countPostsByUsername(username),
+        getLatestPostByUsername(username)
+      ]);
+
+      return {
+        displayName: latestPost?.display_name ?? username,
+        latestSavedAt: latestPost?.saved_at ?? 0,
+        postCount,
+        screenName: normalizedScreenName
+      };
+    })
+  );
+
+  for (const summary of summaries) {
+    if (summary === null || summary.postCount === 0) {
       continue;
     }
 
-    const existing = summaryMap.get(normalizedScreenName);
+    const existing = summaryMap.get(summary.screenName);
 
     if (existing === undefined) {
-      summaryMap.set(normalizedScreenName, {
-        display_name: post.display_name,
-        screen_name: normalizedScreenName,
-        post_count: 1
+      summaryMap.set(summary.screenName, {
+        display_name: summary.displayName,
+        latest_saved_at: summary.latestSavedAt,
+        post_count: summary.postCount,
+        screen_name: summary.screenName
       });
       continue;
     }
 
-    existing.post_count += 1;
+    existing.post_count += summary.postCount;
+
+    if (summary.latestSavedAt > existing.latest_saved_at) {
+      summaryMap.set(summary.screenName, {
+        display_name: summary.displayName,
+        latest_saved_at: summary.latestSavedAt,
+        post_count: existing.post_count,
+        screen_name: summary.screenName
+      });
+    }
   }
 
   return [...summaryMap.values()].sort((left, right) => {
@@ -426,43 +464,22 @@ export async function deleteArchiveTagRedirect(tagRedirectId: string): Promise<b
 }
 
 export async function getArchiveSummary(): Promise<ArchiveSummaryRecord> {
-  const [posts, media, postTags] = await Promise.all([
-    listPosts(),
-    archiveDb.media.toArray(),
-    listAllPostTags()
+  const [postCount, imageCount, videoCount, mediaBytes, usernames, tagCount] = await Promise.all([
+    countPosts(),
+    countMediaByType("image"),
+    countMediaByType("video"),
+    sumMediaByteSize(),
+    listPostUsernames(),
+    countAssignedTagNames()
   ]);
 
-  let imageCount = 0;
-  let videoCount = 0;
-  let mediaBytes = 0;
-  const usernames = new Set<string>();
-  const tagNames = new Set<string>();
-
-  for (const post of posts) {
-    usernames.add(post.x_username);
-  }
-
-  for (const item of media) {
-    if (item.media_type === "image") {
-      imageCount += 1;
-    } else if (item.media_type === "video") {
-      videoCount += 1;
-    }
-
-    mediaBytes += item.byte_size ?? 0;
-  }
-
-  for (const record of postTags) {
-    tagNames.add(record.normalized_name);
-  }
-
   return {
-    postCount: posts.length,
+    postCount,
     imageCount,
     videoCount,
     mediaCount: imageCount + videoCount,
-    accountCount: usernames.size,
-    tagCount: tagNames.size,
+    accountCount: usernames.length,
+    tagCount,
     mediaBytes
   };
 }
@@ -1454,11 +1471,17 @@ function createSeededRandom(seed: number): () => number {
 }
 
 async function listPostIdsByAuthorFilter(authorFilter: string): Promise<string[]> {
-  const posts = await listPosts();
+  const usernames = await listPostUsernames();
+  const matchingUsernames = usernames.filter(
+    (username) => normalizeAuthorFilter(username) === authorFilter
+  );
 
-  return posts
-    .filter((post) => normalizeAuthorFilter(post.x_username) === authorFilter)
-    .map((post) => post.x_post_id);
+  if (matchingUsernames.length === 0) {
+    return [];
+  }
+
+  const idsByUsername = await Promise.all(matchingUsernames.map(listPostIdsByUsername));
+  return idsByUsername.flat();
 }
 
 async function listPostIdsByDateFilter(
