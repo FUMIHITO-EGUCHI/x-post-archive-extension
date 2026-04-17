@@ -1,7 +1,7 @@
 # Task Packet: パフォーマンス修正 — 全件スキャン排除（High Priority）
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
 - branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: high

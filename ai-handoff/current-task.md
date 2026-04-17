@@ -2,81 +2,60 @@
 
 ## Active
 
-- id: `2026-04-17-perf-fix-full-scans`
-- title: `パフォーマンス修正 — 全件スキャン排除（High Priority）`
+- id: `2026-04-17-investigate-handoff-mojibake`
+- title: `Investigate 2026-04-17 Handoff Mojibake`
 - owner: `Codex`
 - status: `active`
 - branch: `feature/full-codebase-review-2026-04-14-fixes`
-- priority: `high`
-- task_file: `ai-handoff/tasks/2026-04-17-perf-fix-full-scans.md`
+- priority: `medium`
+- task_file: `ai-handoff/tasks/2026-04-17-investigate-handoff-mojibake.md`
 
 ## Scope
 
-- Replace `getArchiveSummary()` 3-parallel full scans with count queries (P1)
-- Replace `listArchiveUserSummaries()` full scan with indexed query (P2)
-- Replace `listPostIdsByAuthorFilter()` full scan with indexed query (P3)
-- Add `x_username` index to posts table (required for P2/P3)
-- Keep display behavior unchanged
+- Inspect newly added 2026-04-17 handoff files that contain mojibake
+- Determine whether the mojibake is persisted file corruption or display-path decoding
+- Repair affected files only if the original text can be recovered safely
+- Document the root cause and remaining source-text needs
 
 ## Coordination
 
 - blocked_by: `none`
-- related_findings: `2026-04-17-cia-perf-audit`
-- needs_from_claude: `none`
-- handoff_to_codex: `design complete (2026-04-17); implement per task packet design section`
+- related_findings: `2026-04-17-cia-perf-audit`, `2026-04-07-handoff-encoding`
+- needs_from_claude: `original readable Japanese text if local bytes are already corrupted`
+- handoff_to_codex: `investigate 2026-04-17 handoff mojibake and repair or document source-text needs`
 
 ## Next Action
 
-- next_action: `Implement P1-P3 performance fixes per task packet design.`
+- next_action: `Inspect raw bytes and decode paths for the affected 2026-04-17 handoff files.`
 
 ## Acceptance Criteria
 
-- [x] `getArchiveSummary()` uses count queries instead of `listPosts()` full scan
-- [x] `listArchiveUserSummaries()` uses `x_username` index instead of full scan
-- [x] `listPostIdsByAuthorFilter()` uses indexed query instead of full scan
-- [x] `npm run typecheck` pass
-- [x] `npm run build` pass
+- [ ] The investigation states whether the 2026-04-17 mojibake is persisted in file contents or only display-path related.
+- [ ] Affected files are repaired when recoverable without guessing.
+- [ ] If repair is not possible, the task records exactly which original text is needed from Claude/user.
+- [ ] `npm run handoff:check` passes after any handoff edits.
 
 ## Completion Checklist
-
-- [x] investigation finished
-- [x] implementation finished
-- [x] `npm run typecheck`
-- [x] `npm run build`
-- [x] task packet `Result` updated
-- [x] task packet `Verification` updated
-- [x] `ai-handoff/current-task.md` updated
+- [ ] investigation finished
+- [ ] implementation finished
+- [ ] task packet `Result` updated
+- [ ] task packet `Verification` updated
+- [ ] `ai-handoff/current-task.md` updated
+- [ ] `npm run handoff:check`
 
 ## Recent Updates
 
-- `2026-04-17 Codex`: implemented P1-P3 full-scan performance fixes; added Dexie v14 indexes for `x_username`, `[x_username+saved_at]`, and `media_type`; typecheck/build passed
-- `2026-04-17 Codex`: closed `2026-04-14-viewer-app-decompose-and-cap-load`; all planned decomposition slices are complete; typecheck/build/handoff check passed
-- `2026-04-14 Codex`: committed `2026-04-14-merge-import-controls` as `a790ca3 Merge timeline import controls`
-- `2026-04-14 Codex`: started `2026-04-14-viewer-app-decompose-and-cap-load` on `feature/full-codebase-review-2026-04-14-fixes`
-- `2026-04-14 Codex`: added `MAX_SESSION_RESTORE_LIMIT = 200` and capped session restore `initialLimit`; typecheck/build passed; PostCard extraction remains next
-- `2026-04-14 Codex`: extracted `PostCard`, `QuotedPostCard`, and `MediaCard` into `post-card.tsx`; typecheck/build passed; task remains active for further decomposition
-- `2026-04-14 Codex`: extracted settings page rendering and settings tab state into `settings-screen.tsx`; typecheck/build passed; task remains active for further decomposition
-- `2026-04-15 Codex`: extracted media lightbox state/effects/dialog rendering into `media-lightbox.tsx`; typecheck/build passed; task remains active for further decomposition
-- `2026-04-15 Codex`: committed `be3716d Decompose viewer app sections`
-- `2026-04-15 Codex`: extracted refetch status polling and refetch action handlers into `use-refetch-controls.ts`; typecheck/build passed; task remains active for further decomposition
-- `2026-04-15 Codex`: extracted viewer preferences, preference persistence, theme side effect, and storage estimate state into `use-viewer-preferences.ts`; typecheck/build passed; task remains active for further decomposition
-- `2026-04-15 Codex`: committed `315c8a7 Extract viewer preferences`
-- `2026-04-15 Codex`: extracted per-post tag picker/action state and tag add/remove handlers into `use-tag-operations.ts`; typecheck/build passed; task remains active for further decomposition
-- `2026-04-15 Codex`: extracted archive post list/loading state and `loadArchivePage` into `use-archive-loader.ts`; typecheck/build passed; task remains active for further decomposition
-- `2026-04-17 Codex`: extracted sort/filter state, random seed handling, filter request helpers, and sort/filter reload handlers into `use-sort-filter.ts`; typecheck/build passed; task remains active for further decomposition
-- `2026-04-17 Codex`: committed `ba5ee2e refactor: extract viewer sort filter`
-- `2026-04-17 Codex`: extracted filter modal state, draft date validation, search state, and incremental tag/user option lists into `use-filter-modal.ts`; typecheck/build passed; task remains active for further decomposition
-- `2026-04-17 Codex`: committed `57576d7 refactor: extract viewer filter modal`
-- `2026-04-17 Codex`: extracted viewer session persistence, restore effects, scroll-position persistence, and anchor lookup into `use-viewer-session.ts`; typecheck/build passed
-- `2026-04-17 Claude`: CIA トライアド・パフォーマンス監査完了 → findings: `2026-04-17-cia-perf-audit`; 全件スキャン修正タスク `2026-04-17-perf-fix-full-scans` をアクティブ化
+- `2026-04-17 Codex`: closed `2026-04-17-perf-fix-full-scans` and started `2026-04-17-investigate-handoff-mojibake`.
+- `2026-04-17 Codex`: implemented P1-P3 full-scan performance fixes; added Dexie v14 indexes for `x_username`, `[x_username+saved_at]`, and `media_type`; typecheck/build passed.
+- `2026-04-17 Codex`: closed `2026-04-14-viewer-app-decompose-and-cap-load`; all planned decomposition slices are complete; typecheck/build/handoff check passed.
 
 ## Waiting Tasks
 
-- `2026-04-17-investigate-handoff-mojibake`: investigate whether the new 2026-04-17 handoff mojibake is persisted corruption or display-path decoding, then repair or request source text
-- `2026-04-17-viewer-app-second-pass`: ViewerApp 二次分解（メタデータ hook + フォーマッター分離）
+- `2026-04-17-viewer-app-second-pass`: ViewerApp second-pass decomposition for archive metadata hook and formatter extraction
 
 ## Recently Completed
 
+- `2026-04-17-perf-fix-full-scans`: P1-P3 archive full-scan performance fixes are complete; typecheck, build, and handoff check passed
 - `2026-04-14-viewer-app-decompose-and-cap-load`: ViewerApp decomposition and capped session restore load are complete; typecheck, build, and handoff check passed
 - `2026-04-14-merge-import-controls`: bookmarks/likes import controls now share a single parameterized implementation; typecheck and build passed
 - `2026-04-14-fix-path-filter-and-refetch-typing`: archive restore now filters out `..` segments and refetch.complete uses the typed runtime client; typecheck and build passed
