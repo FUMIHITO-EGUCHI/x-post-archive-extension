@@ -1,9 +1,9 @@
 # Task Packet: Decompose ViewerApp and Cap Session Restore Load
 
 ## Meta
-- status: waiting
+- status: done
 - owner: Codex
-- branch: feature/viewer-app-decompose
+- branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: low
 - files_in_scope: src/features/viewer/components/viewer-app.tsx, src/features/viewer/components/
 - blocked_by: none
@@ -525,16 +525,71 @@ Do these in order. Each step is independently committable and passses typecheck/
 
 ## Work Log
 
+- `2026-04-14 Codex`: Added `MAX_SESSION_RESTORE_LIMIT = 200` and capped session restore `initialLimit`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next step is `PostCard` extraction.
+- `2026-04-14 Codex`: Extracted `PostCard`, `QuotedPostCard`, and `MediaCard` from `viewer-app.tsx` into `post-card.tsx`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely `SettingsScreen`.
+- `2026-04-14 Codex`: Extracted settings page rendering and settings tab state from `viewer-app.tsx` into `settings-screen.tsx`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely media lightbox extraction.
+- `2026-04-15 Codex`: Extracted media lightbox state, OPFS object URL loading, dialog a11y wiring, keyboard navigation, and dialog rendering from `viewer-app.tsx` into `media-lightbox.tsx`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely refetch controls or viewer preferences extraction.
+- `2026-04-15 Codex`: Committed the cap, `PostCard`, `SettingsScreen`, and media lightbox extraction as `be3716d Decompose viewer app sections`.
+- `2026-04-15 Codex`: Extracted refetch status polling and refetch action handlers from `viewer-app.tsx` into `use-refetch-controls.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely viewer preferences extraction.
+- `2026-04-15 Codex`: Extracted viewer preference state, preference persistence handlers, theme side effect, storage estimate state, and preference loading into `use-viewer-preferences.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely tag operations or archive loader extraction.
+- `2026-04-15 Codex`: Committed the viewer preferences extraction as `315c8a7 Extract viewer preferences`.
+- `2026-04-15 Codex`: Extracted per-post tag picker/action state and tag add/remove handlers from `viewer-app.tsx` into `use-tag-operations.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely archive loader extraction.
+- `2026-04-15 Codex`: Extracted archive post list/loading state, request-id guard, load notices, and `loadArchivePage` from `viewer-app.tsx` into `use-archive-loader.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely sort/filter extraction.
+- `2026-04-17 Codex`: Extracted sort/filter state, random seed handling, current filter request helpers, and sort/filter reload handlers from `viewer-app.tsx` into `use-sort-filter.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely filter modal or viewer session extraction.
+- `2026-04-17 Codex`: Committed the sort/filter extraction as `ba5ee2e refactor: extract viewer sort filter`.
+- `2026-04-17 Codex`: Extracted filter modal state, draft date validation, tag/user search state, and incremental tag/user option lists from `viewer-app.tsx` into `use-filter-modal.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely viewer session extraction.
+- `2026-04-17 Codex`: Committed the filter modal extraction as `57576d7 refactor: extract viewer filter modal`.
+- `2026-04-17 Codex`: Extracted viewer session persistence, restore effects, scroll-position persistence, and anchor lookup from `viewer-app.tsx` into `use-viewer-session.ts`; `npm run typecheck` and `npm run build` passed. Planned viewer decomposition slices are complete.
+- `2026-04-17 Codex`: Closed this task after user confirmation.
+
 ## Result
+
+- Partial progress:
+  - `initialLimit` session restore is now capped with `MAX_SESSION_RESTORE_LIMIT = 200`.
+  - This prevents restoring arbitrarily large loaded counts on viewer open.
+  - Post rendering is now extracted to `src/features/viewer/components/post-card.tsx`, including quoted post and media card rendering.
+  - Settings page rendering and settings tab state are now extracted to `src/features/viewer/components/settings-screen.tsx`.
+  - Media lightbox state, OPFS object URL loading, dialog a11y wiring, keyboard navigation, and rendering are now extracted to `src/features/viewer/components/media-lightbox.tsx`.
+  - Refetch status polling and refetch action handlers are now extracted to `src/features/viewer/components/use-refetch-controls.ts`.
+  - Viewer preference state, preference persistence handlers, theme side effect, storage estimate state, and preference loading are now extracted to `src/features/viewer/components/use-viewer-preferences.ts`.
+  - Per-post tag picker/action state and tag add/remove handlers are now extracted to `src/features/viewer/components/use-tag-operations.ts`.
+  - Archive post list/loading state, request-id guard, load notices, and `loadArchivePage` are now extracted to `src/features/viewer/components/use-archive-loader.ts`.
+  - Sort/filter state, random seed handling, current filter request helpers, and sort/filter reload handlers are now extracted to `src/features/viewer/components/use-sort-filter.ts`.
+  - Filter modal state, draft date validation, tag/user search state, and incremental tag/user option lists are now extracted to `src/features/viewer/components/use-filter-modal.ts`.
+  - Viewer session persistence, restore effects, scroll-position persistence, and anchor lookup are now extracted to `src/features/viewer/components/use-viewer-session.ts`.
+  - Planned viewer decomposition slices are complete.
 
 ## Verification
 
+- `npm run typecheck` passed after `initialLimit` cap.
+- `npm run build` passed after `initialLimit` cap.
+- `npm run typecheck` passed after `PostCard` extraction.
+- `npm run build` passed after `PostCard` extraction.
+- `npm run typecheck` passed after `SettingsScreen` extraction.
+- `npm run build` passed after `SettingsScreen` extraction.
+- `npm run typecheck` passed after media lightbox extraction.
+- `npm run build` passed after media lightbox extraction.
+- `npm run typecheck` passed after refetch controls extraction.
+- `npm run build` passed after refetch controls extraction.
+- `npm run typecheck` passed after viewer preferences extraction.
+- `npm run build` passed after viewer preferences extraction.
+- `npm run typecheck` passed after tag operations extraction.
+- `npm run build` passed after tag operations extraction.
+- `npm run typecheck` passed after archive loader extraction.
+- `npm run build` passed after archive loader extraction.
+- `npm run typecheck` passed after sort/filter extraction.
+- `npm run build` passed after sort/filter extraction.
+- `npm run typecheck` passed after filter modal extraction.
+- `npm run build` passed after filter modal extraction.
+- `npm run typecheck` passed after viewer session extraction.
+- `npm run build` passed after viewer session extraction.
+
 ## Completion Checklist
 - [x] Claude design review complete (needs_from_claude resolved)
-- [ ] investigation finished
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
+- [x] investigation finished
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated

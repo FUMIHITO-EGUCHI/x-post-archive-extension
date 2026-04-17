@@ -14,15 +14,28 @@ export function buildVideoPreviewOpfsPath(xPostId: string, mediaId: string): str
   return `/${[...MEDIA_ROOT_SEGMENTS, "video-previews", xPostId, `${mediaId}.jpg`].join("/")}`;
 }
 
-export async function writeBlobToOpfs(opfsPath: string, blob: Blob): Promise<void> {
+export type OpfsWriteResult = {
+  checksum: string;
+};
+
+export async function writeBlobToOpfs(
+  opfsPath: string,
+  blob: Blob
+): Promise<OpfsWriteResult> {
+  const buffer = await blob.arrayBuffer();
+  const checksum = await calculateSha256Hex(buffer);
   const fileHandle = await getFileHandle(opfsPath, true);
   const writable = await fileHandle.createWritable();
 
   try {
-    await writable.write(blob);
+    await writable.write(buffer);
   } finally {
     await writable.close();
   }
+
+  return {
+    checksum
+  };
 }
 
 export async function readBlobFromOpfs(opfsPath: string): Promise<Blob> {
@@ -158,4 +171,18 @@ function isDirectoryNotEmptyError(error: unknown): boolean {
 
 function isNotFoundError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "NotFoundError";
+}
+
+export function isQuotaExceededError(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === "QuotaExceededError" || error.code === DOMException.QUOTA_EXCEEDED_ERR)
+  );
+}
+
+async function calculateSha256Hex(buffer: ArrayBuffer): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+  return [...new Uint8Array(hashBuffer)]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
 }

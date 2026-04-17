@@ -10,7 +10,6 @@ import {
   hasSavedPost,
   listArchivePostsPage,
   listArchiveTagSummaries,
-  listArchivePosts,
   mergeTags,
   renameTag,
   removePostTagByName,
@@ -44,7 +43,6 @@ import type {
   ListTagRedirectsResponse,
   ListPostTagSummariesResponse,
   ListPostsPageResponse,
-  ListPostsResponse,
   UserSummariesResponse,
   MergeTagsResponse,
   RenameTagResponse,
@@ -189,22 +187,6 @@ export async function handleRuntimeMessage(
       return response;
     }
 
-    case "posts/list": {
-      const posts = await listArchivePosts();
-      logger.debug("posts.list.completed", {
-        requestId,
-        context: {
-          type: message.type,
-          count: posts.length
-        }
-      });
-      const response: ListPostsResponse = {
-        type: "posts/list-result",
-        posts
-      };
-      return response;
-    }
-
     case "posts/list-page": {
       const result = await listArchivePostsPage(message.input);
       logger.debug("posts.list_page.completed", {
@@ -223,6 +205,7 @@ export async function handleRuntimeMessage(
         posts: result.posts,
         totalCount: result.totalCount,
         nextOffset: result.nextOffset,
+        nextCursor: result.nextCursor,
         hasMore: result.hasMore
       };
       return response;
@@ -528,7 +511,9 @@ export async function handleRuntimeMessage(
     case "archive/restore": {
       logger.info("archive.restore.started", { requestId, context: { stagingPath: message.stagingPath } });
       const root = await navigator.storage.getDirectory();
-      const segments = message.stagingPath.split("/").filter((s) => s.length > 0);
+      const segments = message.stagingPath
+        .split("/")
+        .filter((s) => s.length > 0 && s !== "..");
       const fileName = segments.at(-1);
 
       if (fileName === undefined) {
@@ -592,7 +577,6 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/save" ||
     candidate.type === "posts/save-batch" ||
     candidate.type === "posts/has" ||
-    candidate.type === "posts/list" ||
     candidate.type === "posts/list-page" ||
     candidate.type === "posts/tags/list" ||
     candidate.type === "users/summaries" ||

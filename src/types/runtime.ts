@@ -16,6 +16,7 @@ import type {
   ArchiveTagRedirectSummaryRecord,
   ArchiveTagSummaryRecord,
   ListPostsPageInput,
+  PostPageCursor,
   PostFilterInput,
   UserSummary
 } from "./viewer";
@@ -35,10 +36,6 @@ export type SavePostsBatchMessage = {
 export type HasPostMessage = {
   type: "posts/has";
   xPostId: string;
-};
-
-export type ListPostsMessage = {
-  type: "posts/list";
 };
 
 export type ListPostsPageMessage = {
@@ -165,7 +162,6 @@ export type RuntimeMessage =
   | SavePostMessage
   | SavePostsBatchMessage
   | HasPostMessage
-  | ListPostsMessage
   | ListPostsPageMessage
   | ListPostTagSummariesMessage
   | RequestUserSummariesMessage
@@ -207,16 +203,12 @@ export type HasPostResponse = {
   exists: boolean;
 };
 
-export type ListPostsResponse = {
-  type: "posts/list-result";
-  posts: ArchivePostRecord[];
-};
-
 export type ListPostsPageResponse = {
   type: "posts/list-page-result";
   posts: ArchivePostRecord[];
   totalCount: number;
   nextOffset: number;
+  nextCursor: PostPageCursor | null;
   hasMore: boolean;
 };
 
@@ -357,7 +349,6 @@ export type RuntimeResponse =
   | SavePostResponse
   | SavePostsBatchResponse
   | HasPostResponse
-  | ListPostsResponse
   | ListPostsPageResponse
   | ListPostTagSummariesResponse
   | UserSummariesResponse

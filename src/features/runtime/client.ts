@@ -14,7 +14,6 @@ import type {
   ListTagRedirectsResponse,
   ListPostTagSummariesResponse,
   ListPostsPageResponse,
-  ListPostsResponse,
   UserSummariesResponse,
   MergeTagsMessage,
   MergeTagsResponse,
@@ -22,6 +21,7 @@ import type {
   RenameTagResponse,
   RefetchCancelResponse,
   RefetchClearResponse,
+  RefetchCompleteResponse,
   RefetchEnqueueResponse,
   RefetchStatusResponse,
   RemovePostTagByNameMessage,
@@ -71,18 +71,6 @@ export async function requestHasPost(xPostId: string): Promise<boolean> {
   }
 
   return response.exists;
-}
-
-export async function requestPosts(): Promise<ListPostsResponse> {
-  const response = await sendMessage({
-    type: "posts/list"
-  }, DEFAULT_RUNTIME_TIMEOUT_MS);
-
-  if (response.type !== "posts/list-result") {
-    throw new Error("Unexpected runtime response for list request.");
-  }
-
-  return response;
 }
 
 export async function requestPostsPage(
@@ -369,6 +357,25 @@ export async function requestRefetchClear(): Promise<RefetchClearResponse> {
 
   if (response.type !== "refetch.clear") {
     throw new Error("Unexpected runtime response for refetch clear request.");
+  }
+
+  return response;
+}
+
+export async function requestNotifyRefetchComplete(
+  xPostId: string,
+  post: SavePostInput | null,
+  error: string | null
+): Promise<RefetchCompleteResponse> {
+  const response = await sendMessage({
+    type: "refetch.complete",
+    xPostId,
+    post,
+    error
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "refetch.complete") {
+    throw new Error("Unexpected runtime response for refetch complete request.");
   }
 
   return response;

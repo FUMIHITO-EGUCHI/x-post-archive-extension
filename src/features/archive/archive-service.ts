@@ -1,29 +1,35 @@
 import { archiveDb } from "../../db/archive-database";
 import {
   addMediaRecords,
+  countMediaByType,
   listMediaByStorageStatus,
   deleteMediaRecordsByPostId,
   listMediaByPostId,
   listMediaByPostIds,
   markMediaPending,
+  sumMediaByteSize,
   updateMediaAfterWrite,
   updateMediaPreview
 } from "../../db/repositories/media-repository";
 import {
   addPost,
+  countPostsByUsername,
   countPosts,
   deletePostRecord,
   getPost,
+  getLatestPostByUsername,
   listPostIds,
+  listPostIdsByUsername,
+  listPostUsernames,
   getPostsByIds,
   hasPost,
-  listPosts,
   listPostsSliceBySort,
   updatePostFields
 } from "../../db/repositories/posts-repository";
 import {
   addPostTag,
   bulkAddPostTagRecords,
+  countAssignedTagNames,
   countPostTagLinksByTagId,
   deletePostTag,
   deletePostTagsByPostId,
@@ -70,6 +76,7 @@ import type {
   ArchiveTagSummaryRecord,
   DateFilterTarget,
   ListPostsPageInput,
+  PostPageCursor,
   PostFilterInput,
   UserSummary
 } from "../../types/viewer";
@@ -77,6 +84,7 @@ import {
   buildMediaOpfsPath,
   buildVideoPreviewOpfsPath,
   deleteBlobFromOpfs,
+  isQuotaExceededError,
   writeBlobToOpfs
 } from "../media-storage/opfs-media-storage";
 import { createLogger } from "../logging/logger";
@@ -203,18 +211,20 @@ export async function saveArchivePost(
   const media = [...imageMedia, ...videoMedia];
 
   try {
-    await archiveDb.transaction("rw", archiveDb.posts, archiveDb.media, async () => {
-      await addPost(post);
-      await addMediaRecords(media);
-    });
+    await archiveDb.transaction(
+      "rw",
+      archiveDb.posts,
+      archiveDb.media,
+      archiveDb.tags,
+      archiveDb.post_tags,
+      async () => {
+        await addPost(post);
+        await addMediaRecords(media);
+        await assignAutoTags(input.x_post_id, autoTags);
+      }
+    );
   } catch (error) {
     throw new Error(`Post save failed in create transaction: ${formatError(error)}`);
-  }
-
-  try {
-    await assignAutoTags(input.x_post_id, autoTags);
-  } catch (error) {
-    throw new Error(`Post save failed while assigning auto tags: ${formatError(error)}`);
   }
 
   enqueueMediaPersistence(media, options.traceId);
@@ -234,16 +244,6 @@ export async function saveArchivePost(
   };
 }
 
-export async function listArchivePosts(): Promise<ArchivePostRecord[]> {
-  const posts = await listPosts();
-
-  if (posts.length === 0) {
-    return [];
-  }
-
-  return hydrateArchivePosts(posts);
-}
-
 export async function listArchivePostsPage(
   input: ListPostsPageInput
 ): Promise<{
@@ -251,6 +251,7 @@ export async function listArchivePostsPage(
   totalCount: number;
   hasMore: boolean;
   nextOffset: number;
+  nextCursor: PostPageCursor | null;
 }> {
   const normalizedOffset = normalizePageOffset(input.offset);
   const normalizedLimit = normalizePageLimit(input.limit);
@@ -262,32 +263,46 @@ export async function listArchivePostsPage(
       posts: [],
       totalCount: 0,
       hasMore: false,
-      nextOffset: normalizedOffset
+      nextOffset: normalizedOffset,
+      nextCursor: null
     };
   }
 
-  const pagePosts =
+  const pageResult =
     input.sortField === "random"
-      ? await listRandomPostsPage(
-          matchingPostIds,
-          normalizedOffset,
-          normalizedLimit,
-          normalizeRandomSeed(input.randomSeed)
-        )
+      ? {
+          posts: await listRandomPostsPage(
+            matchingPostIds,
+            normalizedOffset,
+            normalizedLimit,
+            normalizeRandomSeed(input.randomSeed)
+          ),
+          nextCursor: null
+        }
       : matchingPostIds === null
       ? await listPostsSliceBySort(
           input.sortField,
           input.sortDirection,
           normalizedOffset,
-          normalizedLimit
+          normalizedLimit,
+          normalizePostPageCursor(input.cursor)
         )
-      : await listFilteredPostsPage(input, matchingPostIds, normalizedOffset, normalizedLimit);
+      : {
+          posts: await listFilteredPostsPage(
+            input,
+            matchingPostIds,
+            normalizedOffset,
+            normalizedLimit
+          ),
+          nextCursor: null
+        };
 
   return {
-    posts: await hydrateArchivePosts(pagePosts),
+    posts: await hydrateArchivePosts(pageResult.posts),
     totalCount,
-    hasMore: normalizedOffset + pagePosts.length < totalCount,
-    nextOffset: normalizedOffset + pagePosts.length
+    hasMore: normalizedOffset + pageResult.posts.length < totalCount,
+    nextOffset: normalizedOffset + pageResult.posts.length,
+    nextCursor: pageResult.nextCursor
   };
 }
 
@@ -327,35 +342,66 @@ export async function listArchiveTagSummaries(): Promise<ArchiveTagSummaryRecord
 }
 
 export async function listArchiveUserSummaries(): Promise<UserSummary[]> {
-  const posts = await listPosts();
+  const usernames = await listPostUsernames();
   const summaryMap = new Map<
     string,
     {
       display_name: string;
       screen_name: string;
       post_count: number;
+      latest_saved_at: number;
     }
   >();
 
-  for (const post of posts) {
-    const normalizedScreenName = normalizeAuthorFilter(post.x_username);
+  const summaries = await Promise.all(
+    usernames.map(async (username) => {
+      const normalizedScreenName = normalizeAuthorFilter(username);
 
-    if (normalizedScreenName === null) {
+      if (normalizedScreenName === null) {
+        return null;
+      }
+
+      const [postCount, latestPost] = await Promise.all([
+        countPostsByUsername(username),
+        getLatestPostByUsername(username)
+      ]);
+
+      return {
+        displayName: latestPost?.display_name ?? username,
+        latestSavedAt: latestPost?.saved_at ?? 0,
+        postCount,
+        screenName: normalizedScreenName
+      };
+    })
+  );
+
+  for (const summary of summaries) {
+    if (summary === null || summary.postCount === 0) {
       continue;
     }
 
-    const existing = summaryMap.get(normalizedScreenName);
+    const existing = summaryMap.get(summary.screenName);
 
     if (existing === undefined) {
-      summaryMap.set(normalizedScreenName, {
-        display_name: post.display_name,
-        screen_name: normalizedScreenName,
-        post_count: 1
+      summaryMap.set(summary.screenName, {
+        display_name: summary.displayName,
+        latest_saved_at: summary.latestSavedAt,
+        post_count: summary.postCount,
+        screen_name: summary.screenName
       });
       continue;
     }
 
-    existing.post_count += 1;
+    existing.post_count += summary.postCount;
+
+    if (summary.latestSavedAt > existing.latest_saved_at) {
+      summaryMap.set(summary.screenName, {
+        display_name: summary.displayName,
+        latest_saved_at: summary.latestSavedAt,
+        post_count: existing.post_count,
+        screen_name: summary.screenName
+      });
+    }
   }
 
   return [...summaryMap.values()].sort((left, right) => {
@@ -426,43 +472,22 @@ export async function deleteArchiveTagRedirect(tagRedirectId: string): Promise<b
 }
 
 export async function getArchiveSummary(): Promise<ArchiveSummaryRecord> {
-  const [posts, media, postTags] = await Promise.all([
-    listPosts(),
-    archiveDb.media.toArray(),
-    listAllPostTags()
+  const [postCount, imageCount, videoCount, mediaBytes, usernames, tagCount] = await Promise.all([
+    countPosts(),
+    countMediaByType("image"),
+    countMediaByType("video"),
+    sumMediaByteSize(),
+    listPostUsernames(),
+    countAssignedTagNames()
   ]);
 
-  let imageCount = 0;
-  let videoCount = 0;
-  let mediaBytes = 0;
-  const usernames = new Set<string>();
-  const tagNames = new Set<string>();
-
-  for (const post of posts) {
-    usernames.add(post.x_username);
-  }
-
-  for (const item of media) {
-    if (item.media_type === "image") {
-      imageCount += 1;
-    } else if (item.media_type === "video") {
-      videoCount += 1;
-    }
-
-    mediaBytes += item.byte_size ?? 0;
-  }
-
-  for (const record of postTags) {
-    tagNames.add(record.normalized_name);
-  }
-
   return {
-    postCount: posts.length,
+    postCount,
     imageCount,
     videoCount,
     mediaCount: imageCount + videoCount,
-    accountCount: usernames.size,
-    tagCount: tagNames.size,
+    accountCount: usernames.length,
+    tagCount,
     mediaBytes
   };
 }
@@ -809,18 +834,14 @@ export async function bulkAssignTagPreview(
   const resolvedPostIds = matchingPostIds === null ? await listPostIds() : [...matchingPostIds];
   const totalMatchCount = resolvedPostIds.length;
 
-  let tag = await getTagByNormalizedName(normalizedName);
-
-  if (tag === undefined) {
-    tag = {
+  const tag =
+    (await getTagByNormalizedName(normalizedName)) ?? {
       tag_id: crypto.randomUUID(),
       normalized_name: normalizedName,
       display_name: cleanedDisplayName,
       system_key: null,
       created_at: Date.now()
     };
-    await addTag(tag);
-  }
 
   const alreadyTaggedIds = new Set(await listPostIdsByTagId(tag.tag_id));
   const candidatePostIds = resolvedPostIds.filter((postId) => !alreadyTaggedIds.has(postId));
@@ -850,19 +871,38 @@ export async function bulkAssignTagApplyBatch(
   }
 
   const now = Date.now();
-  const targetTag = await getTagById(targetTagId);
-  const records: PostTagRecord[] = postIds.map((postId) => ({
-    post_tag_id: crypto.randomUUID(),
-    x_post_id: postId,
-    tag_id: targetTagId,
-    normalized_name: targetNormalizedName,
-    display_name: targetDisplayName,
-    system_key: targetTag?.system_key ?? null,
-    source: "manual",
-    assigned_at: now
-  }));
+  const tagged = await archiveDb.transaction("rw", archiveDb.tags, archiveDb.post_tags, async () => {
+    let targetTag = await getTagById(targetTagId);
 
-  const tagged = await bulkAddPostTagRecords(records);
+    if (targetTag === undefined) {
+      targetTag = await getTagByNormalizedName(targetNormalizedName);
+    }
+
+    if (targetTag === undefined) {
+      targetTag = {
+        tag_id: targetTagId,
+        normalized_name: targetNormalizedName,
+        display_name: targetDisplayName,
+        system_key: null,
+        created_at: now
+      };
+      await addTag(targetTag);
+    }
+
+    const records: PostTagRecord[] = postIds.map((postId) => ({
+      post_tag_id: crypto.randomUUID(),
+      x_post_id: postId,
+      tag_id: targetTag.tag_id,
+      normalized_name: targetTag.normalized_name,
+      display_name: targetTag.display_name,
+      system_key: targetTag.system_key,
+      source: "manual",
+      assigned_at: now
+    }));
+
+    return bulkAddPostTagRecords(records);
+  });
+
   return {
     tagged
   };
@@ -982,10 +1022,11 @@ async function persistMedia(record: MediaRecord, traceId?: string): Promise<void
     const blob = await response.blob();
     const mimeType = blob.type || response.headers.get("content-type");
 
-    await writeBlobToOpfs(record.opfs_path, blob);
+    const writeResult = await writeBlobToOpfs(record.opfs_path, blob);
     await updateMediaAfterWrite(record.media_id, {
       mime_type: mimeType === null || mimeType.trim() === "" ? null : mimeType,
       byte_size: blob.size,
+      checksum: writeResult.checksum,
       storage_status: "ready",
       last_error: null
     });
@@ -1000,19 +1041,29 @@ async function persistMedia(record: MediaRecord, traceId?: string): Promise<void
       }
     });
   } catch (error) {
+    const quotaExceeded = isQuotaExceededError(error);
+    const lastError =
+      error instanceof Error
+        ? `${quotaExceeded ? "OPFS quota exceeded: " : ""}${error.message}`
+        : quotaExceeded
+          ? "OPFS quota exceeded."
+          : "Media persistence failed.";
+
     await updateMediaAfterWrite(record.media_id, {
       mime_type: null,
       byte_size: null,
+      checksum: null,
       storage_status: "failed",
-      last_error: error instanceof Error ? error.message : "Media persistence failed."
+      last_error: lastError
     });
 
-    logger.error("media.persist.failed", {
-      message: "Media persistence failed.",
+    logger[quotaExceeded ? "warn" : "error"]("media.persist.failed", {
+      message: quotaExceeded ? "Media persistence failed because OPFS quota was exceeded." : "Media persistence failed.",
       context: {
         mediaId: record.media_id,
         xPostId: record.x_post_id,
         mediaType: record.media_type,
+        quotaExceeded,
         error,
         traceId: traceId ?? null
       }
@@ -1181,12 +1232,13 @@ async function listFilteredPostsPage(
   let scanOffset = 0;
 
   while (results.length < limit) {
-    const chunk = await listPostsSliceBySort(
+    const chunkResult = await listPostsSliceBySort(
       input.sortField,
       input.sortDirection,
       scanOffset,
       scanChunkSize
     );
+    const chunk = chunkResult.posts;
 
     if (chunk.length === 0) {
       break;
@@ -1331,8 +1383,7 @@ async function listRandomPostsPage(
     return [];
   }
 
-  shuffleIdsInPlace(candidateIds, randomSeed);
-  return getPostsByIds(candidateIds.slice(offset, offset + limit));
+  return getPostsByIds(selectSeededRandomIds(candidateIds, offset, limit, randomSeed));
 }
 
 async function getQuotedPostIdSet(): Promise<Set<string>> {
@@ -1410,11 +1461,22 @@ function normalizeRandomSeed(value: number | null | undefined): number {
   return normalized === 0 ? 1 : normalized;
 }
 
-function shuffleIdsInPlace(ids: string[], randomSeed: number): void {
+function selectSeededRandomIds(
+  ids: string[],
+  offset: number,
+  limit: number,
+  randomSeed: number
+): string[] {
+  const selectionEnd = Math.min(ids.length, offset + limit);
+
+  if (offset >= selectionEnd) {
+    return [];
+  }
+
   const random = createSeededRandom(randomSeed);
 
-  for (let index = ids.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(random() * (index + 1));
+  for (let index = 0; index < selectionEnd; index += 1) {
+    const swapIndex = index + Math.floor(random() * (ids.length - index));
     const current = ids[index];
     const target = ids[swapIndex];
 
@@ -1425,6 +1487,31 @@ function shuffleIdsInPlace(ids: string[], randomSeed: number): void {
     ids[index] = target;
     ids[swapIndex] = current;
   }
+
+  return ids.slice(offset, selectionEnd);
+}
+
+function normalizePostPageCursor(value: PostPageCursor | null | undefined): PostPageCursor | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (
+    (value.sortField !== "saved_at" && value.sortField !== "posted_at") ||
+    (value.sortDirection !== "asc" && value.sortDirection !== "desc") ||
+    !Number.isFinite(value.value) ||
+    typeof value.xPostId !== "string" ||
+    value.xPostId.trim() === ""
+  ) {
+    return null;
+  }
+
+  return {
+    sortField: value.sortField,
+    sortDirection: value.sortDirection,
+    value: value.value,
+    xPostId: value.xPostId
+  };
 }
 
 function createSeededRandom(seed: number): () => number {
@@ -1439,11 +1526,17 @@ function createSeededRandom(seed: number): () => number {
 }
 
 async function listPostIdsByAuthorFilter(authorFilter: string): Promise<string[]> {
-  const posts = await listPosts();
+  const usernames = await listPostUsernames();
+  const matchingUsernames = usernames.filter(
+    (username) => normalizeAuthorFilter(username) === authorFilter
+  );
 
-  return posts
-    .filter((post) => normalizeAuthorFilter(post.x_username) === authorFilter)
-    .map((post) => post.x_post_id);
+  if (matchingUsernames.length === 0) {
+    return [];
+  }
+
+  const idsByUsername = await Promise.all(matchingUsernames.map(listPostIdsByUsername));
+  return idsByUsername.flat();
 }
 
 async function listPostIdsByDateFilter(
@@ -1468,111 +1561,30 @@ async function listPostIdsByDateFilter(
   return listPostIds();
 }
 
-async function ensureTagAssignments(inputs: PostTagInput[]): Promise<void> {
-  for (const item of inputs) {
-    const resolvedItem = item;
-    let existingPostTag: PostTagRecord | undefined;
-
-    try {
-      existingPostTag = await getPostTagByNormalizedName(
-        resolvedItem.x_post_id,
-        resolvedItem.normalized_name
-      );
-    } catch (error) {
-      throw new Error(`Tag assignment failed while checking existing tags: ${formatError(error)}`);
-    }
-
-    if (existingPostTag !== undefined) {
-      if (existingPostTag.source === "auto" && resolvedItem.source === "manual") {
-        try {
-          await deletePostTag(existingPostTag.post_tag_id);
-          await deleteOrphanedTag(existingPostTag.tag_id);
-        } catch (error) {
-          throw new Error(`Tag assignment failed while replacing an auto tag: ${formatError(error)}`);
-        }
-      } else {
-        continue;
-      }
-    }
-
-    let tag: TagRecord;
-
-    try {
-      tag = await ensureTagRecord(
-        resolvedItem.normalized_name,
-        resolvedItem.display_name,
-        resolvedItem.system_key,
-        resolvedItem.assigned_at
-      );
-    } catch (error) {
-      throw new Error(`Tag assignment failed while ensuring a tag record: ${formatError(error)}`);
-    }
-
-    try {
-      await addPostTag({
-        post_tag_id: crypto.randomUUID(),
-        x_post_id: resolvedItem.x_post_id,
-        tag_id: tag.tag_id,
-        normalized_name: tag.normalized_name,
-        display_name: resolvedItem.display_name,
-        system_key: resolvedItem.system_key,
-        source: resolvedItem.source,
-        assigned_at: resolvedItem.assigned_at
-      });
-    } catch (error) {
-      throw new Error(`Tag assignment failed while writing post_tags: ${formatError(error)}`);
-    }
-  }
-}
-
-async function assignPostTagsDirectly(inputs: PostTagInput[]): Promise<void> {
-  for (const item of inputs) {
-    await archiveDb.transaction("rw", archiveDb.tags, archiveDb.post_tags, async () => {
-      let tag = await getTagByNormalizedName(item.normalized_name);
-
-      if (tag === undefined) {
-        tag = {
-          tag_id: crypto.randomUUID(),
-          normalized_name: item.normalized_name,
-          display_name: item.display_name,
-          system_key: item.system_key,
-          created_at: item.assigned_at
-        };
-        await addTag(tag);
-      }
-
-      const existingPostTag = await getPostTagByNormalizedName(item.x_post_id, item.normalized_name);
-
-      if (existingPostTag !== undefined) {
-        if (existingPostTag.source === "auto" && item.source === "manual") {
-          await deletePostTag(existingPostTag.post_tag_id);
-          await deleteOrphanedTag(existingPostTag.tag_id);
-        } else {
-          return;
-        }
-      }
-
-      await addPostTag({
-        post_tag_id: crypto.randomUUID(),
-        x_post_id: item.x_post_id,
-        tag_id: tag.tag_id,
-        normalized_name: tag.normalized_name,
-        display_name: item.display_name,
-        system_key: item.system_key,
-        source: item.source,
-        assigned_at: item.assigned_at
-      });
-    });
-  }
-}
-
 async function assignAutoTags(xPostId: string, inputs: PostTagInput[]): Promise<void> {
   for (const item of inputs) {
-    const result = await addPostTagByName(xPostId, item.display_name);
+    const tag = await ensureTagRecord(
+      item.normalized_name,
+      item.display_name,
+      item.system_key,
+      item.assigned_at
+    );
+    const existingPostTag = await getPostTagByNormalizedName(xPostId, item.normalized_name);
 
-    if (!result.ok) {
-      throw new Error(`Auto tag add failed: ${result.error}`);
+    if (existingPostTag !== undefined) {
+      continue;
     }
+
+    await addPostTag({
+      post_tag_id: crypto.randomUUID(),
+      x_post_id: xPostId,
+      tag_id: tag.tag_id,
+      normalized_name: tag.normalized_name,
+      display_name: tag.display_name,
+      system_key: tag.system_key,
+      source: item.source,
+      assigned_at: item.assigned_at
+    });
   }
 }
 
@@ -1702,6 +1714,7 @@ function createPendingImageRecord(
     height: image.height,
     mime_type: null,
     byte_size: null,
+    checksum: null,
     storage_status: "pending",
     saved_at: savedAt,
     last_error: null
@@ -1732,6 +1745,7 @@ function createPendingVideoRecord(
     height: video.height,
     mime_type: video.mime_type,
     byte_size: null,
+    checksum: null,
     storage_status: "pending",
     saved_at: savedAt,
     last_error: null
@@ -1957,7 +1971,8 @@ function normalizeMediaRecord(media: MediaRecord): MediaRecord {
   return {
     ...media,
     preview_image_url: media.preview_image_url ?? null,
-    preview_image_opfs_path: media.preview_image_opfs_path ?? null
+    preview_image_opfs_path: media.preview_image_opfs_path ?? null,
+    checksum: media.checksum ?? null
   };
 }
 
@@ -2027,6 +2042,7 @@ function prepareRefetchedMediaUpdate(
       reusedRecord.last_error = null;
       reusedRecord.byte_size = null;
       reusedRecord.mime_type = null;
+      reusedRecord.checksum = null;
       persistRecords.push(reusedRecord);
     }
 
@@ -2062,6 +2078,7 @@ function prepareRefetchedMediaUpdate(
       reusedRecord.storage_status = "pending";
       reusedRecord.last_error = null;
       reusedRecord.byte_size = null;
+      reusedRecord.checksum = null;
       persistRecords.push(reusedRecord);
     }
 
