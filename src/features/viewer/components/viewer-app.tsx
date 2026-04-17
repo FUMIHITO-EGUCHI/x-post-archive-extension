@@ -5,7 +5,6 @@ import type {
   ArchiveSummaryRecord,
   ArchiveTagSummaryRecord,
   DateFilterTarget,
-  PostFilterInput,
   PostSortField,
   SortDirection,
   UserSummary,
@@ -45,13 +44,17 @@ import { useRefetchControls } from "./use-refetch-controls";
 import { useViewerPreferences } from "./use-viewer-preferences";
 import { useTagOperations } from "./use-tag-operations";
 import { useArchiveLoader } from "./use-archive-loader";
+import {
+  createRandomSeed,
+  DEFAULT_DATE_FILTER_TARGET,
+  useSortFilter
+} from "./use-sort-filter";
 
 type ViewerScreen = "archive" | "settings";
 type TagSortOption = "count" | "name";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_SESSION_RESTORE_LIMIT = 200;
 const FILTER_MODAL_LIST_SIZE = 40;
-const DEFAULT_DATE_FILTER_TARGET: DateFilterTarget = "saved_at";
 const logger = createLogger("viewer");
 
 export function ViewerApp() {
@@ -66,15 +69,7 @@ export function ViewerApp() {
     tagCount: 0,
     mediaBytes: 0
   });
-  const [sortField, setSortField] = useState<PostSortField>("saved_at");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [randomSeed, setRandomSeed] = useState(() => createRandomSeed());
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
-  const [activeAuthorFilter, setActiveAuthorFilter] = useState<string | null>(null);
-  const [activeDateFilterTarget, setActiveDateFilterTarget] = useState<DateFilterTarget | null>(null);
-  const [activeDateFrom, setActiveDateFrom] = useState<string | null>(null);
-  const [activeDateTo, setActiveDateTo] = useState<string | null>(null);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [filterModalActiveTab, setFilterModalActiveTab] = useState<FilterModalTab>("user");
   const [isBulkTagModalOpen, setIsBulkTagModalOpen] = useState(false);
@@ -106,6 +101,39 @@ export function ViewerApp() {
     setLoadNotice,
     setInitialLoadError
   } = archiveLoader;
+  const sortFilter = useSortFilter({
+    loadArchivePage,
+    closeFilterModal
+  });
+  const {
+    sortField,
+    setSortField,
+    sortDirection,
+    setSortDirection,
+    setRandomSeed,
+    activeTagFilter,
+    setActiveTagFilter,
+    activeAuthorFilter,
+    setActiveAuthorFilter,
+    activeDateFilterTarget,
+    setActiveDateFilterTarget,
+    activeDateFrom,
+    setActiveDateFrom,
+    activeDateTo,
+    setActiveDateTo,
+    getCurrentDateFilterInput,
+    getCurrentPostFilterInput,
+    getRandomSeedInput,
+    handleSortFieldChange,
+    handleSortDirectionToggle,
+    handleReshuffle,
+    handleToggleTagFilter,
+    handleToggleAuthorFilter,
+    handleApplyDateFilter: applyDateFilter,
+    handleClearDateFilter: clearDateFilter,
+    handleClearAllFilters: clearAllFilters,
+    handleLoadMore: loadMorePosts
+  } = sortFilter;
 
   const preferences = useViewerPreferences({
     archiveMediaBytes: archiveSummary.mediaBytes,
@@ -519,31 +547,6 @@ export function ViewerApp() {
     }
   }
 
-  function getCurrentDateFilterInput() {
-    return {
-      dateFilterTarget: activeDateFilterTarget,
-      dateFrom: activeDateFrom,
-      dateTo: activeDateTo
-    };
-  }
-
-  function getCurrentPostFilterInput(): PostFilterInput {
-    return {
-      tagFilter: activeTagFilter,
-      authorFilter: activeAuthorFilter,
-      dateFilterTarget: activeDateFilterTarget,
-      dateFrom: toDateFilterStartTimestamp(activeDateFrom),
-      dateTo: toDateFilterEndTimestamp(activeDateTo)
-    };
-  }
-
-  function getRandomSeedInput(nextSortField = sortField, seedOverride?: number | null) {
-    return {
-      randomSeed:
-        nextSortField === "random" ? seedOverride ?? randomSeed : null
-    };
-  }
-
   async function reloadCurrentArchive(limit = Math.max(posts.length, DEFAULT_PAGE_SIZE)) {
     await Promise.all([
       refreshArchiveMetadata(),
@@ -641,112 +644,6 @@ export function ViewerApp() {
     }
   }
 
-  async function handleSortFieldChange(nextValue: PostSortField) {
-    const nextRandomSeed = nextValue === "random" ? createRandomSeed() : randomSeed;
-    setSortField(nextValue);
-    if (nextValue === "random") {
-      setRandomSeed(nextRandomSeed);
-    }
-    window.scrollTo({
-      top: 0
-    });
-    await loadArchivePage({
-      offset: 0,
-      limit: DEFAULT_PAGE_SIZE,
-      sortField: nextValue,
-      sortDirection,
-      ...getRandomSeedInput(nextValue, nextRandomSeed),
-      tagFilter: activeTagFilter,
-      authorFilter: activeAuthorFilter,
-      ...getCurrentDateFilterInput(),
-      append: false
-    });
-  }
-
-  async function handleSortDirectionToggle() {
-    if (sortField === "random") {
-      return;
-    }
-
-    const nextValue = sortDirection === "desc" ? "asc" : "desc";
-    setSortDirection(nextValue);
-    window.scrollTo({
-      top: 0
-    });
-    await loadArchivePage({
-      offset: 0,
-      limit: DEFAULT_PAGE_SIZE,
-      sortField,
-      sortDirection: nextValue,
-      ...getRandomSeedInput(),
-      tagFilter: activeTagFilter,
-      authorFilter: activeAuthorFilter,
-      ...getCurrentDateFilterInput(),
-      append: false
-    });
-  }
-
-  async function handleReshuffle() {
-    const nextRandomSeed = createRandomSeed();
-    setRandomSeed(nextRandomSeed);
-    window.scrollTo({
-      top: 0
-    });
-    await loadArchivePage({
-      offset: 0,
-      limit: DEFAULT_PAGE_SIZE,
-      sortField: "random",
-      sortDirection,
-      ...getRandomSeedInput("random", nextRandomSeed),
-      tagFilter: activeTagFilter,
-      authorFilter: activeAuthorFilter,
-      ...getCurrentDateFilterInput(),
-      append: false
-    });
-  }
-
-  async function handleToggleTagFilter(normalizedName: string) {
-    const nextValue = activeTagFilter === normalizedName ? null : normalizedName;
-
-    setActiveTagFilter(nextValue);
-    closeFilterModal();
-    window.scrollTo({
-      top: 0
-    });
-    await loadArchivePage({
-      offset: 0,
-      limit: DEFAULT_PAGE_SIZE,
-      sortField,
-      sortDirection,
-      ...getRandomSeedInput(),
-      tagFilter: nextValue,
-      authorFilter: activeAuthorFilter,
-      ...getCurrentDateFilterInput(),
-      append: false
-    });
-  }
-
-  async function handleToggleAuthorFilter(screenName: string) {
-    const nextValue = activeAuthorFilter === screenName ? null : screenName;
-
-    setActiveAuthorFilter(nextValue);
-    closeFilterModal();
-    window.scrollTo({
-      top: 0
-    });
-    await loadArchivePage({
-      offset: 0,
-      limit: DEFAULT_PAGE_SIZE,
-      sortField,
-      sortDirection,
-      ...getRandomSeedInput(),
-      tagFilter: activeTagFilter,
-      authorFilter: nextValue,
-      ...getCurrentDateFilterInput(),
-      append: false
-    });
-  }
-
   async function handleApplyDateFilter() {
     const validationError = getDateFilterDraftError(dateFilterDraftFrom, dateFilterDraftTo, language);
 
@@ -759,94 +656,29 @@ export function ViewerApp() {
     const nextDateFilterTarget =
       nextDateFrom === null && nextDateTo === null ? null : dateFilterDraftTarget;
 
-    setActiveDateFilterTarget(nextDateFilterTarget);
-    setActiveDateFrom(nextDateFrom);
-    setActiveDateTo(nextDateTo);
-    closeFilterModal();
-    window.scrollTo({
-      top: 0
-    });
-    await loadArchivePage({
-      offset: 0,
-      limit: DEFAULT_PAGE_SIZE,
-      sortField,
-      sortDirection,
-      ...getRandomSeedInput(),
-      tagFilter: activeTagFilter,
-      authorFilter: activeAuthorFilter,
+    await applyDateFilter({
       dateFilterTarget: nextDateFilterTarget,
       dateFrom: nextDateFrom,
-      dateTo: nextDateTo,
-      append: false
+      dateTo: nextDateTo
     });
   }
 
   async function handleClearDateFilter() {
-    setActiveDateFilterTarget(null);
-    setActiveDateFrom(null);
-    setActiveDateTo(null);
     setDateFilterDraftTarget(DEFAULT_DATE_FILTER_TARGET);
     setDateFilterDraftFrom("");
     setDateFilterDraftTo("");
-    closeFilterModal();
-    window.scrollTo({
-      top: 0
-    });
-    await loadArchivePage({
-      offset: 0,
-      limit: DEFAULT_PAGE_SIZE,
-      sortField,
-      sortDirection,
-      ...getRandomSeedInput(),
-      tagFilter: activeTagFilter,
-      authorFilter: activeAuthorFilter,
-      dateFilterTarget: null,
-      dateFrom: null,
-      dateTo: null,
-      append: false
-    });
+    await clearDateFilter();
   }
 
   async function handleClearAllFilters() {
-    setActiveAuthorFilter(null);
-    setActiveTagFilter(null);
-    setActiveDateFilterTarget(null);
-    setActiveDateFrom(null);
-    setActiveDateTo(null);
     setDateFilterDraftTarget(DEFAULT_DATE_FILTER_TARGET);
     setDateFilterDraftFrom("");
     setDateFilterDraftTo("");
-    closeFilterModal();
-    window.scrollTo({
-      top: 0
-    });
-    await loadArchivePage({
-      offset: 0,
-      limit: DEFAULT_PAGE_SIZE,
-      sortField,
-      sortDirection,
-      ...getRandomSeedInput(),
-      tagFilter: null,
-      authorFilter: null,
-      dateFilterTarget: null,
-      dateFrom: null,
-      dateTo: null,
-      append: false
-    });
+    await clearAllFilters();
   }
 
   async function handleLoadMore() {
-    await loadArchivePage({
-      offset: posts.length,
-      limit: DEFAULT_PAGE_SIZE,
-      sortField,
-      sortDirection,
-      ...getRandomSeedInput(),
-      tagFilter: activeTagFilter,
-      authorFilter: activeAuthorFilter,
-      ...getCurrentDateFilterInput(),
-      append: true
-    });
+    await loadMorePosts(posts.length);
   }
 
   async function persistCurrentViewerSession(overrides?: {
@@ -1182,13 +1014,6 @@ function formatCount(value: number, language: ArchiveLanguage = "en"): string {
   return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
 }
 
-function createRandomSeed(): number {
-  const seed = new Uint32Array(1);
-  globalThis.crypto.getRandomValues(seed);
-  const nextSeed = seed[0];
-  return nextSeed === undefined || nextSeed === 0 ? 1 : nextSeed;
-}
-
 function formatUserSummaryLabel(user: UserSummary): string {
   return `${user.display_name} (@${user.screen_name})`;
 }
@@ -1238,29 +1063,6 @@ function parseLocalDateInput(value: string): Date | null {
   }
 
   return date;
-}
-
-function toDateFilterStartTimestamp(value: string | null): number | null {
-  if (value === null) {
-    return null;
-  }
-
-  return parseLocalDateInput(value)?.getTime() ?? null;
-}
-
-function toDateFilterEndTimestamp(value: string | null): number | null {
-  if (value === null) {
-    return null;
-  }
-
-  const date = parseLocalDateInput(value);
-
-  if (date === null) {
-    return null;
-  }
-
-  date.setHours(23, 59, 59, 999);
-  return date.getTime();
 }
 
 function getDateFilterDraftError(
