@@ -21,11 +21,7 @@ import {
   localizeKnownAutoTagDisplayName,
   type ArchiveLanguage
 } from "../../settings/archive-language";
-import {
-  clearViewerSession,
-  loadViewerSession,
-  persistViewerSession
-} from "../viewer-session-storage";
+import { loadViewerSession } from "../viewer-session-storage";
 import {
   StickyToolbar,
   type FilterModalTab,
@@ -49,6 +45,7 @@ import {
   useSortFilter
 } from "./use-sort-filter";
 import { useFilterModal } from "./use-filter-modal";
+import { useViewerSession } from "./use-viewer-session";
 
 type ViewerScreen = "archive" | "settings";
 const DEFAULT_PAGE_SIZE = 50;
@@ -72,10 +69,7 @@ export function ViewerApp() {
   const [userSummaries, setUserSummaries] = useState<UserSummary[]>([]);
   const archiveLoader = useArchiveLoader();
   const mediaLightbox = useMediaLightbox();
-  const shouldPersistSessionRef = useRef(false);
   const closeFilterModalRef = useRef<() => void>(() => {});
-  const restoreScrollTopRef = useRef<number | null>(null);
-  const [restoreTargetPostId, setRestoreTargetPostId] = useState<string | null>(null);
   const archiveSectionRef = useRef<HTMLElement | null>(null);
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const backToArchiveButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -128,8 +122,7 @@ export function ViewerApp() {
   } = sortFilter;
   const preferences = useViewerPreferences({
     archiveMediaBytes: archiveSummary.mediaBytes,
-    archivePostCount: archiveSummary.postCount,
-    persistCurrentViewerSession
+    archivePostCount: archiveSummary.postCount
   });
   const {
     language,
@@ -148,6 +141,23 @@ export function ViewerApp() {
     handleSessionRestoreModeChange,
     handleClearSavedSession
   } = preferences;
+  const viewerSession = useViewerSession({
+    activeAuthorFilter,
+    activeDateFilterTarget,
+    activeDateFrom,
+    activeDateTo,
+    activeTagFilter,
+    postsLength: posts.length,
+    screen,
+    sessionRestoreMode,
+    sortDirection,
+    sortField
+  });
+  const {
+    enableSessionPersistence,
+    persistCurrentViewerSession,
+    restoreSessionPosition
+  } = viewerSession;
   const filterModal = useFilterModal({
     activeAuthorFilter,
     activeDateFilterTarget,
@@ -300,8 +310,7 @@ export function ViewerApp() {
               Math.max(DEFAULT_PAGE_SIZE, savedSession.loadedCount),
               MAX_SESSION_RESTORE_LIMIT
             );
-            restoreScrollTopRef.current = savedSession.scrollTop;
-            setRestoreTargetPostId(savedSession.anchorPostId);
+            restoreSessionPosition(savedSession.anchorPostId, savedSession.scrollTop);
           }
         }
 
@@ -335,7 +344,7 @@ export function ViewerApp() {
         ]);
 
         if (!cancelled) {
-          shouldPersistSessionRef.current = true;
+          enableSessionPersistence();
         }
       } catch (error) {
         logger.error("viewer.initialize.failed", {
@@ -357,109 +366,6 @@ export function ViewerApp() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (restoreTargetPostId === null && restoreScrollTopRef.current === null) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      const targetElement =
-        restoreTargetPostId === null ? null : findPostCardElement(restoreTargetPostId);
-
-      if (targetElement !== null) {
-        targetElement.scrollIntoView({
-          block: "start"
-        });
-      } else if (restoreScrollTopRef.current !== null) {
-        window.scrollTo({
-          top: restoreScrollTopRef.current
-        });
-      }
-
-      restoreScrollTopRef.current = null;
-      setRestoreTargetPostId(null);
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [posts, restoreTargetPostId]);
-
-  useEffect(() => {
-    if (!shouldPersistSessionRef.current || screen !== "archive") {
-      return;
-    }
-
-    if (sessionRestoreMode === "off") {
-      void clearViewerSession();
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      void persistCurrentViewerSession();
-    }, 250);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [
-    activeAuthorFilter,
-    activeDateFilterTarget,
-    activeDateFrom,
-    activeDateTo,
-    activeTagFilter,
-    posts.length,
-    screen,
-    sessionRestoreMode,
-    sortDirection,
-    sortField
-  ]);
-
-  useEffect(() => {
-    if (
-      !shouldPersistSessionRef.current ||
-      sessionRestoreMode !== "filters-and-position" ||
-      screen !== "archive"
-    ) {
-      return undefined;
-    }
-
-    let timeoutId: number | null = null;
-
-    function handleScroll() {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-
-      timeoutId = window.setTimeout(() => {
-        void persistCurrentViewerSession();
-      }, 300);
-    }
-
-    window.addEventListener("scroll", handleScroll, {
-      passive: true
-    });
-
-    return () => {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-
-      window.removeEventListener("scroll", handleScroll);
-    };
-  }, [
-    activeAuthorFilter,
-    activeDateFilterTarget,
-    activeDateFrom,
-    activeDateTo,
-    activeTagFilter,
-    posts.length,
-    screen,
-    sessionRestoreMode,
-    sortDirection,
-    sortField
-  ]);
 
   async function refreshArchiveMetadata(): Promise<void> {
     try {
@@ -608,45 +514,6 @@ export function ViewerApp() {
 
   async function handleLoadMore() {
     await loadMorePosts(posts.length);
-  }
-
-  async function persistCurrentViewerSession(overrides?: {
-    anchorPostId?: string | null;
-    scrollTop?: number;
-  }) {
-    if (sessionRestoreMode === "off") {
-      return;
-    }
-
-    try {
-      await persistViewerSession({
-        version: 1,
-        sortField,
-        sortDirection,
-        activeTagFilter,
-        activeAuthorFilter,
-        activeDateFilterTarget,
-        activeDateFrom,
-        activeDateTo,
-        loadedCount: posts.length,
-        anchorPostId:
-          sessionRestoreMode === "filters-and-position"
-            ? overrides?.anchorPostId ?? findCurrentAnchorPostId()
-            : null,
-        scrollTop:
-          sessionRestoreMode === "filters-and-position"
-            ? overrides?.scrollTop ?? window.scrollY
-            : 0,
-        savedAt: Date.now()
-      });
-    } catch (error) {
-      logger.error("viewer.session.persist_failed", {
-        message: "Failed to persist the viewer session.",
-        context: {
-          error
-        }
-      });
-    }
   }
 
   const filterChips: StickyToolbarFilterChip[] = [];
@@ -839,7 +706,9 @@ export function ViewerApp() {
           onThemeChange={handleThemeChange}
           onLanguageChange={handleLanguageChange}
           onFontSizeChange={handleFontSizeChange}
-          onSessionRestoreModeChange={handleSessionRestoreModeChange}
+          onSessionRestoreModeChange={(nextValue) =>
+            handleSessionRestoreModeChange(nextValue, persistCurrentViewerSession)
+          }
           onClearSavedSession={handleClearSavedSession}
           onTagRenamed={handleTagRenamed}
           onTagMerged={handleTagMerged}
@@ -1118,48 +987,4 @@ function formatArchiveCountLabel(
     : `Showing ${formatCount(totalCount, language)} / ${formatCount(totalCount, language)} posts`;
 }
 
-function findPostCardElement(xPostId: string): HTMLElement | null {
-  const elements = document.querySelectorAll<HTMLElement>("[data-post-id]");
-
-  for (const element of elements) {
-    if (element.dataset.postId === xPostId) {
-      return element;
-    }
-  }
-
-  return null;
-}
-
-function findCurrentAnchorPostId(): string | null {
-  const elements = document.querySelectorAll<HTMLElement>("[data-post-id]");
-  let bestMatch: {
-    xPostId: string;
-    distance: number;
-  } | null = null;
-
-  for (const element of elements) {
-    const xPostId = element.dataset.postId;
-
-    if (xPostId === undefined) {
-      continue;
-    }
-
-    const rect = element.getBoundingClientRect();
-
-    if (rect.bottom <= 0) {
-      continue;
-    }
-
-    const distance = Math.abs(rect.top);
-
-    if (bestMatch === null || distance < bestMatch.distance) {
-      bestMatch = {
-        xPostId,
-        distance
-      };
-    }
-  }
-
-  return bestMatch?.xPostId ?? null;
-}
 

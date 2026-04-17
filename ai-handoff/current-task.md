@@ -13,7 +13,7 @@
 ## Scope
 
 - Start with `MAX_SESSION_RESTORE_LIMIT = 200` cap for session restore `initialLimit`
-- Continue safe decomposition steps; `PostCard`, `SettingsScreen`, media lightbox, refetch controls, viewer preferences, tag operations, archive loader, sort/filter, and filter modal extraction are now done
+- Continue safe decomposition steps; `PostCard`, `SettingsScreen`, media lightbox, refetch controls, viewer preferences, tag operations, archive loader, sort/filter, filter modal, and viewer session extraction are now done
 - Keep data loading, filter/sort behavior, and viewer UI behavior unchanged
 
 ## Coordination
@@ -25,7 +25,7 @@
 
 ## Next Action
 
-- next_action: `Continue decomposition with the next safe slice, likely viewer session extraction.`
+- next_action: `Close this task or pick up the next waiting task.`
 
 ## Acceptance Criteria
 
@@ -37,7 +37,7 @@
 ## Completion Checklist
 
 - [x] investigation finished
-- [ ] implementation finished
+- [x] implementation finished
 - [x] `npm run typecheck`
 - [x] `npm run build`
 - [x] task packet `Result` updated
@@ -61,6 +61,8 @@
 - `2026-04-17 Codex`: extracted sort/filter state, random seed handling, filter request helpers, and sort/filter reload handlers into `use-sort-filter.ts`; typecheck/build passed; task remains active for further decomposition
 - `2026-04-17 Codex`: committed `ba5ee2e refactor: extract viewer sort filter`
 - `2026-04-17 Codex`: extracted filter modal state, draft date validation, search state, and incremental tag/user option lists into `use-filter-modal.ts`; typecheck/build passed; task remains active for further decomposition
+- `2026-04-17 Codex`: committed `57576d7 refactor: extract viewer filter modal`
+- `2026-04-17 Codex`: extracted viewer session persistence, restore effects, scroll-position persistence, and anchor lookup into `use-viewer-session.ts`; typecheck/build passed
 
 ## Waiting Tasks
 

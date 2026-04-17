@@ -538,6 +538,8 @@ Do these in order. Each step is independently committable and passses typecheck/
 - `2026-04-17 Codex`: Extracted sort/filter state, random seed handling, current filter request helpers, and sort/filter reload handlers from `viewer-app.tsx` into `use-sort-filter.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely filter modal or viewer session extraction.
 - `2026-04-17 Codex`: Committed the sort/filter extraction as `ba5ee2e refactor: extract viewer sort filter`.
 - `2026-04-17 Codex`: Extracted filter modal state, draft date validation, tag/user search state, and incremental tag/user option lists from `viewer-app.tsx` into `use-filter-modal.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely viewer session extraction.
+- `2026-04-17 Codex`: Committed the filter modal extraction as `57576d7 refactor: extract viewer filter modal`.
+- `2026-04-17 Codex`: Extracted viewer session persistence, restore effects, scroll-position persistence, and anchor lookup from `viewer-app.tsx` into `use-viewer-session.ts`; `npm run typecheck` and `npm run build` passed. Planned viewer decomposition slices are complete.
 
 ## Result
 
@@ -553,7 +555,8 @@ Do these in order. Each step is independently committable and passses typecheck/
   - Archive post list/loading state, request-id guard, load notices, and `loadArchivePage` are now extracted to `src/features/viewer/components/use-archive-loader.ts`.
   - Sort/filter state, random seed handling, current filter request helpers, and sort/filter reload handlers are now extracted to `src/features/viewer/components/use-sort-filter.ts`.
   - Filter modal state, draft date validation, tag/user search state, and incremental tag/user option lists are now extracted to `src/features/viewer/components/use-filter-modal.ts`.
-  - `viewer-app.tsx` still owns session state; broader decomposition is still active.
+  - Viewer session persistence, restore effects, scroll-position persistence, and anchor lookup are now extracted to `src/features/viewer/components/use-viewer-session.ts`.
+  - Planned viewer decomposition slices are complete.
 
 ## Verification
 
@@ -577,11 +580,13 @@ Do these in order. Each step is independently committable and passses typecheck/
 - `npm run build` passed after sort/filter extraction.
 - `npm run typecheck` passed after filter modal extraction.
 - `npm run build` passed after filter modal extraction.
+- `npm run typecheck` passed after viewer session extraction.
+- `npm run build` passed after viewer session extraction.
 
 ## Completion Checklist
 - [x] Claude design review complete (needs_from_claude resolved)
 - [x] investigation finished
-- [ ] implementation finished
+- [x] implementation finished
 - [x] `npm run typecheck`
 - [x] `npm run build`
 - [x] task packet `Result` updated
