@@ -210,18 +210,20 @@ export async function saveArchivePost(
   const media = [...imageMedia, ...videoMedia];
 
   try {
-    await archiveDb.transaction("rw", archiveDb.posts, archiveDb.media, async () => {
-      await addPost(post);
-      await addMediaRecords(media);
-    });
+    await archiveDb.transaction(
+      "rw",
+      archiveDb.posts,
+      archiveDb.media,
+      archiveDb.tags,
+      archiveDb.post_tags,
+      async () => {
+        await addPost(post);
+        await addMediaRecords(media);
+        await assignAutoTags(input.x_post_id, autoTags);
+      }
+    );
   } catch (error) {
     throw new Error(`Post save failed in create transaction: ${formatError(error)}`);
-  }
-
-  try {
-    await assignAutoTags(input.x_post_id, autoTags);
-  } catch (error) {
-    throw new Error(`Post save failed while assigning auto tags: ${formatError(error)}`);
   }
 
   enqueueMediaPersistence(media, options.traceId);
@@ -1549,11 +1551,28 @@ async function listPostIdsByDateFilter(
 
 async function assignAutoTags(xPostId: string, inputs: PostTagInput[]): Promise<void> {
   for (const item of inputs) {
-    const result = await addPostTagByName(xPostId, item.display_name);
+    const tag = await ensureTagRecord(
+      item.normalized_name,
+      item.display_name,
+      item.system_key,
+      item.assigned_at
+    );
+    const existingPostTag = await getPostTagByNormalizedName(xPostId, item.normalized_name);
 
-    if (!result.ok) {
-      throw new Error(`Auto tag add failed: ${result.error}`);
+    if (existingPostTag !== undefined) {
+      continue;
     }
+
+    await addPostTag({
+      post_tag_id: crypto.randomUUID(),
+      x_post_id: xPostId,
+      tag_id: tag.tag_id,
+      normalized_name: tag.normalized_name,
+      display_name: tag.display_name,
+      system_key: tag.system_key,
+      source: item.source,
+      assigned_at: item.assigned_at
+    });
   }
 }
 
