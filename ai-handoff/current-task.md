@@ -31,24 +31,25 @@
 
 ## Acceptance Criteria
 
-- [ ] `getArchiveSummary()` uses count queries instead of `listPosts()` full scan
-- [ ] `listArchiveUserSummaries()` uses `x_username` index instead of full scan
-- [ ] `listPostIdsByAuthorFilter()` uses indexed query instead of full scan
-- [ ] `npm run typecheck` pass
-- [ ] `npm run build` pass
+- [x] `getArchiveSummary()` uses count queries instead of `listPosts()` full scan
+- [x] `listArchiveUserSummaries()` uses `x_username` index instead of full scan
+- [x] `listPostIdsByAuthorFilter()` uses indexed query instead of full scan
+- [x] `npm run typecheck` pass
+- [x] `npm run build` pass
 
 ## Completion Checklist
 
-- [ ] investigation finished
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
+- [x] investigation finished
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
 
 ## Recent Updates
 
+- `2026-04-17 Codex`: implemented P1-P3 full-scan performance fixes; added Dexie v14 indexes for `x_username`, `[x_username+saved_at]`, and `media_type`; typecheck/build passed
 - `2026-04-17 Codex`: closed `2026-04-14-viewer-app-decompose-and-cap-load`; all planned decomposition slices are complete; typecheck/build/handoff check passed
 - `2026-04-14 Codex`: committed `2026-04-14-merge-import-controls` as `a790ca3 Merge timeline import controls`
 - `2026-04-14 Codex`: started `2026-04-14-viewer-app-decompose-and-cap-load` on `feature/full-codebase-review-2026-04-14-fixes`

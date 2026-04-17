@@ -49,6 +49,10 @@ export async function listAllPostTags(): Promise<PostTagRecord[]> {
   return archiveDb.post_tags.toArray();
 }
 
+export async function countAssignedTagNames(): Promise<number> {
+  return (await archiveDb.post_tags.orderBy("normalized_name").uniqueKeys()).length;
+}
+
 export async function deletePostTag(postTagId: string): Promise<void> {
   await archiveDb.post_tags.delete(postTagId);
 }
