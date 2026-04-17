@@ -207,24 +207,26 @@ import {
 
 ## Work Log
 
-（Codex が実装時に追記すること）
+- `2026-04-17 Codex`: Extracted pure formatter/date helpers from `viewer-app.tsx` into `viewer-formatters.ts`, and reused shared date helpers from `use-filter-modal.ts`.
+- `2026-04-17 Codex`: Extracted archive metadata state and `refreshArchiveMetadata()` from `viewer-app.tsx` into `use-archive-metadata.ts`.
 
 ## Result
 
-（Codex が記入）
+- `viewer-app.tsx` no longer owns archive summary/tag/user summary state directly.
+- `viewer-app.tsx` no longer contains the pure formatter/date helper block.
+- `use-filter-modal.ts` now shares `normalizeDateInputValue()` and `parseLocalDateInput()` from `viewer-formatters.ts`.
+- Viewer behavior, data loading, filter/sort behavior, and settings/refetch wiring remain unchanged.
 
 ## Verification
 
-- [ ] `npm run typecheck` pass（formatters 抽出後）
-- [ ] `npm run build` pass（formatters 抽出後）
-- [ ] `npm run typecheck` pass（metadata hook 抽出後）
-- [ ] `npm run build` pass（metadata hook 抽出後）
+- [x] `npm run typecheck` pass after formatter and metadata extraction.
+- [x] `npm run build` pass after formatter and metadata extraction.
 
 ## Completion Checklist
-- [ ] investigation finished
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
+- [x] investigation finished
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated

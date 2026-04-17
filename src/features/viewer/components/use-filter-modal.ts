@@ -9,6 +9,10 @@ import type { ArchiveLanguage } from "../../settings/archive-language";
 import type { FilterModalTab } from "./sticky-toolbar";
 import { useIncrementalList } from "./use-incremental-list";
 import { DEFAULT_DATE_FILTER_TARGET } from "./use-sort-filter";
+import {
+  normalizeDateInputValue,
+  parseLocalDateInput
+} from "./viewer-formatters";
 
 export type TagSortOption = "count" | "name";
 
@@ -191,45 +195,6 @@ function normalizeTagSearchQuery(value: string): string {
 
 function normalizeUserSearchQuery(value: string): string {
   return value.trim().replace(/^@+/, "").toLocaleLowerCase("ja-JP");
-}
-
-function normalizeDateInputValue(value: string): string | null {
-  const trimmedValue = value.trim();
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedValue)) {
-    return null;
-  }
-
-  return trimmedValue;
-}
-
-function parseLocalDateInput(value: string): Date | null {
-  const normalizedValue = normalizeDateInputValue(value);
-
-  if (normalizedValue === null) {
-    return null;
-  }
-
-  const [yearText, monthText, dayText] = normalizedValue.split("-");
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-    return null;
-  }
-
-  const date = new Date(year, month - 1, day, 0, 0, 0, 0);
-
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return null;
-  }
-
-  return date;
 }
 
 function getDateFilterDraftError(
