@@ -1,9 +1,9 @@
 # Task Packet: Investigate Quoted Container Annotation Coverage
 
 ## Meta
-- status: waiting
+- status: active
 - owner: Codex
-- branch: feature/archive-followups
+- branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: medium
 - files_in_scope: src/features/x/annotate-quoted-post-containers.ts, src/features/x/extract-post-from-article.ts, src/entrypoints/x-main.content.ts, src/features/x/bootstrap-x-content-script.ts
 - blocked_by: none
