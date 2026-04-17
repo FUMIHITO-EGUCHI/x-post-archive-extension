@@ -42,15 +42,10 @@ export type LoadedViewerPreferences = {
 
 export function useViewerPreferences({
   archiveMediaBytes,
-  archivePostCount,
-  persistCurrentViewerSession
+  archivePostCount
 }: {
   archiveMediaBytes: number;
   archivePostCount: number;
-  persistCurrentViewerSession: (overrides?: {
-    anchorPostId?: string | null;
-    scrollTop?: number;
-  }) => Promise<void>;
 }) {
   const [language, setLanguage] = useState<ArchiveLanguage>("ja");
   const [archiveSettings, setArchiveSettings] =
@@ -162,7 +157,14 @@ export function useViewerPreferences({
     setViewerTheme(preferences.viewerTheme);
   }, []);
 
-  async function handleSessionRestoreModeChange(nextValue: ViewerSessionRestoreMode) {
+  async function handleSessionRestoreModeChange(
+    nextValue: ViewerSessionRestoreMode,
+    persistCurrentViewerSession: (overrides?: {
+      anchorPostId?: string | null;
+      sessionRestoreMode?: ViewerSessionRestoreMode;
+      scrollTop?: number;
+    }) => Promise<void>
+  ) {
     setSessionRestoreMode(nextValue);
 
     try {
@@ -174,7 +176,7 @@ export function useViewerPreferences({
       }
 
       await persistCurrentViewerSession({
-        anchorPostId: nextValue === "filters-and-position" ? findCurrentAnchorPostId() : null,
+        sessionRestoreMode: nextValue,
         scrollTop: nextValue === "filters-and-position" ? window.scrollY : 0
       });
     } catch (error) {
@@ -288,37 +290,4 @@ export function useViewerPreferences({
 
 function isFontSizeOption(value: unknown): value is FontSizeOption {
   return value === "small" || value === "medium" || value === "large";
-}
-
-function findCurrentAnchorPostId(): string | null {
-  const postCards = document.querySelectorAll<HTMLElement>("[data-x-post-id]");
-  let bestMatch: {
-    xPostId: string;
-    distance: number;
-  } | null = null;
-
-  for (const element of postCards) {
-    const xPostId = element.dataset.xPostId;
-
-    if (typeof xPostId !== "string" || xPostId.length === 0) {
-      continue;
-    }
-
-    const rect = element.getBoundingClientRect();
-
-    if (rect.bottom <= 0) {
-      continue;
-    }
-
-    const distance = Math.abs(rect.top);
-
-    if (bestMatch === null || distance < bestMatch.distance) {
-      bestMatch = {
-        xPostId,
-        distance
-      };
-    }
-  }
-
-  return bestMatch?.xPostId ?? null;
 }
