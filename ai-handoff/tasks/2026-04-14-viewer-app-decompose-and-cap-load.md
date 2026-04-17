@@ -536,6 +536,8 @@ Do these in order. Each step is independently committable and passses typecheck/
 - `2026-04-15 Codex`: Extracted per-post tag picker/action state and tag add/remove handlers from `viewer-app.tsx` into `use-tag-operations.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely archive loader extraction.
 - `2026-04-15 Codex`: Extracted archive post list/loading state, request-id guard, load notices, and `loadArchivePage` from `viewer-app.tsx` into `use-archive-loader.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely sort/filter extraction.
 - `2026-04-17 Codex`: Extracted sort/filter state, random seed handling, current filter request helpers, and sort/filter reload handlers from `viewer-app.tsx` into `use-sort-filter.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely filter modal or viewer session extraction.
+- `2026-04-17 Codex`: Committed the sort/filter extraction as `ba5ee2e refactor: extract viewer sort filter`.
+- `2026-04-17 Codex`: Extracted filter modal state, draft date validation, tag/user search state, and incremental tag/user option lists from `viewer-app.tsx` into `use-filter-modal.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely viewer session extraction.
 
 ## Result
 
@@ -550,7 +552,8 @@ Do these in order. Each step is independently committable and passses typecheck/
   - Per-post tag picker/action state and tag add/remove handlers are now extracted to `src/features/viewer/components/use-tag-operations.ts`.
   - Archive post list/loading state, request-id guard, load notices, and `loadArchivePage` are now extracted to `src/features/viewer/components/use-archive-loader.ts`.
   - Sort/filter state, random seed handling, current filter request helpers, and sort/filter reload handlers are now extracted to `src/features/viewer/components/use-sort-filter.ts`.
-  - `viewer-app.tsx` still owns filter modal draft/list state and session state; broader decomposition is still active.
+  - Filter modal state, draft date validation, tag/user search state, and incremental tag/user option lists are now extracted to `src/features/viewer/components/use-filter-modal.ts`.
+  - `viewer-app.tsx` still owns session state; broader decomposition is still active.
 
 ## Verification
 
@@ -572,6 +575,8 @@ Do these in order. Each step is independently committable and passses typecheck/
 - `npm run build` passed after archive loader extraction.
 - `npm run typecheck` passed after sort/filter extraction.
 - `npm run build` passed after sort/filter extraction.
+- `npm run typecheck` passed after filter modal extraction.
+- `npm run build` passed after filter modal extraction.
 
 ## Completion Checklist
 - [x] Claude design review complete (needs_from_claude resolved)
