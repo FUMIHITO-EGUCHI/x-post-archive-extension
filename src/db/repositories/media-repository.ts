@@ -53,7 +53,10 @@ export async function listMediaByStorageStatus(
 
 export async function updateMediaAfterWrite(
   mediaId: string,
-  update: Pick<MediaRecord, "mime_type" | "byte_size" | "storage_status" | "last_error">
+  update: Pick<
+    MediaRecord,
+    "mime_type" | "byte_size" | "checksum" | "storage_status" | "last_error"
+  >
 ): Promise<void> {
   await archiveDb.media.update(mediaId, update);
 }
@@ -61,6 +64,7 @@ export async function updateMediaAfterWrite(
 export async function markMediaPending(mediaId: string): Promise<void> {
   await archiveDb.media.update(mediaId, {
     storage_status: "pending",
+    checksum: null,
     last_error: null
   });
 }

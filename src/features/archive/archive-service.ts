@@ -84,6 +84,7 @@ import {
   buildMediaOpfsPath,
   buildVideoPreviewOpfsPath,
   deleteBlobFromOpfs,
+  isQuotaExceededError,
   writeBlobToOpfs
 } from "../media-storage/opfs-media-storage";
 import { createLogger } from "../logging/logger";
@@ -1021,10 +1022,11 @@ async function persistMedia(record: MediaRecord, traceId?: string): Promise<void
     const blob = await response.blob();
     const mimeType = blob.type || response.headers.get("content-type");
 
-    await writeBlobToOpfs(record.opfs_path, blob);
+    const writeResult = await writeBlobToOpfs(record.opfs_path, blob);
     await updateMediaAfterWrite(record.media_id, {
       mime_type: mimeType === null || mimeType.trim() === "" ? null : mimeType,
       byte_size: blob.size,
+      checksum: writeResult.checksum,
       storage_status: "ready",
       last_error: null
     });
@@ -1039,19 +1041,29 @@ async function persistMedia(record: MediaRecord, traceId?: string): Promise<void
       }
     });
   } catch (error) {
+    const quotaExceeded = isQuotaExceededError(error);
+    const lastError =
+      error instanceof Error
+        ? `${quotaExceeded ? "OPFS quota exceeded: " : ""}${error.message}`
+        : quotaExceeded
+          ? "OPFS quota exceeded."
+          : "Media persistence failed.";
+
     await updateMediaAfterWrite(record.media_id, {
       mime_type: null,
       byte_size: null,
+      checksum: null,
       storage_status: "failed",
-      last_error: error instanceof Error ? error.message : "Media persistence failed."
+      last_error: lastError
     });
 
-    logger.error("media.persist.failed", {
-      message: "Media persistence failed.",
+    logger[quotaExceeded ? "warn" : "error"]("media.persist.failed", {
+      message: quotaExceeded ? "Media persistence failed because OPFS quota was exceeded." : "Media persistence failed.",
       context: {
         mediaId: record.media_id,
         xPostId: record.x_post_id,
         mediaType: record.media_type,
+        quotaExceeded,
         error,
         traceId: traceId ?? null
       }
@@ -1702,6 +1714,7 @@ function createPendingImageRecord(
     height: image.height,
     mime_type: null,
     byte_size: null,
+    checksum: null,
     storage_status: "pending",
     saved_at: savedAt,
     last_error: null
@@ -1732,6 +1745,7 @@ function createPendingVideoRecord(
     height: video.height,
     mime_type: video.mime_type,
     byte_size: null,
+    checksum: null,
     storage_status: "pending",
     saved_at: savedAt,
     last_error: null
@@ -1957,7 +1971,8 @@ function normalizeMediaRecord(media: MediaRecord): MediaRecord {
   return {
     ...media,
     preview_image_url: media.preview_image_url ?? null,
-    preview_image_opfs_path: media.preview_image_opfs_path ?? null
+    preview_image_opfs_path: media.preview_image_opfs_path ?? null,
+    checksum: media.checksum ?? null
   };
 }
 
@@ -2027,6 +2042,7 @@ function prepareRefetchedMediaUpdate(
       reusedRecord.last_error = null;
       reusedRecord.byte_size = null;
       reusedRecord.mime_type = null;
+      reusedRecord.checksum = null;
       persistRecords.push(reusedRecord);
     }
 
@@ -2062,6 +2078,7 @@ function prepareRefetchedMediaUpdate(
       reusedRecord.storage_status = "pending";
       reusedRecord.last_error = null;
       reusedRecord.byte_size = null;
+      reusedRecord.checksum = null;
       persistRecords.push(reusedRecord);
     }
 
