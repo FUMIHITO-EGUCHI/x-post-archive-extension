@@ -1,7 +1,7 @@
 # Task Packet: Decompose ViewerApp and Cap Session Restore Load
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
 - branch: feature/full-codebase-review-2026-04-14-fixes
 - priority: low
@@ -540,6 +540,7 @@ Do these in order. Each step is independently committable and passses typecheck/
 - `2026-04-17 Codex`: Extracted filter modal state, draft date validation, tag/user search state, and incremental tag/user option lists from `viewer-app.tsx` into `use-filter-modal.ts`; `npm run typecheck` and `npm run build` passed. Viewer decomposition remains in progress; next safe slice is likely viewer session extraction.
 - `2026-04-17 Codex`: Committed the filter modal extraction as `57576d7 refactor: extract viewer filter modal`.
 - `2026-04-17 Codex`: Extracted viewer session persistence, restore effects, scroll-position persistence, and anchor lookup from `viewer-app.tsx` into `use-viewer-session.ts`; `npm run typecheck` and `npm run build` passed. Planned viewer decomposition slices are complete.
+- `2026-04-17 Codex`: Closed this task after user confirmation.
 
 ## Result
 
