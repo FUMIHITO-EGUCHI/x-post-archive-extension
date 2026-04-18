@@ -8,7 +8,7 @@ export type VideoDownloadMode = "direct_mp4" | "hls";
 
 export const DEFAULT_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD = 3;
 export const MIN_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD = 1;
-export const MAX_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD = 20;
+export const MAX_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD = 999;
 
 export type ArchiveSettings = {
   autoArchiveOnLike: boolean;

@@ -79,7 +79,9 @@ export function ViewerApp() {
     loadNotice,
     loadArchivePage,
     setLoadNotice,
-    setInitialLoadError
+    setInitialLoadError,
+    updatePostTags,
+    removePostFromCurrentPage
   } = archiveLoader;
   const sortFilter = useSortFilter({
     loadArchivePage,
@@ -209,8 +211,12 @@ export function ViewerApp() {
     handleClearRefetchQueue
   } = refetchControls;
   const tagOperations = useTagOperations({
+    activeTagFilter,
     posts,
-    reloadCurrentArchive
+    refreshArchiveMetadata,
+    removePostFromCurrentPage,
+    reloadCurrentArchive,
+    updatePostTags
   });
   const {
     tagActionPostId,

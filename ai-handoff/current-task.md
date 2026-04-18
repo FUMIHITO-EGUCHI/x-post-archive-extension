@@ -2,43 +2,45 @@
 
 ## Active
 
-- task_file: `ai-handoff/tasks/2026-04-17-fix-large-backup-restore-timeout.md`
+- none
 
 ## Scope
 
-- Viewer で `importArchiveBackupZip` を直接呼び、Background 経由の staging / sendMessage を廃止
+- v0.17.6 task packet implementation completed.
 
 ## Coordination
 
 - blocked_by: `none`
 - related_findings: `none`
 - needs_from_claude: `none`
-- handoff_to_codex: 設計完了 (2026-04-17)
+- handoff_to_codex: none
 
 ## Next Action
 
-- next_action: `Manual verify: 大容量バックアップ復元と progress 表示を実機確認`
+- next_action: `Manual verify restore merge/replace and tag local updates in the viewer.`
 
 ## Acceptance Criteria
 
-- [ ] 大容量バックアップ（例: 15GB超）が Viewer で直接復元できる
-- [ ] 復元中に progress バーが更新される
+- [x] duplicate batch threshold max is 999
+- [x] video lightbox loops playback
+- [x] backup restore supports replace and merge modes
+- [x] tag add/remove updates displayed post tags without full archive reload
 - [x] `npm run typecheck` pass
 - [x] `npm run build` pass
 
 ## Completion Checklist
 
-- [x] investigation finished
 - [x] implementation finished
 - [x] `npm run typecheck`
 - [x] `npm run build`
 - [x] task packet `Result` updated
 - [x] task packet `Verification` updated
 - [x] `ai-handoff/current-task.md` updated
+- [x] `npm run handoff:check`
 
 ## Recent Updates
 
-- `2026-04-17 Claude`: started `2026-04-17-fix-large-backup-restore-timeout`; 15.6GB バックアップが 10分タイムアウトで失敗する問題を調査。Viewer で直接復元するよう設計完了。
+- `2026-04-18 Codex`: completed v0.17.6 tasks: duplicate threshold max 999, video lightbox loop, backup restore replace/merge modes, and local tag operation updates. `npm run typecheck` / `npm run build` passed.
 - `2026-04-17 Codex`: implemented `2026-04-17-fix-large-backup-restore-timeout`; Viewer restore now calls `importArchiveBackupZip` directly and `archive/restore` runtime staging path was removed. `npm run typecheck` / `npm run build` passed. Manual large-backup verification remains.
 - `2026-04-17 Codex`: completed `2026-04-17-integrity-media-checksum-and-quota`; media writes now store SHA-256 checksums and quota failures are logged distinctly.
 - `2026-04-17 Codex`: completed `2026-04-17-integrity-post-tag-atomicity`; new post save now assigns auto-tags inside the create transaction.
@@ -50,6 +52,10 @@
 
 ## Recently Completed
 
+- `2026-04-18-duplicate-threshold-max-999`: Bulk import duplicate stop threshold max is now 999; typecheck/build passed
+- `2026-04-18-video-loop`: Video lightbox playback now loops; typecheck/build passed
+- `2026-04-18-restore-merge-or-replace`: Backup restore now supports replace and merge modes; typecheck/build passed
+- `2026-04-18-perf-tagging-speed`: Post tag add/remove now updates displayed state locally; typecheck/build passed
 - `2026-04-17-integrity-media-checksum-and-quota`: Media writes now store SHA-256 checksums and quota failures are logged distinctly; typecheck/build passed
 - `2026-04-17-integrity-post-tag-atomicity`: New post save now assigns auto-tags inside the create transaction; typecheck/build passed
 - `2026-04-17-perf-keyset-pagination`: Added cursor pagination for unfiltered `saved_at` / `posted_at` load-more; typecheck/build passed

@@ -1,7 +1,7 @@
 # Task Packet: 動画を自動繰り返し（ループ再生）
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
 - branch: master
 - priority: normal
@@ -77,22 +77,30 @@
 - `2026-04-18 Claude`: task packet 作成。変更箇所は media-lightbox.tsx:299 の `<video>` 要素のみ
 
 ## Codex Plan
+- `VideoLightboxDialog` の `<video>` に `loop` 属性を追加する。
+- `npm run typecheck` と `npm run build` で確認する。
 
 ## Codex Result
+ライトボックス内の動画プレイヤーに `loop` 属性を追加し、終端後に自動で先頭から再生されるようにした。
 
 ## Changed Files
+- `src/features/viewer/components/media-lightbox.tsx`
 
 ## Verification
+- `npm run typecheck` passed
+- `npm run build` passed
 
 ## Remaining Issues
+none
 
 ## Suggested Next Action
+none
 
 ## Completion Checklist
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Codex Result` or `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Codex Result` or `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
+- [x] `npm run handoff:check`
