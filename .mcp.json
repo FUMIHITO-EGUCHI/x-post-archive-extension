@@ -1,14 +1,5 @@
 {
   "mcpServers": {
-    "serena": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "serena-slim@latest"
-      ],
-      "env": {}
-    },
     "chrome-devtools": {
       "type": "stdio",
       "command": "node_modules\\.bin\\chrome-devtools-mcp.cmd",
