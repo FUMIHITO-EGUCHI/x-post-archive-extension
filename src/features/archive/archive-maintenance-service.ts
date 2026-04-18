@@ -436,7 +436,8 @@ async function mergeArchiveDatabaseRecords(
 
       const postTagsToAdd = await collectNewPostTags(
         backup.data.post_tags,
-        resolvedTags.tagByBackupId
+        resolvedTags.tagByBackupId,
+        new Set(postsToAdd.map((post) => post.x_post_id))
       );
       await archiveDb.post_tags.bulkAdd(postTagsToAdd);
       onProgress?.({
@@ -514,13 +515,18 @@ async function collectNewTagRedirects(
 
 async function collectNewPostTags(
   postTags: PostTagRecord[],
-  tagByBackupId: ReadonlyMap<string, TagRecord>
+  tagByBackupId: ReadonlyMap<string, TagRecord>,
+  restoredPostIds: ReadonlySet<string>
 ): Promise<PostTagRecord[]> {
   const postTagsToAdd: PostTagRecord[] = [];
   const existingIds = new Set<string>();
   const existingPostTagKeys = new Set<string>();
 
   for (const postTag of postTags) {
+    if (!restoredPostIds.has(postTag.x_post_id)) {
+      continue;
+    }
+
     const tag = tagByBackupId.get(postTag.tag_id);
 
     if (tag === undefined) {
