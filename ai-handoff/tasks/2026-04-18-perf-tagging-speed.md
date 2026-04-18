@@ -1,7 +1,7 @@
 # Task Packet: タグ付けが遅い — パフォーマンス改善
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
 - branch: master
 - priority: high
@@ -75,22 +75,35 @@
 - `2026-04-18 Claude`: task packet 作成。原因を reloadCurrentArchive の全件再ロードと特定。設計は Codex に委ねる
 
 ## Codex Plan
+- `reloadCurrentArchive` の呼び出し箇所を確認する。
+- タグ追加は runtime が返す `postTag` を使い、表示中投稿の `tags` だけ局所更新する。
+- タグ削除は表示中投稿の `tags` から対象を外し、現在のタグフィルタを外す操作なら表示中リストから投稿を外す。
+- タグサマリー更新は `refreshArchiveMetadata` のみに絞る。
+- `npm run typecheck` と `npm run build` で確認する。
 
 ## Codex Result
+タグ追加・削除後の全件再ロードをやめ、表示中投稿のタグ配列を React state 上で局所更新するようにした。タグフィルタ中にそのタグを削除した場合は、DB 状態と表示条件を合わせるため該当投稿を現在ページから外す。タグ一覧や件数は `refreshArchiveMetadata` で更新する。
 
 ## Changed Files
+- `src/features/viewer/components/use-tag-operations.ts`
+- `src/features/viewer/components/use-archive-loader.ts`
+- `src/features/viewer/components/viewer-app.tsx`
 
 ## Verification
+- `npm run typecheck` passed
+- `npm run build` passed
 
 ## Remaining Issues
+none
 
 ## Suggested Next Action
+Manual verify in the viewer with a large filtered list: add/remove a manual tag and confirm the list is not fully reloaded.
 
 ## Completion Checklist
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Codex Result` or `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Codex Result` or `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
+- [x] `npm run handoff:check`

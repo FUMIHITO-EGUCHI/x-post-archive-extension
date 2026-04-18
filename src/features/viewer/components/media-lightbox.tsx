@@ -301,6 +301,7 @@ export function VideoLightboxDialog({
             src={activeVideo.objectUrl}
             controls
             autoPlay
+            loop
             preload="metadata"
             playsInline
           />

@@ -41,6 +41,18 @@ export type ArchiveTransferProgress = {
   detail: string | null;
 };
 
+export type RestoreMode = "replace" | "merge";
+
+export type ImportArchiveBackupOptions = {
+  mode?: RestoreMode;
+  onProgress?: (progress: ArchiveTransferProgress) => void;
+};
+
+type NormalizedImportArchiveBackupOptions = {
+  mode: RestoreMode;
+  onProgress: ((progress: ArchiveTransferProgress) => void) | undefined;
+};
+
 export type DuplicateImageCleanupOptions = {
   apply?: boolean;
   xPostIds?: string[];
@@ -170,8 +182,10 @@ export async function streamArchiveBackupZip(
 
 export async function importArchiveBackupZip(
   file: Blob,
-  onProgress?: (progress: ArchiveTransferProgress) => void
+  options?: ImportArchiveBackupOptions | ((progress: ArchiveTransferProgress) => void)
 ): Promise<ArchiveBackupSummary> {
+  const importOptions = normalizeImportArchiveBackupOptions(options);
+  const { mode, onProgress } = importOptions;
   const zipReader = new ZipReader(new BlobReader(file), {
     useWebWorkers: false
   });
@@ -210,14 +224,16 @@ export async function importArchiveBackupZip(
 
     validateRequiredBackupFiles(backup.data.media, fileEntries);
 
-    onProgress?.({
-      phase: "Clearing current archive",
-      completed: 0,
-      total: 1,
-      detail: "Removing current saved archive data."
-    });
+    if (mode === "replace") {
+      onProgress?.({
+        phase: "Clearing current archive",
+        completed: 0,
+        total: 1,
+        detail: "Removing current saved archive data."
+      });
 
-    await clearArchiveData();
+      await clearArchiveData();
+    }
 
     onProgress?.({
       phase: "Restoring files",
@@ -232,6 +248,16 @@ export async function importArchiveBackupZip(
 
       if (zipEntry === undefined) {
         throw new Error(`Backup ZIP is missing ${toZipEntryPath(fileEntry.path)}.`);
+      }
+
+      if (mode === "merge" && (await opfsPathExists(fileEntry.path))) {
+        onProgress?.({
+          phase: "Restoring files",
+          completed: index + 1,
+          total: backup.data.files.length,
+          detail: `${fileEntry.path} already exists.`
+        });
+        continue;
       }
 
       const blob = await zipEntry
@@ -258,53 +284,11 @@ export async function importArchiveBackupZip(
       detail: "Writing archive records."
     });
 
-    await archiveDb.transaction(
-      "rw",
-      [
-        archiveDb.posts,
-        archiveDb.media,
-        archiveDb.tags,
-        archiveDb.tag_redirects,
-        archiveDb.post_tags
-      ],
-      async () => {
-        await archiveDb.posts.bulkPut(backup.data.posts);
-        onProgress?.({
-          phase: "Restoring database",
-          completed: 1,
-          total: 5,
-          detail: "Posts restored."
-        });
-        await archiveDb.media.bulkPut(backup.data.media);
-        onProgress?.({
-          phase: "Restoring database",
-          completed: 2,
-          total: 5,
-          detail: "Media restored."
-        });
-        await archiveDb.tags.bulkPut(backup.data.tags);
-        onProgress?.({
-          phase: "Restoring database",
-          completed: 3,
-          total: 5,
-          detail: "Tags restored."
-        });
-        await archiveDb.tag_redirects.bulkPut(backup.data.tag_redirects);
-        onProgress?.({
-          phase: "Restoring database",
-          completed: 4,
-          total: 5,
-          detail: "Tag redirects restored."
-        });
-        await archiveDb.post_tags.bulkPut(backup.data.post_tags);
-        onProgress?.({
-          phase: "Restoring database",
-          completed: 5,
-          total: 5,
-          detail: "Post tag relations restored."
-        });
-      }
-    );
+    if (mode === "replace") {
+      await replaceArchiveDatabaseRecords(backup, onProgress);
+    } else {
+      await mergeArchiveDatabaseRecords(backup, onProgress);
+    }
 
     onProgress?.({
       phase: "Restore complete",
@@ -318,6 +302,269 @@ export async function importArchiveBackupZip(
     throw normalizeArchiveTransferError(error, "restore");
   } finally {
     await zipReader.close();
+  }
+}
+
+function normalizeImportArchiveBackupOptions(
+  options: ImportArchiveBackupOptions | ((progress: ArchiveTransferProgress) => void) | undefined
+): NormalizedImportArchiveBackupOptions {
+  if (typeof options === "function") {
+    return {
+      mode: "replace",
+      onProgress: options
+    };
+  }
+
+  return {
+    mode: options?.mode ?? "replace",
+    onProgress: options?.onProgress
+  };
+}
+
+async function replaceArchiveDatabaseRecords(
+  backup: ArchiveBackupManifest,
+  onProgress?: (progress: ArchiveTransferProgress) => void
+): Promise<void> {
+  await archiveDb.transaction(
+    "rw",
+    [
+      archiveDb.posts,
+      archiveDb.media,
+      archiveDb.tags,
+      archiveDb.tag_redirects,
+      archiveDb.post_tags
+    ],
+    async () => {
+      await archiveDb.posts.bulkPut(backup.data.posts);
+      onProgress?.({
+        phase: "Restoring database",
+        completed: 1,
+        total: 5,
+        detail: "Posts restored."
+      });
+      await archiveDb.media.bulkPut(backup.data.media);
+      onProgress?.({
+        phase: "Restoring database",
+        completed: 2,
+        total: 5,
+        detail: "Media restored."
+      });
+      await archiveDb.tags.bulkPut(backup.data.tags);
+      onProgress?.({
+        phase: "Restoring database",
+        completed: 3,
+        total: 5,
+        detail: "Tags restored."
+      });
+      await archiveDb.tag_redirects.bulkPut(backup.data.tag_redirects);
+      onProgress?.({
+        phase: "Restoring database",
+        completed: 4,
+        total: 5,
+        detail: "Tag redirects restored."
+      });
+      await archiveDb.post_tags.bulkPut(backup.data.post_tags);
+      onProgress?.({
+        phase: "Restoring database",
+        completed: 5,
+        total: 5,
+        detail: "Post tag relations restored."
+      });
+    }
+  );
+}
+
+async function mergeArchiveDatabaseRecords(
+  backup: ArchiveBackupManifest,
+  onProgress?: (progress: ArchiveTransferProgress) => void
+): Promise<void> {
+  await archiveDb.transaction(
+    "rw",
+    [
+      archiveDb.posts,
+      archiveDb.media,
+      archiveDb.tags,
+      archiveDb.tag_redirects,
+      archiveDb.post_tags
+    ],
+    async () => {
+      const existingPostIds = new Set(
+        (await archiveDb.posts.bulkGet(backup.data.posts.map((post) => post.x_post_id)))
+          .filter((post): post is PostRecord => post !== undefined)
+          .map((post) => post.x_post_id)
+      );
+      const postsToAdd = backup.data.posts.filter((post) => !existingPostIds.has(post.x_post_id));
+      await archiveDb.posts.bulkAdd(postsToAdd);
+      onProgress?.({
+        phase: "Restoring database",
+        completed: 1,
+        total: 5,
+        detail: `Posts merged: ${postsToAdd.length} added.`
+      });
+
+      const existingMediaIds = new Set(
+        (await archiveDb.media.bulkGet(backup.data.media.map((media) => media.media_id)))
+          .filter((media): media is MediaRecord => media !== undefined)
+          .map((media) => media.media_id)
+      );
+      const mediaToAdd = backup.data.media.filter((media) => !existingMediaIds.has(media.media_id));
+      await archiveDb.media.bulkAdd(mediaToAdd);
+      onProgress?.({
+        phase: "Restoring database",
+        completed: 2,
+        total: 5,
+        detail: `Media merged: ${mediaToAdd.length} added.`
+      });
+
+      const resolvedTags = await buildResolvedTagRecords(backup.data.tags);
+      await archiveDb.tags.bulkAdd(resolvedTags.tagsToAdd);
+      onProgress?.({
+        phase: "Restoring database",
+        completed: 3,
+        total: 5,
+        detail: `Tags merged: ${resolvedTags.tagsToAdd.length} added.`
+      });
+
+      const redirectsToAdd = await collectNewTagRedirects(backup.data.tag_redirects);
+      await archiveDb.tag_redirects.bulkAdd(redirectsToAdd);
+      onProgress?.({
+        phase: "Restoring database",
+        completed: 4,
+        total: 5,
+        detail: `Tag redirects merged: ${redirectsToAdd.length} added.`
+      });
+
+      const postTagsToAdd = await collectNewPostTags(
+        backup.data.post_tags,
+        resolvedTags.tagByBackupId
+      );
+      await archiveDb.post_tags.bulkAdd(postTagsToAdd);
+      onProgress?.({
+        phase: "Restoring database",
+        completed: 5,
+        total: 5,
+        detail: `Post tag relations merged: ${postTagsToAdd.length} added.`
+      });
+    }
+  );
+}
+
+async function buildResolvedTagRecords(tags: TagRecord[]): Promise<{
+  tagsToAdd: TagRecord[];
+  tagByBackupId: Map<string, TagRecord>;
+}> {
+  const tagByBackupId = new Map<string, TagRecord>();
+  const tagsToAdd: TagRecord[] = [];
+  const existingById = new Map<string, TagRecord>();
+  const existingByNormalizedName = new Map<string, TagRecord>();
+
+  for (const tag of tags) {
+    const existingTag =
+      existingById.get(tag.tag_id) ??
+      existingByNormalizedName.get(tag.normalized_name) ??
+      (await archiveDb.tags.get(tag.tag_id)) ??
+      (await archiveDb.tags.where("normalized_name").equals(tag.normalized_name).first());
+
+    if (existingTag !== undefined) {
+      existingById.set(existingTag.tag_id, existingTag);
+      existingByNormalizedName.set(existingTag.normalized_name, existingTag);
+      tagByBackupId.set(tag.tag_id, existingTag);
+      continue;
+    }
+
+    tagsToAdd.push(tag);
+    existingById.set(tag.tag_id, tag);
+    existingByNormalizedName.set(tag.normalized_name, tag);
+    tagByBackupId.set(tag.tag_id, tag);
+  }
+
+  return {
+    tagsToAdd,
+    tagByBackupId
+  };
+}
+
+async function collectNewTagRedirects(
+  redirects: TagRedirectRecord[]
+): Promise<TagRedirectRecord[]> {
+  const redirectsToAdd: TagRedirectRecord[] = [];
+  const existingIds = new Set<string>();
+  const existingSources = new Set<string>();
+
+  for (const redirect of redirects) {
+    if (
+      existingIds.has(redirect.tag_redirect_id) ||
+      existingSources.has(redirect.source_normalized_name) ||
+      (await archiveDb.tag_redirects.get(redirect.tag_redirect_id)) !== undefined ||
+      (await archiveDb.tag_redirects
+        .where("source_normalized_name")
+        .equals(redirect.source_normalized_name)
+        .first()) !== undefined
+    ) {
+      continue;
+    }
+
+    redirectsToAdd.push(redirect);
+    existingIds.add(redirect.tag_redirect_id);
+    existingSources.add(redirect.source_normalized_name);
+  }
+
+  return redirectsToAdd;
+}
+
+async function collectNewPostTags(
+  postTags: PostTagRecord[],
+  tagByBackupId: ReadonlyMap<string, TagRecord>
+): Promise<PostTagRecord[]> {
+  const postTagsToAdd: PostTagRecord[] = [];
+  const existingIds = new Set<string>();
+  const existingPostTagKeys = new Set<string>();
+
+  for (const postTag of postTags) {
+    const tag = tagByBackupId.get(postTag.tag_id);
+
+    if (tag === undefined) {
+      continue;
+    }
+
+    const key = `${postTag.x_post_id}\u0000${tag.normalized_name}`;
+
+    if (
+      existingIds.has(postTag.post_tag_id) ||
+      existingPostTagKeys.has(key) ||
+      (await archiveDb.post_tags.get(postTag.post_tag_id)) !== undefined ||
+      (await archiveDb.post_tags
+        .where("[x_post_id+normalized_name]")
+        .equals([postTag.x_post_id, tag.normalized_name])
+        .first()) !== undefined
+    ) {
+      continue;
+    }
+
+    postTagsToAdd.push({
+      ...postTag,
+      tag_id: tag.tag_id,
+      normalized_name: tag.normalized_name,
+      display_name: tag.display_name,
+      system_key: tag.system_key
+    });
+    existingIds.add(postTag.post_tag_id);
+    existingPostTagKeys.add(key);
+  }
+
+  return postTagsToAdd;
+}
+
+async function opfsPathExists(path: string): Promise<boolean> {
+  try {
+    await readBlobFromOpfs(path);
+    return true;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return false;
+    }
+
+    throw error;
   }
 }
 

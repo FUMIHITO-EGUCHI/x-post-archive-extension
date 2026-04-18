@@ -1,7 +1,7 @@
 # Task Packet: 重複自動停止の上限を 999 件に増加
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
 - branch: master
 - priority: normal
@@ -68,22 +68,30 @@ export const MAX_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD = 999;
 - `2026-04-18 Claude`: task packet 作成。変更箇所は src/types/archive.ts の定数 1 か所のみ
 
 ## Codex Plan
+- `MAX_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD` を 999 に変更する。
+- `npm run typecheck` と `npm run build` で確認する。
 
 ## Codex Result
+`src/types/archive.ts` の一括取り込み重複停止しきい値上限を 20 から 999 に変更した。
 
 ## Changed Files
+- `src/types/archive.ts`
 
 ## Verification
+- `npm run typecheck` passed
+- `npm run build` passed
 
 ## Remaining Issues
+none
 
 ## Suggested Next Action
+none
 
 ## Completion Checklist
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Codex Result` or `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Codex Result` or `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
+- [x] `npm run handoff:check`

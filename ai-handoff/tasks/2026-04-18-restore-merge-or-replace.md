@@ -1,7 +1,7 @@
 # Task Packet: バックアップ復元時にマージ／置き換えを選択可能にする
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
 - branch: master
 - priority: normal
@@ -125,22 +125,34 @@ const [restoreMode, setRestoreMode] = useState<RestoreMode>("replace");
 - `2026-04-18 Claude`: task packet 作成。clearArchiveData() の有無でモード分岐する設計を策定
 
 ## Codex Plan
+- `importArchiveBackupZip` に `replace` / `merge` モードを追加する。
+- `replace` は既存の削除後 `bulkPut` 動作を維持する。
+- `merge` は OPFS ファイル、posts、media、tags、tag_redirects、post_tags の重複を既存優先でスキップする。
+- 設定画面に復元モード選択を追加し、置き換え時だけ確認ダイアログを出す。
+- `npm run typecheck` と `npm run build` で確認する。
 
 ## Codex Result
+バックアップ復元に `replace` / `merge` モードを追加した。`replace` は従来通り現在のアーカイブを削除して復元し、`merge` は既存データを保持して ZIP 内の未登録データだけ追加する。タグは `normalized_name` が既存と一致する場合、既存タグIDに寄せて `post_tags` を追加する。設定画面には復元モード選択を追加し、破壊的な確認ダイアログは置き換えモードのみに限定した。
 
 ## Changed Files
+- `src/features/archive/archive-maintenance-service.ts`
+- `src/features/viewer/components/settings-archive-maintenance-panel.tsx`
 
 ## Verification
+- `npm run typecheck` passed
+- `npm run build` passed
 
 ## Remaining Issues
+none
 
 ## Suggested Next Action
+Manual verify with a small backup ZIP: replace clears current data, merge preserves existing duplicate posts/tags and adds only missing records.
 
 ## Completion Checklist
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Codex Result` or `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Codex Result` or `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
+- [x] `npm run handoff:check`

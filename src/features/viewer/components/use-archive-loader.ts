@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { ArchivePostRecord } from "../../../types/archive";
+import type { ArchivePostRecord, ArchiveTagRecord } from "../../../types/archive";
 import type {
   DateFilterTarget,
   ListPostsPageInput,
@@ -117,6 +117,27 @@ export function useArchiveLoader() {
     setLoadNotice("Posts could not be loaded. Showing an empty list.");
   }
 
+  function updatePostTags(
+    xPostId: string,
+    updateTags: (tags: ArchiveTagRecord[]) => ArchiveTagRecord[]
+  ) {
+    setPosts((currentPosts) =>
+      currentPosts.map((post) =>
+        post.x_post_id === xPostId
+          ? {
+              ...post,
+              tags: updateTags(post.tags)
+            }
+          : post
+      )
+    );
+  }
+
+  function removePostFromCurrentPage(xPostId: string) {
+    setPosts((currentPosts) => currentPosts.filter((post) => post.x_post_id !== xPostId));
+    setArchiveTotalCount((currentTotalCount) => Math.max(0, currentTotalCount - 1));
+  }
+
   return {
     posts,
     archiveTotalCount,
@@ -126,7 +147,9 @@ export function useArchiveLoader() {
     loadNotice,
     loadArchivePage,
     setLoadNotice,
-    setInitialLoadError
+    setInitialLoadError,
+    updatePostTags,
+    removePostFromCurrentPage
   };
 }
 

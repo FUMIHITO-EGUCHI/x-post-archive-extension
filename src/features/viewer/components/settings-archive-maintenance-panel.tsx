@@ -3,6 +3,7 @@ import type { ArchiveBackupSummary } from "../../../types/archive-backup";
 import type { RefetchStatusRecord } from "../../../types/refetch";
 import {
   type ArchiveTransferProgress,
+  type RestoreMode,
   importArchiveBackupZip,
   streamArchiveBackupZip
 } from "../../archive/archive-maintenance-service";
@@ -47,6 +48,7 @@ export function SettingsArchiveMaintenancePanel({
   const [restoreStatus, setRestoreStatus] = useState<string | null>(null);
   const [restoreTone, setRestoreTone] = useState<FeedbackTone>("neutral");
   const [restoreRunning, setRestoreRunning] = useState(false);
+  const [restoreMode, setRestoreMode] = useState<RestoreMode>("replace");
   const [backupProgress, setBackupProgress] = useState<ArchiveTransferProgress | null>(null);
   const [restoreProgress, setRestoreProgress] = useState<ArchiveTransferProgress | null>(null);
   const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
@@ -131,11 +133,14 @@ export function SettingsArchiveMaintenancePanel({
       return;
     }
 
-    const confirmed = window.confirm(
-      isJapanese
-        ? "復元すると、現在の保存済みアーカイブは選択したバックアップで置き換えられます。続行しますか？"
-        : "Restore will replace the current saved archive with the selected backup. Continue?"
-    );
+    const confirmed =
+      restoreMode === "replace"
+        ? window.confirm(
+            isJapanese
+              ? "復元すると、現在の保存済みアーカイブは選択したバックアップで置き換えられます。続行しますか？"
+              : "Restore will replace the current saved archive with the selected backup. Continue?"
+          )
+        : true;
 
     if (!confirmed) {
       return;
@@ -148,16 +153,23 @@ export function SettingsArchiveMaintenancePanel({
 
     try {
       const restoreFile = await readRestoreFileWithRetry(restoreHandle, language);
-      const summary = await importArchiveBackupZip(restoreFile, (progress) => {
-        setRestoreProgress(progress);
+      const summary = await importArchiveBackupZip(restoreFile, {
+        mode: restoreMode,
+        onProgress: (progress) => {
+          setRestoreProgress(progress);
+        }
       });
       await onArchiveChanged();
 
       setRestoreTone("success");
       setRestoreStatus(
         isJapanese
-          ? `アーカイブを復元しました: ${formatBackupSummary(summary, language)}`
-          : `Archive restored: ${formatBackupSummary(summary, language)}`
+          ? restoreMode === "replace"
+            ? `アーカイブを復元しました: ${formatBackupSummary(summary, language)}`
+            : `バックアップをマージしました: ${formatBackupSummary(summary, language)}`
+          : restoreMode === "replace"
+            ? `Archive restored: ${formatBackupSummary(summary, language)}`
+            : `Backup merged: ${formatBackupSummary(summary, language)}`
       );
       setRestoreHandle(null);
       setRestoreFileName(null);
@@ -378,9 +390,43 @@ export function SettingsArchiveMaintenancePanel({
           <h3>{isJapanese ? "バックアップから復元" : "Restore from backup"}</h3>
           <p>
             {isJapanese
-              ? "バックアップ ZIP の内容で今のアーカイブを復元します。現在の保存内容は結合されず、そのまま置き換わります。"
-              : "Replace your current archive with the contents of a backup ZIP. This does not merge data."}
+              ? "バックアップ ZIP の内容を復元します。現在のアーカイブを置き換えるか、既存データに追加するかを選べます。"
+              : "Restore a backup ZIP by replacing the current archive or merging it into existing data."}
           </p>
+        </div>
+        <div className="viewer-font-option-list" role="radiogroup" aria-label={isJapanese ? "復元モード" : "Restore mode"}>
+          {[
+            {
+              value: "replace" as const,
+              label: isJapanese
+                ? "置き換え: 現在のアーカイブを削除して復元"
+                : "Replace: clear current archive and restore"
+            },
+            {
+              value: "merge" as const,
+              label: isJapanese
+                ? "マージ: 既存データに追加"
+                : "Merge: add to existing archive"
+            }
+          ].map((option) => (
+            <button
+              key={option.value}
+              className={
+                restoreMode === option.value
+                  ? "viewer-font-option viewer-font-option-active"
+                  : "viewer-font-option"
+              }
+              type="button"
+              role="radio"
+              aria-checked={restoreMode === option.value}
+              disabled={restoreRunning}
+              onClick={() => {
+                setRestoreMode(option.value);
+              }}
+            >
+              <strong>{option.label}</strong>
+            </button>
+          ))}
         </div>
         <div className="viewer-settings-file-row">
           <button
