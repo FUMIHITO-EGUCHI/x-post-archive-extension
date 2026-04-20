@@ -19,6 +19,7 @@ export type LoadArchivePageInput = {
   sortDirection: SortDirection;
   randomSeed: number | null;
   tagFilter: string | null;
+  excludeTagFilter: string | null;
   authorFilter: string | null;
   dateFilterTarget: DateFilterTarget | null;
   dateFrom: string | null;
@@ -58,6 +59,7 @@ export function useArchiveLoader() {
         cursor: input.append ? nextCursor : null,
         randomSeed: input.randomSeed,
         tagFilter: input.tagFilter,
+        excludeTagFilter: input.excludeTagFilter,
         authorFilter: input.authorFilter,
         ...buildDateFilterRequest(input.dateFilterTarget, input.dateFrom, input.dateTo)
       });

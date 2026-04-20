@@ -57,6 +57,7 @@ export type ListPostsPageInput = {
   cursor?: PostPageCursor | null;
   randomSeed?: number | null;
   tagFilter: string | null;
+  excludeTagFilter: string | null;
   authorFilter: string | null;
   dateFilterTarget: DateFilterTarget | null;
   dateFrom: number | null;
@@ -65,7 +66,7 @@ export type ListPostsPageInput = {
 
 export type PostFilterInput = Pick<
   ListPostsPageInput,
-  "tagFilter" | "authorFilter" | "dateFilterTarget" | "dateFrom" | "dateTo"
+  "tagFilter" | "excludeTagFilter" | "authorFilter" | "dateFilterTarget" | "dateFrom" | "dateTo"
 >;
 
 export type ViewerSessionRestoreMode = "off" | "filters" | "filters-and-position";
@@ -85,6 +86,7 @@ export type ViewerSessionState = {
   sortField: PostSortField;
   sortDirection: SortDirection;
   activeTagFilter: string | null;
+  activeExcludeTagFilter?: string | null;
   activeAuthorFilter?: string | null;
   activeDateFilterTarget?: DateFilterTarget | null;
   activeDateFrom?: string | null;

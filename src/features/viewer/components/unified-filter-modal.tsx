@@ -26,7 +26,9 @@ export type UnifiedFilterModalProps = {
   onToggleAuthorFilter: (screenName: string) => void;
   onLoadMoreUsers: () => void;
   activeTagFilter: string | null;
+  activeExcludeTagFilter: string | null;
   selectedTagFilter: ArchiveTagSummaryRecord | null;
+  selectedExcludeTagFilter: ArchiveTagSummaryRecord | null;
   visibleTagOptionCount: number;
   displayedTagOptions: ArchiveTagSummaryRecord[];
   hasMoreTagOptions: boolean;
@@ -36,6 +38,7 @@ export type UnifiedFilterModalProps = {
   onTagSearchQueryChange: (value: string) => void;
   onTagSortOptionChange: (value: TagSortOption) => void;
   onToggleTagFilter: (normalizedName: string) => void;
+  onToggleExcludeTagFilter: (normalizedName: string) => void;
   onLoadMoreTags: () => void;
   getTagDisplayName: (tag: ArchiveTagRecord) => string;
   activeDateFilterTarget: DateFilterTarget | null;
@@ -69,7 +72,9 @@ export function UnifiedFilterModal({
   onToggleAuthorFilter,
   onLoadMoreUsers,
   activeTagFilter,
+  activeExcludeTagFilter,
   selectedTagFilter,
+  selectedExcludeTagFilter,
   visibleTagOptionCount,
   displayedTagOptions,
   hasMoreTagOptions,
@@ -79,6 +84,7 @@ export function UnifiedFilterModal({
   onTagSearchQueryChange,
   onTagSortOptionChange,
   onToggleTagFilter,
+  onToggleExcludeTagFilter,
   onLoadMoreTags,
   getTagDisplayName,
   activeDateFilterTarget,
@@ -122,7 +128,7 @@ export function UnifiedFilterModal({
     {
       tab: "tag" as const,
       label: language === "ja" ? "タグ" : "Tag",
-      isActive: activeTagFilter !== null
+      isActive: activeTagFilter !== null || activeExcludeTagFilter !== null
     },
     {
       tab: "date" as const,
@@ -222,6 +228,7 @@ export function UnifiedFilterModal({
           {activeTab === "tag" && (
             <TagFilterPanel
               activeTagFilter={activeTagFilter}
+              activeExcludeTagFilter={activeExcludeTagFilter}
               displayedTagOptions={displayedTagOptions}
               getTagDisplayName={getTagDisplayName}
               hasMoreTagOptions={hasMoreTagOptions}
@@ -229,9 +236,11 @@ export function UnifiedFilterModal({
               onLoadMoreTags={onLoadMoreTags}
               onTagSearchQueryChange={onTagSearchQueryChange}
               onTagSortOptionChange={onTagSortOptionChange}
+              onToggleExcludeTagFilter={onToggleExcludeTagFilter}
               onToggleTagFilter={onToggleTagFilter}
               remainingTagOptionCount={remainingTagOptionCount}
               selectedTagFilter={selectedTagFilter}
+              selectedExcludeTagFilter={selectedExcludeTagFilter}
               tagSearchQuery={tagSearchQuery}
               tagSortOption={tagSortOption}
               visibleTagOptionCount={visibleTagOptionCount}
@@ -380,6 +389,7 @@ function UserFilterPanel({
 
 function TagFilterPanel({
   activeTagFilter,
+  activeExcludeTagFilter,
   displayedTagOptions,
   getTagDisplayName,
   hasMoreTagOptions,
@@ -387,14 +397,17 @@ function TagFilterPanel({
   onLoadMoreTags,
   onTagSearchQueryChange,
   onTagSortOptionChange,
+  onToggleExcludeTagFilter,
   onToggleTagFilter,
   remainingTagOptionCount,
   selectedTagFilter,
+  selectedExcludeTagFilter,
   tagSearchQuery,
   tagSortOption,
   visibleTagOptionCount
 }: {
   activeTagFilter: string | null;
+  activeExcludeTagFilter: string | null;
   displayedTagOptions: ArchiveTagSummaryRecord[];
   getTagDisplayName: (tag: ArchiveTagRecord) => string;
   hasMoreTagOptions: boolean;
@@ -402,9 +415,11 @@ function TagFilterPanel({
   onLoadMoreTags: () => void;
   onTagSearchQueryChange: (value: string) => void;
   onTagSortOptionChange: (value: TagSortOption) => void;
+  onToggleExcludeTagFilter: (normalizedName: string) => void;
   onToggleTagFilter: (normalizedName: string) => void;
   remainingTagOptionCount: number;
   selectedTagFilter: ArchiveTagSummaryRecord | null;
+  selectedExcludeTagFilter: ArchiveTagSummaryRecord | null;
   tagSearchQuery: string;
   tagSortOption: TagSortOption;
   visibleTagOptionCount: number;
@@ -462,6 +477,28 @@ function TagFilterPanel({
         </div>
       )}
 
+      {selectedExcludeTagFilter !== null && (
+        <div className="viewer-tag-modal-summary">
+          <span>
+            {language === "ja" ? "\u9664\u5916\u4e2d" : "Excluded"}: {" "}
+            {formatTagFilterLabel(
+              getTagDisplayName(selectedExcludeTagFilter.tag),
+              selectedExcludeTagFilter.postCount,
+              language
+            )}
+          </span>
+          <button
+            className="viewer-tag-filter-clear"
+            type="button"
+            onClick={() => {
+              onToggleExcludeTagFilter(selectedExcludeTagFilter.tag.normalized_name);
+            }}
+          >
+            {language === "ja" ? "\u89e3\u9664" : "Clear"}
+          </button>
+        </div>
+      )}
+
       {visibleTagOptionCount === 0 ? (
         <p className="viewer-message">
           {language === "ja"
@@ -471,25 +508,49 @@ function TagFilterPanel({
       ) : (
         <>
           <div className="viewer-tag-option-list">
-            {displayedTagOptions.map(({ tag, postCount }) => (
-              <button
-                key={tag.tag_id}
-                className={
-                  tag.normalized_name === activeTagFilter
-                    ? "viewer-tag-option viewer-tag-option-active"
-                    : "viewer-tag-option"
-                }
-                type="button"
-                onClick={() => {
-                  onToggleTagFilter(tag.normalized_name);
-                }}
-              >
-                <strong>{getTagDisplayName(tag)}</strong>
-                <span>
-                  {formatCount(postCount, language)} {language === "ja" ? "件" : "posts"}
-                </span>
-              </button>
-            ))}
+            {displayedTagOptions.map(({ tag, postCount }) => {
+              const isIncluded = tag.normalized_name === activeTagFilter;
+              const isExcluded = tag.normalized_name === activeExcludeTagFilter;
+
+              return (
+                <div key={tag.tag_id} className="viewer-tag-option-row">
+                  <span className="viewer-tag-option-label">
+                    <strong>{getTagDisplayName(tag)}</strong>
+                    <span>
+                      {formatCount(postCount, language)} {language === "ja" ? "\u4ef6" : "posts"}
+                    </span>
+                  </span>
+                  <button
+                    className={
+                      isIncluded
+                        ? "viewer-tag-option-btn viewer-tag-option-btn-active"
+                        : "viewer-tag-option-btn"
+                    }
+                    type="button"
+                    aria-pressed={isIncluded}
+                    onClick={() => {
+                      onToggleTagFilter(tag.normalized_name);
+                    }}
+                  >
+                    {language === "ja" ? "\u7d5e\u308a\u8fbc\u3080" : "Include"}
+                  </button>
+                  <button
+                    className={
+                      isExcluded
+                        ? "viewer-tag-option-btn viewer-tag-option-btn-exclude viewer-tag-option-btn-active"
+                        : "viewer-tag-option-btn viewer-tag-option-btn-exclude"
+                    }
+                    type="button"
+                    aria-pressed={isExcluded}
+                    onClick={() => {
+                      onToggleExcludeTagFilter(tag.normalized_name);
+                    }}
+                  >
+                    {language === "ja" ? "\u9664\u5916" : "Exclude"}
+                  </button>
+                </div>
+              );
+            })}
           </div>
           {hasMoreTagOptions && (
             <div className="viewer-incremental-list-footer">

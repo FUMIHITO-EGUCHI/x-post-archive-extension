@@ -97,6 +97,8 @@ export function ViewerApp() {
     setRandomSeed,
     activeTagFilter,
     setActiveTagFilter,
+    activeExcludeTagFilter,
+    setActiveExcludeTagFilter,
     activeAuthorFilter,
     setActiveAuthorFilter,
     activeDateFilterTarget,
@@ -112,6 +114,7 @@ export function ViewerApp() {
     handleSortDirectionToggle,
     handleReshuffle,
     handleToggleTagFilter,
+    handleToggleExcludeTagFilter,
     handleToggleAuthorFilter,
     handleApplyDateFilter: applyDateFilter,
     handleClearDateFilter: clearDateFilter,
@@ -144,6 +147,7 @@ export function ViewerApp() {
     activeDateFilterTarget,
     activeDateFrom,
     activeDateTo,
+    activeExcludeTagFilter,
     activeTagFilter,
     postsLength: posts.length,
     screen,
@@ -161,6 +165,7 @@ export function ViewerApp() {
     activeDateFilterTarget,
     activeDateFrom,
     activeDateTo,
+    activeExcludeTagFilter,
     activeTagFilter,
     availableTags,
     getTagDisplayName,
@@ -211,6 +216,7 @@ export function ViewerApp() {
     handleClearRefetchQueue
   } = refetchControls;
   const tagOperations = useTagOperations({
+    activeExcludeTagFilter,
     activeTagFilter,
     posts,
     refreshArchiveMetadata,
@@ -243,6 +249,10 @@ export function ViewerApp() {
   const selectedTagFilter = useMemo(
     () => availableTags.find(({ tag }) => tag.normalized_name === activeTagFilter) ?? null,
     [activeTagFilter, availableTags]
+  );
+  const selectedExcludeTagFilter = useMemo(
+    () => availableTags.find(({ tag }) => tag.normalized_name === activeExcludeTagFilter) ?? null,
+    [activeExcludeTagFilter, availableTags]
   );
   const selectedAuthorFilter = useMemo(
     () => userSummaries.find((user) => user.screen_name === activeAuthorFilter) ?? null,
@@ -292,6 +302,7 @@ export function ViewerApp() {
         let nextSortDirection: SortDirection = "desc";
         let nextRandomSeed = createRandomSeed();
         let nextTagFilter: string | null = null;
+        let nextExcludeTagFilter: string | null = null;
         let nextAuthorFilter: string | null = null;
         let nextDateFilterTarget: DateFilterTarget | null = null;
         let nextDateFrom: string | null = null;
@@ -302,10 +313,15 @@ export function ViewerApp() {
           nextSortField = savedSession.sortField;
           nextSortDirection = savedSession.sortDirection;
           nextTagFilter = savedSession.activeTagFilter;
+          nextExcludeTagFilter = savedSession.activeExcludeTagFilter ?? null;
           nextAuthorFilter = savedSession.activeAuthorFilter ?? null;
           nextDateFilterTarget = savedSession.activeDateFilterTarget ?? null;
           nextDateFrom = savedSession.activeDateFrom ?? null;
           nextDateTo = savedSession.activeDateTo ?? null;
+
+          if (nextExcludeTagFilter === nextTagFilter) {
+            nextExcludeTagFilter = null;
+          }
 
           if (nextSessionRestoreMode === "filters-and-position" && nextSortField !== "random") {
             initialLimit = Math.min(
@@ -320,6 +336,7 @@ export function ViewerApp() {
         setSortDirection(nextSortDirection);
         setRandomSeed(nextRandomSeed);
         setActiveTagFilter(nextTagFilter);
+        setActiveExcludeTagFilter(nextExcludeTagFilter);
         setActiveAuthorFilter(nextAuthorFilter);
         setActiveDateFilterTarget(nextDateFilterTarget);
         setActiveDateFrom(nextDateFrom);
@@ -337,6 +354,7 @@ export function ViewerApp() {
             sortDirection: nextSortDirection,
             randomSeed: nextSortField === "random" ? nextRandomSeed : null,
             tagFilter: nextTagFilter,
+            excludeTagFilter: nextExcludeTagFilter,
             authorFilter: nextAuthorFilter,
             dateFilterTarget: nextDateFilterTarget,
             dateFrom: nextDateFrom,
@@ -379,6 +397,7 @@ export function ViewerApp() {
         sortDirection,
         ...getRandomSeedInput(),
         tagFilter: activeTagFilter,
+        excludeTagFilter: activeExcludeTagFilter,
         authorFilter: activeAuthorFilter,
         ...getCurrentDateFilterInput(),
         append: false
@@ -396,9 +415,18 @@ export function ViewerApp() {
   ): Promise<void> {
     const nextTagFilter =
       activeTagFilter === oldNormalizedName ? newNormalizedName : activeTagFilter;
+    let nextExcludeTagFilter =
+      activeExcludeTagFilter === oldNormalizedName ? newNormalizedName : activeExcludeTagFilter;
+
+    if (nextExcludeTagFilter === nextTagFilter) {
+      nextExcludeTagFilter = null;
+    }
 
     if (nextTagFilter !== activeTagFilter) {
       setActiveTagFilter(nextTagFilter);
+    }
+    if (nextExcludeTagFilter !== activeExcludeTagFilter) {
+      setActiveExcludeTagFilter(nextExcludeTagFilter);
     }
 
     await Promise.all([
@@ -410,6 +438,7 @@ export function ViewerApp() {
         sortDirection,
         ...getRandomSeedInput(),
         tagFilter: nextTagFilter,
+        excludeTagFilter: nextExcludeTagFilter,
         authorFilter: activeAuthorFilter,
         ...getCurrentDateFilterInput(),
         append: false
@@ -423,9 +452,18 @@ export function ViewerApp() {
   ): Promise<void> {
     const nextTagFilter =
       activeTagFilter === sourceNormalizedName ? targetNormalizedName : activeTagFilter;
+    let nextExcludeTagFilter =
+      activeExcludeTagFilter === sourceNormalizedName ? targetNormalizedName : activeExcludeTagFilter;
+
+    if (nextExcludeTagFilter === nextTagFilter) {
+      nextExcludeTagFilter = null;
+    }
 
     if (nextTagFilter !== activeTagFilter) {
       setActiveTagFilter(nextTagFilter);
+    }
+    if (nextExcludeTagFilter !== activeExcludeTagFilter) {
+      setActiveExcludeTagFilter(nextExcludeTagFilter);
     }
 
     await Promise.all([
@@ -437,6 +475,7 @@ export function ViewerApp() {
         sortDirection,
         ...getRandomSeedInput(),
         tagFilter: nextTagFilter,
+        excludeTagFilter: nextExcludeTagFilter,
         authorFilter: activeAuthorFilter,
         ...getCurrentDateFilterInput(),
         append: false
@@ -505,7 +544,7 @@ export function ViewerApp() {
     });
   }
 
-  if (selectedTagFilter !== null) {
+  if (selectedTagFilter !== null || selectedExcludeTagFilter !== null) {
     filterChips.push({
       key: "tag"
     });
@@ -520,7 +559,7 @@ export function ViewerApp() {
   const firstActiveFilterTab: FilterModalTab =
     activeAuthorFilter !== null
       ? "user"
-      : selectedTagFilter !== null
+      : selectedTagFilter !== null || selectedExcludeTagFilter !== null
         ? "tag"
         : hasActiveDateFilter
           ? "date"
@@ -589,6 +628,7 @@ export function ViewerApp() {
                 {formatEmptyArchiveMessage({
                   language,
                   selectedTagFilter,
+                  selectedExcludeTagFilter,
                   activeAuthorFilter,
                   activeDateFilterTarget,
                   activeDateFrom,
@@ -708,6 +748,7 @@ export function ViewerApp() {
           activeDateFrom={activeDateFrom}
           activeDateTo={activeDateTo}
           activeTagFilter={activeTagFilter}
+          activeExcludeTagFilter={activeExcludeTagFilter}
           archiveTotalCount={archiveTotalCount}
           dateFilterDraftError={dateFilterDraftError}
           dateFilterDraftFrom={dateFilterDraftFrom}
@@ -741,11 +782,15 @@ export function ViewerApp() {
           onToggleTagFilter={(normalizedName) => {
             void handleToggleTagFilter(normalizedName);
           }}
+          onToggleExcludeTagFilter={(normalizedName) => {
+            void handleToggleExcludeTagFilter(normalizedName);
+          }}
           onUserSearchQueryChange={setUserSearchQuery}
           remainingTagOptionCount={remainingTagOptionCount}
           remainingUserOptionCount={remainingUserOptionCount}
           selectedAuthorFilter={selectedAuthorFilter}
           selectedTagFilter={selectedTagFilter}
+          selectedExcludeTagFilter={selectedExcludeTagFilter}
           tagSearchQuery={tagSearchQuery}
           tagSortOption={tagSortOption}
           userSearchQuery={userSearchQuery}
