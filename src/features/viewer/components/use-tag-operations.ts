@@ -9,6 +9,7 @@ import {
 const logger = createLogger("tag-operations");
 
 export function useTagOperations({
+  activeExcludeTagFilter,
   activeTagFilter,
   posts,
   refreshArchiveMetadata,
@@ -16,6 +17,7 @@ export function useTagOperations({
   reloadCurrentArchive,
   updatePostTags
 }: {
+  activeExcludeTagFilter: string | null;
   activeTagFilter: string | null;
   posts: ArchivePostRecord[];
   refreshArchiveMetadata: () => Promise<void>;
@@ -50,7 +52,11 @@ export function useTagOperations({
       const response = await requestAddPostTagByName(xPostId, displayName);
 
       if (response.ok) {
-        updatePostTags(xPostId, (tags) => addOrReplaceTag(tags, response.postTag));
+        if (activeExcludeTagFilter === response.postTag.normalized_name) {
+          removePostFromCurrentPage(xPostId);
+        } else {
+          updatePostTags(xPostId, (tags) => addOrReplaceTag(tags, response.postTag));
+        }
         await refreshArchiveMetadata();
       } else {
         await reloadCurrentArchive();

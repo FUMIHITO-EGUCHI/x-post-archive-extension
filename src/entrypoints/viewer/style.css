@@ -2129,6 +2129,63 @@ body {
   cursor: pointer;
 }
 
+.viewer-tag-option-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid rgba(16, 32, 51, 0.08);
+  border-radius: 18px;
+  padding: 12px;
+  background: #fff;
+}
+
+.viewer-tag-option-label {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.viewer-tag-option-label strong {
+  overflow-wrap: anywhere;
+  font-size: calc(15px * var(--viewer-font-scale));
+  color: #17324d;
+}
+
+.viewer-tag-option-label span {
+  font-size: calc(13px * var(--viewer-font-scale));
+  color: #526479;
+}
+
+.viewer-tag-option-btn {
+  min-width: 86px;
+  border: 1px solid rgba(16, 32, 51, 0.1);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f8fbff;
+  color: #17324d;
+  font-size: calc(13px * var(--viewer-font-scale));
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.viewer-tag-option-btn-active {
+  border-color: rgba(29, 78, 216, 0.28);
+  background: #edf4ff;
+  color: #174ea6;
+}
+
+.viewer-tag-option-btn-exclude {
+  color: #8d2a16;
+}
+
+.viewer-tag-option-btn-exclude.viewer-tag-option-btn-active {
+  border-color: rgba(180, 83, 9, 0.3);
+  background: #fff4e6;
+  color: #9a3412;
+}
+
 .viewer-tag-option strong {
   font-size: calc(15px * var(--viewer-font-scale));
   color: #17324d;
@@ -2203,6 +2260,7 @@ body {
 :root[data-theme="dark"] .viewer-tag-management-redirects,
 :root[data-theme="dark"] .viewer-tag-management-redirect-row,
 :root[data-theme="dark"] .viewer-tag-option,
+:root[data-theme="dark"] .viewer-tag-option-row,
 :root[data-theme="dark"] .viewer-settings-metric,
 :root[data-theme="dark"] .viewer-log-context-item,
 :root[data-theme="dark"] .post-metric,
@@ -2219,6 +2277,7 @@ body {
 :root[data-theme="dark"] .viewer-log-clear-button,
 :root[data-theme="dark"] .viewer-log-export-option,
 :root[data-theme="dark"] .viewer-secondary-button,
+:root[data-theme="dark"] .viewer-tag-option-btn,
 :root[data-theme="dark"] .tag-input,
 :root[data-theme="dark"] .tag-picker-input {
   border-color: var(--color-border-strong);
@@ -2229,6 +2288,7 @@ body {
 :root[data-theme="dark"] .viewer-settings-tab-active,
 :root[data-theme="dark"] .viewer-font-option-active,
 :root[data-theme="dark"] .viewer-tag-option-active,
+:root[data-theme="dark"] .viewer-tag-option-btn-active,
 :root[data-theme="dark"] .tag-picker-option-active,
 :root[data-theme="dark"] .viewer-tag-modal-summary {
   border-color: var(--color-accent-soft-strong);
@@ -2388,17 +2448,26 @@ body {
   );
 }
 
-:root[data-theme="dark"] .viewer-tag-option {
+:root[data-theme="dark"] .viewer-tag-option,
+:root[data-theme="dark"] .viewer-tag-option-row {
   background: #22303c;
 }
 
 :root[data-theme="dark"] .viewer-tag-option strong,
-:root[data-theme="dark"] .viewer-tag-option span {
+:root[data-theme="dark"] .viewer-tag-option span,
+:root[data-theme="dark"] .viewer-tag-option-label strong,
+:root[data-theme="dark"] .viewer-tag-option-label span {
   color: var(--color-text);
 }
 
-:root[data-theme="dark"] .viewer-tag-option-active {
+:root[data-theme="dark"] .viewer-tag-option-active,
+:root[data-theme="dark"] .viewer-tag-option-btn-active {
   background: rgba(29, 155, 240, 0.18);
+}
+
+:root[data-theme="dark"] .viewer-tag-option-btn-exclude.viewer-tag-option-btn-active {
+  background: rgba(244, 93, 34, 0.16);
+  color: #ffb199;
 }
 
 :root[data-theme="dark"] .viewer-icon-button,
@@ -2422,6 +2491,7 @@ body {
 :root[data-theme="dark"] .viewer-log-message,
 :root[data-theme="dark"] .viewer-log-context-item dt,
 :root[data-theme="dark"] .viewer-tag-option span,
+:root[data-theme="dark"] .viewer-tag-option-label span,
 :root[data-theme="dark"] .viewer-modal-copy p,
 :root[data-theme="dark"] .post-handle,
 :root[data-theme="dark"] .post-date,

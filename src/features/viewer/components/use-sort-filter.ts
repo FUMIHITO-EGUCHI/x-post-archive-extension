@@ -23,6 +23,7 @@ export function useSortFilter({
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [randomSeed, setRandomSeed] = useState(() => createRandomSeed());
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [activeExcludeTagFilter, setActiveExcludeTagFilter] = useState<string | null>(null);
   const [activeAuthorFilter, setActiveAuthorFilter] = useState<string | null>(null);
   const [activeDateFilterTarget, setActiveDateFilterTarget] =
     useState<DateFilterTarget | null>(null);
@@ -40,6 +41,7 @@ export function useSortFilter({
   function getCurrentPostFilterInput(): PostFilterInput {
     return {
       tagFilter: activeTagFilter,
+      excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       dateFilterTarget: activeDateFilterTarget,
       dateFrom: toDateFilterStartTimestamp(activeDateFrom),
@@ -70,6 +72,7 @@ export function useSortFilter({
       sortDirection,
       ...getRandomSeedInput(nextValue, nextRandomSeed),
       tagFilter: activeTagFilter,
+      excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       ...getCurrentDateFilterInput(),
       append: false
@@ -93,6 +96,7 @@ export function useSortFilter({
       sortDirection: nextValue,
       ...getRandomSeedInput(),
       tagFilter: activeTagFilter,
+      excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       ...getCurrentDateFilterInput(),
       append: false
@@ -112,6 +116,7 @@ export function useSortFilter({
       sortDirection,
       ...getRandomSeedInput("random", nextRandomSeed),
       tagFilter: activeTagFilter,
+      excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       ...getCurrentDateFilterInput(),
       append: false
@@ -120,8 +125,15 @@ export function useSortFilter({
 
   async function handleToggleTagFilter(normalizedName: string) {
     const nextValue = activeTagFilter === normalizedName ? null : normalizedName;
+    const nextExcludeValue =
+      nextValue !== null && activeExcludeTagFilter === normalizedName
+        ? null
+        : activeExcludeTagFilter;
 
     setActiveTagFilter(nextValue);
+    if (nextExcludeValue !== activeExcludeTagFilter) {
+      setActiveExcludeTagFilter(nextExcludeValue);
+    }
     closeFilterModal();
     window.scrollTo({
       top: 0
@@ -133,6 +145,34 @@ export function useSortFilter({
       sortDirection,
       ...getRandomSeedInput(),
       tagFilter: nextValue,
+      excludeTagFilter: nextExcludeValue,
+      authorFilter: activeAuthorFilter,
+      ...getCurrentDateFilterInput(),
+      append: false
+    });
+  }
+
+  async function handleToggleExcludeTagFilter(normalizedName: string) {
+    const nextValue = activeExcludeTagFilter === normalizedName ? null : normalizedName;
+    const nextTagFilter =
+      nextValue !== null && activeTagFilter === normalizedName ? null : activeTagFilter;
+
+    setActiveExcludeTagFilter(nextValue);
+    if (nextTagFilter !== activeTagFilter) {
+      setActiveTagFilter(nextTagFilter);
+    }
+    closeFilterModal();
+    window.scrollTo({
+      top: 0
+    });
+    await loadArchivePage({
+      offset: 0,
+      limit: DEFAULT_PAGE_SIZE,
+      sortField,
+      sortDirection,
+      ...getRandomSeedInput(),
+      tagFilter: nextTagFilter,
+      excludeTagFilter: nextValue,
       authorFilter: activeAuthorFilter,
       ...getCurrentDateFilterInput(),
       append: false
@@ -154,6 +194,7 @@ export function useSortFilter({
       sortDirection,
       ...getRandomSeedInput(),
       tagFilter: activeTagFilter,
+      excludeTagFilter: activeExcludeTagFilter,
       authorFilter: nextValue,
       ...getCurrentDateFilterInput(),
       append: false
@@ -183,6 +224,7 @@ export function useSortFilter({
       sortDirection,
       ...getRandomSeedInput(),
       tagFilter: activeTagFilter,
+      excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       dateFilterTarget,
       dateFrom,
@@ -206,6 +248,7 @@ export function useSortFilter({
       sortDirection,
       ...getRandomSeedInput(),
       tagFilter: activeTagFilter,
+      excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       dateFilterTarget: null,
       dateFrom: null,
@@ -217,6 +260,7 @@ export function useSortFilter({
   async function handleClearAllFilters() {
     setActiveAuthorFilter(null);
     setActiveTagFilter(null);
+    setActiveExcludeTagFilter(null);
     setActiveDateFilterTarget(null);
     setActiveDateFrom(null);
     setActiveDateTo(null);
@@ -231,6 +275,7 @@ export function useSortFilter({
       sortDirection,
       ...getRandomSeedInput(),
       tagFilter: null,
+      excludeTagFilter: null,
       authorFilter: null,
       dateFilterTarget: null,
       dateFrom: null,
@@ -247,6 +292,7 @@ export function useSortFilter({
       sortDirection,
       ...getRandomSeedInput(),
       tagFilter: activeTagFilter,
+      excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       ...getCurrentDateFilterInput(),
       append: true
@@ -262,6 +308,8 @@ export function useSortFilter({
     setRandomSeed,
     activeTagFilter,
     setActiveTagFilter,
+    activeExcludeTagFilter,
+    setActiveExcludeTagFilter,
     activeAuthorFilter,
     setActiveAuthorFilter,
     activeDateFilterTarget,
@@ -277,6 +325,7 @@ export function useSortFilter({
     handleSortDirectionToggle,
     handleReshuffle,
     handleToggleTagFilter,
+    handleToggleExcludeTagFilter,
     handleToggleAuthorFilter,
     handleApplyDateFilter,
     handleClearDateFilter,

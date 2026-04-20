@@ -110,6 +110,7 @@ export function formatDateFilterConditionLabel(
 export function formatEmptyArchiveMessage(input: {
   language: ArchiveLanguage;
   selectedTagFilter: ArchiveTagSummaryRecord | null;
+  selectedExcludeTagFilter: ArchiveTagSummaryRecord | null;
   activeAuthorFilter: string | null;
   activeDateFilterTarget: DateFilterTarget | null;
   activeDateFrom: string | null;
@@ -120,6 +121,7 @@ export function formatEmptyArchiveMessage(input: {
   const {
     language,
     selectedTagFilter,
+    selectedExcludeTagFilter,
     activeAuthorFilter,
     activeDateFilterTarget,
     activeDateFrom,
@@ -129,12 +131,25 @@ export function formatEmptyArchiveMessage(input: {
   } = input;
   const activeFilters: string[] = [];
 
-  if (selectedTagFilter === null && activeAuthorFilter === null && activeDateFilterTarget === null) {
+  if (
+    selectedTagFilter === null &&
+    selectedExcludeTagFilter === null &&
+    activeAuthorFilter === null &&
+    activeDateFilterTarget === null
+  ) {
     return language === "ja" ? "保存済み投稿はありません。" : "No saved posts.";
   }
 
   if (selectedTagFilter !== null) {
     activeFilters.push(getTagDisplayName(selectedTagFilter.tag));
+  }
+
+  if (selectedExcludeTagFilter !== null) {
+    activeFilters.push(
+      language === "ja"
+        ? `\u9664\u5916: ${getTagDisplayName(selectedExcludeTagFilter.tag)}`
+        : `excluding ${getTagDisplayName(selectedExcludeTagFilter.tag)}`
+    );
   }
 
   if (activeAuthorFilter !== null) {

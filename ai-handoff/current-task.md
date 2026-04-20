@@ -2,45 +2,49 @@
 
 ## Active
 
-- `2026-04-20-tag-exclude-filter`: タグ除外フィルター実装
+- none
 
 ## Scope
 
-- フィルターモーダルのタグ一覧に include/exclude 2 択を追加。exclude は差集合でクエリ層に実装。
+- Tag exclude filter implementation and Shared Profile manual verification completed.
 
 ## Coordination
 
-- task_file: `ai-handoff/tasks/2026-04-20-tag-exclude-filter.md`
 - blocked_by: `none`
 - related_findings: `none`
 - needs_from_claude: `none`
-- handoff_to_codex: `ai-handoff/tasks/2026-04-20-tag-exclude-filter.md`
+- handoff_to_codex: none
 
 ## Next Action
 
-- next_action: `Codex が task packet の Design に従い実装する。`
+- next_action: `none`
 
 ## Acceptance Criteria
 
-- [x] duplicate batch threshold max is 999
-- [x] video lightbox loops playback
-- [x] backup restore supports replace and merge modes
-- [x] tag add/remove updates displayed post tags without full archive reload
+- [x] Tag rows show include and exclude controls
+- [x] Excluding a tag removes posts with that tag from the result set
+- [x] `bookmarked` can be excluded to show non-bookmarked matching posts
+- [x] Include and exclude cannot hold the same tag at the same time
+- [x] Clear all filters also clears exclude
+- [x] Tag tab badge is active when exclude is applied
+- [x] Session persistence restores exclude filters
 - [x] `npm run typecheck` pass
 - [x] `npm run build` pass
 
 ## Completion Checklist
 
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
+- [x] `npm run handoff:check`
 
 ## Recent Updates
 
+- `2026-04-20 Codex`: manually verified `2026-04-20-tag-exclude-filter` in the Shared Profile viewer: include/exclude controls, bookmark exclude/include counts, mutual exclusion, clear-all, tag tab badge, and session restore all passed.
+- `2026-04-20 Codex`: completed `2026-04-20-tag-exclude-filter`; added excludeTagFilter through archive queries, viewer state, modal UI, session persistence, and local tag updates. `npm run typecheck` / `npm run build` passed.
 - `2026-04-18 Codex`: completed v0.17.6 tasks: duplicate threshold max 999, video lightbox loop, backup restore replace/merge modes, and local tag operation updates. `npm run typecheck` / `npm run build` passed.
 - `2026-04-17 Codex`: implemented `2026-04-17-fix-large-backup-restore-timeout`; Viewer restore now calls `importArchiveBackupZip` directly and `archive/restore` runtime staging path was removed. `npm run typecheck` / `npm run build` passed. Manual large-backup verification remains.
 - `2026-04-17 Codex`: completed `2026-04-17-integrity-media-checksum-and-quota`; media writes now store SHA-256 checksums and quota failures are logged distinctly.
@@ -53,6 +57,7 @@
 
 ## Recently Completed
 
+- `2026-04-20-tag-exclude-filter`: Tag exclude filter implemented; typecheck/build passed
 - `2026-04-18-duplicate-threshold-max-999`: Bulk import duplicate stop threshold max is now 999; typecheck/build passed
 - `2026-04-18-video-loop`: Video lightbox playback now loops; typecheck/build passed
 - `2026-04-18-restore-merge-or-replace`: Backup restore now supports replace and merge modes; typecheck/build passed

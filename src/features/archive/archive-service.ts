@@ -825,6 +825,7 @@ export async function bulkAssignTagPreview(
     sortDirection: "desc",
     randomSeed: null,
     tagFilter: filter.tagFilter,
+    excludeTagFilter: filter.excludeTagFilter,
     authorFilter: filter.authorFilter,
     dateFilterTarget: filter.dateFilterTarget,
     dateFrom: filter.dateFrom,
@@ -1401,6 +1402,10 @@ async function getQuotedPostIdSet(): Promise<Set<string>> {
 async function resolveFilteredPostIds(input: ListPostsPageInput): Promise<Set<string> | null> {
   const tagFilterPostIds =
     input.tagFilter === null ? null : new Set(await listPostIdsByNormalizedName(input.tagFilter));
+  const excludeTagPostIds =
+    input.excludeTagFilter == null
+      ? null
+      : new Set(await listPostIdsByNormalizedName(input.excludeTagFilter));
   const authorFilter = normalizeAuthorFilter(input.authorFilter);
   const dateFilterTarget = normalizeDateFilterTarget(input.dateFilterTarget);
   const dateFrom = normalizeDateFilterTimestamp(input.dateFrom);
@@ -1410,7 +1415,12 @@ async function resolveFilteredPostIds(input: ListPostsPageInput): Promise<Set<st
       ? null
       : new Set(await listPostIdsByDateFilter(dateFilterTarget, dateFrom, dateTo));
 
-  if (tagFilterPostIds === null && authorFilter === null && dateFilterPostIds === null) {
+  if (
+    tagFilterPostIds === null &&
+    excludeTagPostIds === null &&
+    authorFilter === null &&
+    dateFilterPostIds === null
+  ) {
     return null;
   }
 
@@ -1420,24 +1430,29 @@ async function resolveFilteredPostIds(input: ListPostsPageInput): Promise<Set<st
     (value): value is Set<string> => value !== null
   );
 
-  if (filterSets.length === 0) {
-    return null;
-  }
+  const result =
+    filterSets.length === 0 ? new Set(await listPostIds()) : new Set<string>(filterSets[0]);
 
-  const intersection = new Set<string>(filterSets[0]);
+  if (filterSets.length > 0) {
+    for (const postId of result) {
+      for (let index = 1; index < filterSets.length; index += 1) {
+        const currentSet = filterSets[index];
 
-  for (const postId of intersection) {
-    for (let index = 1; index < filterSets.length; index += 1) {
-      const currentSet = filterSets[index];
-
-      if (currentSet !== undefined && !currentSet.has(postId)) {
-        intersection.delete(postId);
-        break;
+        if (currentSet !== undefined && !currentSet.has(postId)) {
+          result.delete(postId);
+          break;
+        }
       }
     }
   }
 
-  return intersection;
+  if (excludeTagPostIds !== null) {
+    for (const postId of excludeTagPostIds) {
+      result.delete(postId);
+    }
+  }
+
+  return result;
 }
 
 function normalizePageOffset(value: number): number {

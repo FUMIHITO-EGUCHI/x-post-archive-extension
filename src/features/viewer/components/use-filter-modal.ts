@@ -23,6 +23,7 @@ export function useFilterModal({
   activeDateFilterTarget,
   activeDateFrom,
   activeDateTo,
+  activeExcludeTagFilter,
   activeTagFilter,
   availableTags,
   getTagDisplayName,
@@ -33,6 +34,7 @@ export function useFilterModal({
   activeDateFilterTarget: DateFilterTarget | null;
   activeDateFrom: string | null;
   activeDateTo: string | null;
+  activeExcludeTagFilter: string | null;
   activeTagFilter: string | null;
   availableTags: ArchiveTagSummaryRecord[];
   getTagDisplayName: (tag: ArchiveTagRecord) => string;
@@ -116,15 +118,19 @@ export function useFilterModal({
   }, [userSearchQuery, userSummaries]);
 
   const requiredVisibleTagOptionCount = useMemo(() => {
-    if (activeTagFilter === null) {
+    const activeTagFilters = [activeTagFilter, activeExcludeTagFilter].filter(
+      (value): value is string => value !== null
+    );
+
+    if (activeTagFilters.length === 0) {
       return 0;
     }
 
-    const index = visibleTagOptions.findIndex(
-      ({ tag }) => tag.normalized_name === activeTagFilter
+    const indexes = activeTagFilters.map((activeFilter) =>
+      visibleTagOptions.findIndex(({ tag }) => tag.normalized_name === activeFilter)
     );
-    return index < 0 ? 0 : index + 1;
-  }, [activeTagFilter, visibleTagOptions]);
+    return Math.max(0, ...indexes.map((index) => (index < 0 ? 0 : index + 1)));
+  }, [activeExcludeTagFilter, activeTagFilter, visibleTagOptions]);
 
   const {
     visibleItems: displayedTagOptions,

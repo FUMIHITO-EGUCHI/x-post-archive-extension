@@ -24,6 +24,7 @@ type UseViewerSessionOptions = {
   activeDateFilterTarget: DateFilterTarget | null;
   activeDateFrom: string | null;
   activeDateTo: string | null;
+  activeExcludeTagFilter: string | null;
   activeTagFilter: string | null;
   postsLength: number;
   screen: ViewerScreen;
@@ -39,6 +40,7 @@ export function useViewerSession({
   activeDateFilterTarget,
   activeDateFrom,
   activeDateTo,
+  activeExcludeTagFilter,
   activeTagFilter,
   postsLength,
   screen,
@@ -64,6 +66,7 @@ export function useViewerSession({
           sortField,
           sortDirection,
           activeTagFilter,
+          activeExcludeTagFilter,
           activeAuthorFilter,
           activeDateFilterTarget,
           activeDateFrom,
@@ -93,6 +96,7 @@ export function useViewerSession({
       activeDateFilterTarget,
       activeDateFrom,
       activeDateTo,
+      activeExcludeTagFilter,
       activeTagFilter,
       postsLength,
       sessionRestoreMode,
@@ -151,6 +155,7 @@ export function useViewerSession({
     activeDateFilterTarget,
     activeDateFrom,
     activeDateTo,
+    activeExcludeTagFilter,
     activeTagFilter,
     persistCurrentViewerSession,
     postsLength,
@@ -197,6 +202,7 @@ export function useViewerSession({
     activeDateFilterTarget,
     activeDateFrom,
     activeDateTo,
+    activeExcludeTagFilter,
     activeTagFilter,
     persistCurrentViewerSession,
     postsLength,
