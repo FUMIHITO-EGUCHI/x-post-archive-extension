@@ -2,22 +2,23 @@
 
 ## Active
 
-- none
+- `2026-04-20-tag-exclude-filter`: タグ除外フィルター実装
 
 ## Scope
 
-- v0.17.6 task packet implementation completed.
+- フィルターモーダルのタグ一覧に include/exclude 2 択を追加。exclude は差集合でクエリ層に実装。
 
 ## Coordination
 
+- task_file: `ai-handoff/tasks/2026-04-20-tag-exclude-filter.md`
 - blocked_by: `none`
 - related_findings: `none`
 - needs_from_claude: `none`
-- handoff_to_codex: none
+- handoff_to_codex: `ai-handoff/tasks/2026-04-20-tag-exclude-filter.md`
 
 ## Next Action
 
-- next_action: `Manual verify restore merge/replace and tag local updates in the viewer.`
+- next_action: `Codex が task packet の Design に従い実装する。`
 
 ## Acceptance Criteria
 
@@ -30,13 +31,13 @@
 
 ## Completion Checklist
 
-- [x] implementation finished
-- [x] `npm run typecheck`
-- [x] `npm run build`
-- [x] task packet `Result` updated
-- [x] task packet `Verification` updated
-- [x] `ai-handoff/current-task.md` updated
-- [x] `npm run handoff:check`
+- [ ] implementation finished
+- [ ] `npm run typecheck`
+- [ ] `npm run build`
+- [ ] task packet `Result` updated
+- [ ] task packet `Verification` updated
+- [ ] `ai-handoff/current-task.md` updated
+- [ ] `npm run handoff:check`
 
 ## Recent Updates
 
