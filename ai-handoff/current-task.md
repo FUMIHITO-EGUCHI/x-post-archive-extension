@@ -2,22 +2,23 @@
 
 ## Active
 
-- none
+- `2026-04-20-infinite-scroll-and-modal-scrollbar`: 無限スクロールとフィルターモーダルのスクロールバー非表示
 
 ## Scope
 
-- Tag exclude filter implementation and Shared Profile manual verification completed.
+- 投稿一覧の「さらに読み込む」ボタンを廃止し IntersectionObserver で無限スクロール化。フィルターモーダルのスクロールバーを CSS で非表示に。
 
 ## Coordination
 
+- task_file: `ai-handoff/tasks/2026-04-20-infinite-scroll-and-modal-scrollbar.md`
 - blocked_by: `none`
 - related_findings: `none`
 - needs_from_claude: `none`
-- handoff_to_codex: none
+- handoff_to_codex: `ai-handoff/tasks/2026-04-20-infinite-scroll-and-modal-scrollbar.md`
 
 ## Next Action
 
-- next_action: `none`
+- next_action: `Codex が task packet の Design に従い実装する。`
 
 ## Acceptance Criteria
 
@@ -33,13 +34,13 @@
 
 ## Completion Checklist
 
-- [x] implementation finished
-- [x] `npm run typecheck`
-- [x] `npm run build`
-- [x] task packet `Result` updated
-- [x] task packet `Verification` updated
-- [x] `ai-handoff/current-task.md` updated
-- [x] `npm run handoff:check`
+- [ ] implementation finished
+- [ ] `npm run typecheck`
+- [ ] `npm run build`
+- [ ] task packet `Result` updated
+- [ ] task packet `Verification` updated
+- [ ] `ai-handoff/current-task.md` updated
+- [ ] `npm run handoff:check`
 
 ## Recent Updates
 
