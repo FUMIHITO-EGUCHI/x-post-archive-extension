@@ -10,15 +10,15 @@
 
 ## Coordination
 
-- task_file: not set
+- task_file: `ai-handoff/tasks/2026-04-21-keyword-search.md`
 - blocked_by: `none`
 - related_findings: `none`
 - needs_from_claude: `none`
-- handoff_to_codex: `none`
+- handoff_to_codex: `ready`
 
 ## Next Action
 
-- next_action: `Pick the next task packet before starting implementation.`
+- next_action: `Codex implements keyword search per task packet.`
 
 ## Acceptance Criteria
 
