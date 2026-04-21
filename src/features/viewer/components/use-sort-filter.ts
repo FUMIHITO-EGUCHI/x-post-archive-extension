@@ -29,6 +29,7 @@ export function useSortFilter({
     useState<DateFilterTarget | null>(null);
   const [activeDateFrom, setActiveDateFrom] = useState<string | null>(null);
   const [activeDateTo, setActiveDateTo] = useState<string | null>(null);
+  const [activeKeywordFilter, setActiveKeywordFilter] = useState<string | null>(null);
 
   function getCurrentDateFilterInput() {
     return {
@@ -45,7 +46,8 @@ export function useSortFilter({
       authorFilter: activeAuthorFilter,
       dateFilterTarget: activeDateFilterTarget,
       dateFrom: toDateFilterStartTimestamp(activeDateFrom),
-      dateTo: toDateFilterEndTimestamp(activeDateTo)
+      dateTo: toDateFilterEndTimestamp(activeDateTo),
+      keywordFilter: activeKeywordFilter
     };
   }
 
@@ -74,6 +76,7 @@ export function useSortFilter({
       tagFilter: activeTagFilter,
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
+      keywordFilter: activeKeywordFilter,
       ...getCurrentDateFilterInput(),
       append: false
     });
@@ -98,6 +101,7 @@ export function useSortFilter({
       tagFilter: activeTagFilter,
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
+      keywordFilter: activeKeywordFilter,
       ...getCurrentDateFilterInput(),
       append: false
     });
@@ -118,6 +122,7 @@ export function useSortFilter({
       tagFilter: activeTagFilter,
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
+      keywordFilter: activeKeywordFilter,
       ...getCurrentDateFilterInput(),
       append: false
     });
@@ -147,6 +152,7 @@ export function useSortFilter({
       tagFilter: nextValue,
       excludeTagFilter: nextExcludeValue,
       authorFilter: activeAuthorFilter,
+      keywordFilter: activeKeywordFilter,
       ...getCurrentDateFilterInput(),
       append: false
     });
@@ -174,6 +180,7 @@ export function useSortFilter({
       tagFilter: nextTagFilter,
       excludeTagFilter: nextValue,
       authorFilter: activeAuthorFilter,
+      keywordFilter: activeKeywordFilter,
       ...getCurrentDateFilterInput(),
       append: false
     });
@@ -196,6 +203,7 @@ export function useSortFilter({
       tagFilter: activeTagFilter,
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: nextValue,
+      keywordFilter: activeKeywordFilter,
       ...getCurrentDateFilterInput(),
       append: false
     });
@@ -226,6 +234,7 @@ export function useSortFilter({
       tagFilter: activeTagFilter,
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
+      keywordFilter: activeKeywordFilter,
       dateFilterTarget,
       dateFrom,
       dateTo,
@@ -250,9 +259,30 @@ export function useSortFilter({
       tagFilter: activeTagFilter,
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
+      keywordFilter: activeKeywordFilter,
       dateFilterTarget: null,
       dateFrom: null,
       dateTo: null,
+      append: false
+    });
+  }
+
+  async function handleKeywordChange(keyword: string | null) {
+    setActiveKeywordFilter(keyword);
+    window.scrollTo({
+      top: 0
+    });
+    await loadArchivePage({
+      offset: 0,
+      limit: DEFAULT_PAGE_SIZE,
+      sortField,
+      sortDirection,
+      ...getRandomSeedInput(),
+      tagFilter: activeTagFilter,
+      excludeTagFilter: activeExcludeTagFilter,
+      authorFilter: activeAuthorFilter,
+      ...getCurrentDateFilterInput(),
+      keywordFilter: keyword,
       append: false
     });
   }
@@ -264,6 +294,7 @@ export function useSortFilter({
     setActiveDateFilterTarget(null);
     setActiveDateFrom(null);
     setActiveDateTo(null);
+    setActiveKeywordFilter(null);
     closeFilterModal();
     window.scrollTo({
       top: 0
@@ -280,6 +311,7 @@ export function useSortFilter({
       dateFilterTarget: null,
       dateFrom: null,
       dateTo: null,
+      keywordFilter: null,
       append: false
     });
   }
@@ -294,6 +326,7 @@ export function useSortFilter({
       tagFilter: activeTagFilter,
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
+      keywordFilter: activeKeywordFilter,
       ...getCurrentDateFilterInput(),
       append: true
     });
@@ -312,6 +345,8 @@ export function useSortFilter({
     setActiveExcludeTagFilter,
     activeAuthorFilter,
     setActiveAuthorFilter,
+    activeKeywordFilter,
+    setActiveKeywordFilter,
     activeDateFilterTarget,
     setActiveDateFilterTarget,
     activeDateFrom,
@@ -329,6 +364,7 @@ export function useSortFilter({
     handleToggleAuthorFilter,
     handleApplyDateFilter,
     handleClearDateFilter,
+    handleKeywordChange,
     handleClearAllFilters,
     handleLoadMore
   };

@@ -56,6 +56,7 @@ export function ViewerApp() {
   const [screen, setScreen] = useState<ViewerScreen>("archive");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isBulkTagModalOpen, setIsBulkTagModalOpen] = useState(false);
+  const [isSearchMode, setIsSearchMode] = useState(false);
   const archiveMetadata = useArchiveMetadata();
   const archiveLoader = useArchiveLoader();
   const mediaLightbox = useMediaLightbox();
@@ -103,6 +104,7 @@ export function ViewerApp() {
     setActiveExcludeTagFilter,
     activeAuthorFilter,
     setActiveAuthorFilter,
+    activeKeywordFilter,
     activeDateFilterTarget,
     setActiveDateFilterTarget,
     activeDateFrom,
@@ -120,6 +122,7 @@ export function ViewerApp() {
     handleToggleAuthorFilter,
     handleApplyDateFilter: applyDateFilter,
     handleClearDateFilter: clearDateFilter,
+    handleKeywordChange,
     handleClearAllFilters: clearAllFilters,
     handleLoadMore: loadMorePosts
   } = sortFilter;
@@ -360,6 +363,7 @@ export function ViewerApp() {
             dateFilterTarget: nextDateFilterTarget,
             dateFrom: nextDateFrom,
             dateTo: nextDateTo,
+            keywordFilter: null,
             append: false
           })
         ]);
@@ -401,6 +405,7 @@ export function ViewerApp() {
         excludeTagFilter: activeExcludeTagFilter,
         authorFilter: activeAuthorFilter,
         ...getCurrentDateFilterInput(),
+        keywordFilter: activeKeywordFilter,
         append: false
       })
     ]);
@@ -442,6 +447,7 @@ export function ViewerApp() {
         excludeTagFilter: nextExcludeTagFilter,
         authorFilter: activeAuthorFilter,
         ...getCurrentDateFilterInput(),
+        keywordFilter: activeKeywordFilter,
         append: false
       })
     ]);
@@ -479,6 +485,7 @@ export function ViewerApp() {
         excludeTagFilter: nextExcludeTagFilter,
         authorFilter: activeAuthorFilter,
         ...getCurrentDateFilterInput(),
+        keywordFilter: activeKeywordFilter,
         append: false
       })
     ]);
@@ -530,6 +537,7 @@ export function ViewerApp() {
 
   async function handleClearAllFilters() {
     resetDateFilterDraft();
+    setIsSearchMode(false);
     await clearAllFilters();
   }
 
@@ -631,6 +639,8 @@ export function ViewerApp() {
             filterChips={filterChips}
             firstActiveFilterTab={firstActiveFilterTab}
             isBulkTagDisabled={status !== "ready" || archiveTotalCount === 0}
+            isSearchMode={isSearchMode}
+            keywordFilter={activeKeywordFilter}
             language={language}
             onOpenBulkTag={() => {
               setIsBulkTagModalOpen(true);
@@ -639,8 +649,18 @@ export function ViewerApp() {
               void handleClearAllFilters();
             }}
             onOpenFilter={openFilterModal}
+            onOpenSearch={() => {
+              setIsSearchMode(true);
+            }}
             onOpenSettings={() => {
               setScreen("settings");
+            }}
+            onCloseSearch={() => {
+              setIsSearchMode(false);
+              void handleKeywordChange(null);
+            }}
+            onKeywordChange={(keyword) => {
+              void handleKeywordChange(keyword);
             }}
             onReshuffle={() => {
               void handleReshuffle();

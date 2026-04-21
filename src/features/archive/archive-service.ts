@@ -19,6 +19,7 @@ import {
   getPost,
   getLatestPostByUsername,
   listPostIds,
+  listPostIdsByKeyword,
   listPostIdsByUsername,
   listPostUsernames,
   getPostsByIds,
@@ -829,7 +830,8 @@ export async function bulkAssignTagPreview(
     authorFilter: filter.authorFilter,
     dateFilterTarget: filter.dateFilterTarget,
     dateFrom: filter.dateFrom,
-    dateTo: filter.dateTo
+    dateTo: filter.dateTo,
+    keywordFilter: filter.keywordFilter
   };
   const matchingPostIds = await resolveFilteredPostIds(pageInput);
   const resolvedPostIds = matchingPostIds === null ? await listPostIds() : [...matchingPostIds];
@@ -1407,6 +1409,7 @@ async function resolveFilteredPostIds(input: ListPostsPageInput): Promise<Set<st
       ? null
       : new Set(await listPostIdsByNormalizedName(input.excludeTagFilter));
   const authorFilter = normalizeAuthorFilter(input.authorFilter);
+  const keywordFilter = normalizeKeywordFilter(input.keywordFilter);
   const dateFilterTarget = normalizeDateFilterTarget(input.dateFilterTarget);
   const dateFrom = normalizeDateFilterTimestamp(input.dateFrom);
   const dateTo = normalizeDateFilterTimestamp(input.dateTo);
@@ -1414,21 +1417,27 @@ async function resolveFilteredPostIds(input: ListPostsPageInput): Promise<Set<st
     dateFilterTarget === null || (dateFrom === null && dateTo === null)
       ? null
       : new Set(await listPostIdsByDateFilter(dateFilterTarget, dateFrom, dateTo));
+  const keywordFilterPostIds =
+    keywordFilter === null ? null : new Set(await listPostIdsByKeyword(keywordFilter));
 
   if (
     tagFilterPostIds === null &&
     excludeTagPostIds === null &&
     authorFilter === null &&
-    dateFilterPostIds === null
+    dateFilterPostIds === null &&
+    keywordFilterPostIds === null
   ) {
     return null;
   }
 
   const authorFilterPostIds =
     authorFilter === null ? null : new Set(await listPostIdsByAuthorFilter(authorFilter));
-  const filterSets = [tagFilterPostIds, authorFilterPostIds, dateFilterPostIds].filter(
-    (value): value is Set<string> => value !== null
-  );
+  const filterSets = [
+    tagFilterPostIds,
+    authorFilterPostIds,
+    dateFilterPostIds,
+    keywordFilterPostIds
+  ].filter((value): value is Set<string> => value !== null);
 
   const result =
     filterSets.length === 0 ? new Set(await listPostIds()) : new Set<string>(filterSets[0]);
@@ -1998,6 +2007,15 @@ function normalizeAuthorFilter(value: string | null): string | null {
 
   const cleaned = value.trim().replace(/^@+/, "").toLocaleLowerCase("en-US");
   return cleaned === "" ? null : cleaned;
+}
+
+function normalizeKeywordFilter(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue === "" ? null : trimmedValue;
 }
 
 function normalizeQuotedPostId(value: string | null | undefined): string | null {

@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { PostSortField, SortDirection } from "../../../types/viewer";
 import type { ArchiveLanguage } from "../../settings/archive-language";
 
@@ -17,12 +17,17 @@ export type StickyToolbarProps = {
   filterChips: StickyToolbarFilterChip[];
   firstActiveFilterTab: FilterModalTab;
   isBulkTagDisabled: boolean;
+  isSearchMode: boolean;
+  keywordFilter: string | null;
   sortField: PostSortField;
   sortDirection: SortDirection;
   onSortFieldChange: (field: PostSortField) => void;
   onSortDirectionToggle: () => void;
   onReshuffle: () => void;
   onOpenBulkTag: () => void;
+  onOpenSearch: () => void;
+  onCloseSearch: () => void;
+  onKeywordChange: (keyword: string | null) => void;
   onClearAllFilters: () => void;
 };
 
@@ -35,19 +40,95 @@ export function StickyToolbar({
   filterChips,
   firstActiveFilterTab,
   isBulkTagDisabled,
+  isSearchMode,
+  keywordFilter,
   sortField,
   sortDirection,
   onSortFieldChange,
   onSortDirectionToggle,
   onReshuffle,
   onOpenBulkTag,
+  onOpenSearch,
+  onCloseSearch,
+  onKeywordChange,
   onClearAllFilters
 }: StickyToolbarProps) {
   const activeFilterCount = filterChips.length;
+  const debounceTimeoutRef = useRef<number | null>(null);
+  const [searchValue, setSearchValue] = useState(keywordFilter ?? "");
+
+  useEffect(() => {
+    setSearchValue(keywordFilter ?? "");
+  }, [keywordFilter]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current !== null) {
+        window.clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  if (isSearchMode) {
+    return (
+      <section
+        className="viewer-sticky-toolbar viewer-sticky-toolbar-search"
+        aria-label={language === "ja" ? "キーワード検索" : "Keyword search"}
+      >
+        <div className="viewer-search-container">
+          <SearchIcon className="viewer-search-icon" />
+          <input
+            className="viewer-search-input"
+            type="search"
+            autoFocus
+            value={searchValue}
+            placeholder={language === "ja" ? "キーワードで検索..." : "Search by keyword..."}
+            onChange={(event) => {
+              const nextValue = event.currentTarget.value;
+              setSearchValue(nextValue);
+
+              if (debounceTimeoutRef.current !== null) {
+                window.clearTimeout(debounceTimeoutRef.current);
+              }
+
+              debounceTimeoutRef.current = window.setTimeout(() => {
+                onKeywordChange(nextValue.trim().length > 0 ? nextValue : null);
+              }, 300);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                onCloseSearch();
+              }
+            }}
+          />
+          <button
+            className="viewer-icon-button"
+            type="button"
+            aria-label={language === "ja" ? "検索を閉じる" : "Close search"}
+            onClick={onCloseSearch}
+          >
+            <CloseIcon />
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <section className="viewer-sticky-toolbar" aria-label={language === "ja" ? "一覧操作" : "Archive controls"}>
+    <section
+      className="viewer-sticky-toolbar"
+      aria-label={language === "ja" ? "アーカイブ操作" : "Archive controls"}
+    >
       <div className="viewer-toolbar-left">
+        <button
+          className="viewer-icon-button"
+          type="button"
+          aria-label={language === "ja" ? "キーワード検索" : "Keyword search"}
+          aria-pressed={keywordFilter !== null && keywordFilter.trim().length > 0}
+          onClick={onOpenSearch}
+        >
+          <SearchIcon />
+        </button>
         <button
           className={
             activeFilterCount > 0
@@ -75,7 +156,10 @@ export function StickyToolbar({
         </button>
       </div>
 
-      <div className="viewer-toolbar-center" aria-label={language === "ja" ? "適用中の絞り込み" : "Active filters"}>
+      <div
+        className="viewer-toolbar-center"
+        aria-label={language === "ja" ? "適用中の絞り込み" : "Active filters"}
+      >
         {activeFilterCount === 0 ? (
           <span className="viewer-toolbar-empty">
             {language === "ja" ? "絞り込みなし" : "No filters"}
@@ -122,8 +206,8 @@ export function StickyToolbar({
             }}
           >
             <option value="random">{language === "ja" ? "ランダム" : "Random"}</option>
-            <option value="posted_at">{language === "ja" ? "投稿日時" : "Posted at"}</option>
-            <option value="saved_at">{language === "ja" ? "保存日時" : "Saved at"}</option>
+            <option value="posted_at">{language === "ja" ? "投稿日" : "Posted at"}</option>
+            <option value="saved_at">{language === "ja" ? "保存日" : "Saved at"}</option>
             <option value="reply_count">{language === "ja" ? "返信数" : "Replies"}</option>
             <option value="repost_count">{language === "ja" ? "リポスト数" : "Reposts"}</option>
             <option value="like_count">{language === "ja" ? "いいね数" : "Likes"}</option>
@@ -131,7 +215,7 @@ export function StickyToolbar({
         </label>
         {sortField === "random" ? (
           <button className="viewer-secondary-button" type="button" onClick={onReshuffle}>
-            {language === "ja" ? "再シャッフル" : "Reshuffle"}
+            {language === "ja" ? "シャッフル" : "Reshuffle"}
           </button>
         ) : (
           <button
@@ -176,6 +260,28 @@ function GearIcon() {
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path
         d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.15 7.15 0 0 0-1.63-.94L14.4 2.8a.49.49 0 0 0-.49-.4h-3.84a.49.49 0 0 0-.49.4L9.2 5.32c-.58.22-1.13.53-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.66 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.43 7.43 0 0 0-.05.94 7.43 7.43 0 0 0 .05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.5.41 1.05.72 1.63.94l.38 2.52c.05.24.25.4.49.4h3.84c.24 0 .44-.16.49-.4l.38-2.52c.58-.22 1.13-.53 1.63-.94l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.44 4.45 1.06-1.06-4.45-4.44A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="m6.53 5.47 5.47 5.47 5.47-5.47 1.06 1.06L13.06 12l5.47 5.47-1.06 1.06L12 13.06l-5.47 5.47-1.06-1.06L10.94 12 5.47 6.53l1.06-1.06Z"
         fill="currentColor"
       />
     </svg>
