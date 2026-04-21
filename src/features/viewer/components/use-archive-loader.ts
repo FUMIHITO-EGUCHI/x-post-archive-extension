@@ -24,6 +24,7 @@ export type LoadArchivePageInput = {
   dateFilterTarget: DateFilterTarget | null;
   dateFrom: string | null;
   dateTo: string | null;
+  keywordFilter: string | null;
   append: boolean;
 };
 
@@ -61,6 +62,7 @@ export function useArchiveLoader() {
         tagFilter: input.tagFilter,
         excludeTagFilter: input.excludeTagFilter,
         authorFilter: input.authorFilter,
+        keywordFilter: input.keywordFilter,
         ...buildDateFilterRequest(input.dateFilterTarget, input.dateFrom, input.dateTo)
       });
 
