@@ -60,6 +60,16 @@ export async function listPostIdsByUsername(username: string): Promise<string[]>
   return (await archiveDb.posts.where("x_username").equals(username).primaryKeys()).map(String);
 }
 
+export async function listPostIdsByKeyword(keyword: string): Promise<string[]> {
+  const lowerKeyword = keyword.toLowerCase();
+
+  return (
+    await archiveDb.posts
+      .filter((post) => post.post_text.toLowerCase().includes(lowerKeyword))
+      .primaryKeys()
+  ).map(String);
+}
+
 export async function listPostIdsWithZeroEngagementCounts(): Promise<string[]> {
   const posts = await archiveDb.posts.where("reply_count").equals(0).toArray();
 
