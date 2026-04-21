@@ -1,94 +1,67 @@
-# Task Packet
+# Task Packet: Filter Modal Infinite Scroll
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
-- branch: master
+- branch: feature/infinite-scroll-modal-scrollbar
 - priority: normal
 - files_in_scope: src/features/viewer/components/unified-filter-modal.tsx, src/entrypoints/viewer/style.css
 - blocked_by: none
 - related_findings: none
 - needs_from_claude: none
-- handoff_to_codex: unified-filter-modal のユーザー絞り込み・タグ絞り込みパネルの「さらに表示」ボタンを廃止し、無限スクロールに変更する
-- summary:
+- handoff_to_codex: done
+- summary: Replace filter modal user/tag load-more buttons with IntersectionObserver-based infinite scroll.
 
 ## Goal
 
-`unified-filter-modal.tsx` 内のユーザーフィルターパネルとタグフィルターパネルにある「さらに表示」ボタンを廃止し、リスト末尾へのスクロールで自動的に続きを読み込む無限スクロールに変更する。
+Replace the user and tag filter modal load-more controls with automatic loading when the user scrolls near the end of each option list.
 
-## Requested Action
+## Result
 
-要件整理済み。設計・実装・型チェック・ビルド確認まで行う。コミットはしない。
-
-## In Scope
-
-- `unified-filter-modal.tsx` の `UserFilterPanel` 内「さらに表示」ボタン削除 → 無限スクロール化
-- `unified-filter-modal.tsx` の `TagFilterPanel` 内「さらに表示」ボタン削除 → 無限スクロール化
-- `viewer-incremental-list-footer` / 残り件数表示 `<p>` の削除
-- スクロール末尾検出には `IntersectionObserver` を使う（sentinel 要素方式）
-- ロード中インジケーターは任意（シンプルで可）
-
-## Out Of Scope
-
-- `settings-tag-management-panel.tsx` / `settings-tag-redirects-panel.tsx` の「さらに表示」は変更しない
-- `viewer-app.tsx` の `loadMoreTagOptions` / `loadMoreUserOptions` の prop 削除は不要（settings パネルが引き続き使う可能性がある場合は残す。使わないなら削除可）
-- DB スキーマ・repository 層の変更
-- 仮想スクロール導入
-
-## Constraints
-
-- `useIncrementalList` フックの `loadMore()` を再利用する
-- モーダル内の既存スクロールコンテナ（`overflow-y: auto` な要素）を sentinel の親とする
-- 選択中フィルターが初期表示外に落ちない挙動（`requiredCount` 利用）は維持する
-- `npm run typecheck` と `npm run build` を通す
-
-## Files To Read First
-
-- `src/features/viewer/components/unified-filter-modal.tsx` — ユーザー/タグパネルの現状実装（行 300–510 付近）
-- `src/features/viewer/components/use-incremental-list.ts` — `loadMore()` の実装
-- `src/entrypoints/viewer/style.css` — `viewer-incremental-list-footer` 等の既存スタイル
-
-## Inputs From Claude
-
-- 現在の「さらに表示」は `unified-filter-modal.tsx` の `UserFilterPanel`（行 363–374）と `TagFilterPanel`（行 494–505）にある
-- `useIncrementalList` の `hasMore` / `loadMore` が既に存在する
-- 無限スクロールは `IntersectionObserver` + sentinel 要素（リスト末尾に置く `<div ref={sentinelRef}>`）で実装するのが最小コスト
-- `viewer-app.tsx` は `onLoadMoreTags` / `onLoadMoreUsers` を `unified-filter-modal` に渡しているが、無限スクロール化後は modal 内部で完結するため prop を削除できる
+- Added `useInfiniteOptionList()` in `unified-filter-modal.tsx` to observe a sentinel inside the existing scrollable option list.
+- User filter options now load the next chunk automatically when the list is scrolled to the end.
+- Tag filter options now load the next chunk automatically when the list is scrolled to the end.
+- The old modal load-more footer buttons are not rendered.
+- Added `.viewer-option-list-sentinel` styling for the list-end sentinel.
+- Fixed a reset bug where tag options briefly loaded past the first 40 items, then reset back to the initial set because `getTagDisplayName` changed identity on each viewer render.
 
 ## Acceptance Criteria
 
-- ユーザーフィルターパネルで「さらに表示」ボタンが表示されない
-- タグフィルターパネルで「さらに表示」ボタンが表示されない
-- 各パネルのリストを末尾までスクロールすると自動で続きが読み込まれる
-- 選択中フィルターが初期表示件数の外にある場合も表示が欠けない
-- `npm run typecheck`
-- `npm run build`
-
-## Open Questions
-
-- `onLoadMoreTags` / `onLoadMoreUsers` prop が modal 内部のみで使われている場合は削除してよい。`viewer-app.tsx` でも直接参照していないか確認すること
-
-## Work Log
-
-- `2026-04-20 Claude`: task packet 作成
-
-## Codex Plan
-
-## Codex Result
-
-## Changed Files
+- [x] User filter panel load-more button is not displayed
+- [x] Tag filter panel load-more button is not displayed
+- [x] Scrolling to the end of the user option list loads more users automatically
+- [x] Scrolling to the end of the tag option list loads more tags automatically
+- [x] Selected filters remain visible outside the initial display count
+- [x] `npm run typecheck` passed
+- [x] `npm run build` passed
 
 ## Verification
 
+- `npm run typecheck` passed.
+- `npm run build` passed.
+- Shared Profile manual verification via CDP Chrome on port 9223 passed.
+- User filter modal: initial visible user options were 40, sentinel count was 1, footer button count was 0; after scrolling the option list to the bottom, visible user options increased to 80.
+- Tag filter modal: initial visible tag options were 40, sentinel count was 1, footer button count was 0; after scrolling the option list to the bottom, visible tag options increased to 80.
+- Regression check after the reset fix: tag filter modal loaded continuously from 40 (`SPY_FAMILY` as the last visible tag) to 80, 120, and 160 items; each count remained stable after the load.
+
+## Changed Files
+
+- `src/features/viewer/components/unified-filter-modal.tsx`
+- `src/entrypoints/viewer/style.css`
+
 ## Remaining Issues
+
+- none
 
 ## Suggested Next Action
 
+- Commit the completed infinite scroll changes together when ready.
+
 ## Completion Checklist
-- [ ] implementation finished
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] task packet `Codex Result` updated
-- [ ] task packet `Verification` updated
-- [ ] `ai-handoff/current-task.md` updated
-- [ ] `npm run handoff:check`
+- [x] implementation finished
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] task packet `Codex Result` updated
+- [x] task packet `Verification` updated
+- [x] `ai-handoff/current-task.md` updated
+- [x] `npm run handoff:check`
