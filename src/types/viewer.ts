@@ -62,11 +62,18 @@ export type ListPostsPageInput = {
   dateFilterTarget: DateFilterTarget | null;
   dateFrom: number | null;
   dateTo: number | null;
+  keywordFilter: string | null;
 };
 
 export type PostFilterInput = Pick<
   ListPostsPageInput,
-  "tagFilter" | "excludeTagFilter" | "authorFilter" | "dateFilterTarget" | "dateFrom" | "dateTo"
+  | "tagFilter"
+  | "excludeTagFilter"
+  | "authorFilter"
+  | "dateFilterTarget"
+  | "dateFrom"
+  | "dateTo"
+  | "keywordFilter"
 >;
 
 export type ViewerSessionRestoreMode = "off" | "filters" | "filters-and-position";
