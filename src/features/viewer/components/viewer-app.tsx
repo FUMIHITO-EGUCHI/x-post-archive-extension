@@ -1,5 +1,5 @@
 ﻿import type { CSSProperties } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ArchiveTagRecord } from "../../../types/archive";
 import type {
   DateFilterTarget,
@@ -61,6 +61,8 @@ export function ViewerApp() {
   const mediaLightbox = useMediaLightbox();
   const closeFilterModalRef = useRef<() => void>(() => {});
   const archiveSectionRef = useRef<HTMLElement | null>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreInFlightRef = useRef(false);
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const backToArchiveButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousScreenRef = useRef<ViewerScreen>("archive");
@@ -142,6 +144,18 @@ export function ViewerApp() {
     handleSessionRestoreModeChange,
     handleClearSavedSession
   } = preferences;
+  const getTagDisplayName = useCallback((tag: ArchiveTagRecord): string => {
+    if (tag.source !== "auto") {
+      return tag.display_name;
+    }
+
+    return localizeKnownAutoTagDisplayName(
+      language,
+      tag.system_key ?? null,
+      tag.normalized_name,
+      tag.display_name
+    );
+  }, [language]);
   const viewerSession = useViewerSession({
     activeAuthorFilter,
     activeDateFilterTarget,
@@ -263,19 +277,6 @@ export function ViewerApp() {
 
   function closeBulkTagModal() {
     setIsBulkTagModalOpen(false);
-  }
-
-  function getTagDisplayName(tag: ArchiveTagRecord): string {
-    if (tag.source !== "auto") {
-      return tag.display_name;
-    }
-
-    return localizeKnownAutoTagDisplayName(
-      language,
-      tag.system_key ?? null,
-      tag.normalized_name,
-      tag.display_name
-    );
   }
 
   useEffect(() => {
@@ -532,9 +533,52 @@ export function ViewerApp() {
     await clearAllFilters();
   }
 
-  async function handleLoadMore() {
-    await loadMorePosts(posts.length);
-  }
+  const handleLoadMore = useCallback(async () => {
+    if (
+      screen !== "archive" ||
+      status !== "ready" ||
+      !hasMorePosts ||
+      isLoadingMore ||
+      loadMoreInFlightRef.current
+    ) {
+      return;
+    }
+
+    loadMoreInFlightRef.current = true;
+    try {
+      await loadMorePosts(posts.length);
+    } finally {
+      loadMoreInFlightRef.current = false;
+    }
+  }, [hasMorePosts, isLoadingMore, loadMorePosts, posts.length, screen, status]);
+
+  useEffect(() => {
+    if (screen !== "archive" || status !== "ready" || !hasMorePosts || isLoadingMore) {
+      return;
+    }
+
+    const sentinel = loadMoreSentinelRef.current;
+    if (sentinel === null) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void handleLoadMore();
+        }
+      },
+      {
+        rootMargin: "240px 0px"
+      }
+    );
+
+    observer.observe(sentinel);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [handleLoadMore, hasMorePosts, isLoadingMore, screen, status]);
 
   const filterChips: StickyToolbarFilterChip[] = [];
 
@@ -688,23 +732,16 @@ export function ViewerApp() {
             )}
 
             {hasMorePosts && (
-              <div className="viewer-list-footer">
-                <button
-                  className="viewer-action-button"
-                  type="button"
-                  onClick={() => {
-                    void handleLoadMore();
-                  }}
-                  disabled={isLoadingMore}
-                >
-                  {isLoadingMore
-                    ? language === "ja"
-                      ? "読み込み中..."
-                      : "Loading..."
-                    : language === "ja"
-                      ? "さらに読み込む"
-                      : "Load more"}
-                </button>
+              <div
+                ref={loadMoreSentinelRef}
+                className="viewer-list-sentinel"
+                aria-hidden="true"
+              />
+            )}
+
+            {isLoadingMore && (
+              <div className="viewer-list-footer" role="status" aria-live="polite">
+                <span>{language === "ja" ? "読み込み中..." : "Loading..."}</span>
               </div>
             )}
           </section>
