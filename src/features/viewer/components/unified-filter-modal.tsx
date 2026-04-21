@@ -299,6 +299,12 @@ function UserFilterPanel({
   userSearchQuery: string;
   userSummaries: UserSummary[];
 }) {
+  const optionList = useInfiniteOptionList({
+    hasMore: hasMoreUserOptions,
+    itemCount: displayedUserOptions.length,
+    onLoadMore: onLoadMoreUsers
+  });
+
   return (
     <>
       <div className="viewer-user-modal-controls">
@@ -348,7 +354,7 @@ function UserFilterPanel({
         </p>
       ) : (
         <>
-          <div className="viewer-tag-option-list">
+          <div ref={optionList.containerRef} className="viewer-tag-option-list">
             {displayedUserOptions.map((user) => (
               <button
                 key={user.screen_name}
@@ -368,8 +374,15 @@ function UserFilterPanel({
                 </span>
               </button>
             ))}
+            {hasMoreUserOptions && (
+              <div
+                ref={optionList.sentinelRef}
+                className="viewer-option-list-sentinel"
+                aria-hidden="true"
+              />
+            )}
           </div>
-          {hasMoreUserOptions && (
+          {false && hasMoreUserOptions && (
             <div className="viewer-incremental-list-footer">
               <p className="viewer-incremental-list-meta">
                 {language === "ja"
@@ -424,6 +437,12 @@ function TagFilterPanel({
   tagSortOption: TagSortOption;
   visibleTagOptionCount: number;
 }) {
+  const optionList = useInfiniteOptionList({
+    hasMore: hasMoreTagOptions,
+    itemCount: displayedTagOptions.length,
+    onLoadMore: onLoadMoreTags
+  });
+
   return (
     <>
       <div className="viewer-tag-modal-controls">
@@ -507,7 +526,7 @@ function TagFilterPanel({
         </p>
       ) : (
         <>
-          <div className="viewer-tag-option-list">
+          <div ref={optionList.containerRef} className="viewer-tag-option-list">
             {displayedTagOptions.map(({ tag, postCount }) => {
               const isIncluded = tag.normalized_name === activeTagFilter;
               const isExcluded = tag.normalized_name === activeExcludeTagFilter;
@@ -551,8 +570,15 @@ function TagFilterPanel({
                 </div>
               );
             })}
+            {hasMoreTagOptions && (
+              <div
+                ref={optionList.sentinelRef}
+                className="viewer-option-list-sentinel"
+                aria-hidden="true"
+              />
+            )}
           </div>
-          {hasMoreTagOptions && (
+          {false && hasMoreTagOptions && (
             <div className="viewer-incremental-list-footer">
               <p className="viewer-incremental-list-meta">
                 {language === "ja"
@@ -568,6 +594,67 @@ function TagFilterPanel({
       )}
     </>
   );
+}
+
+function useInfiniteOptionList({
+  hasMore,
+  itemCount,
+  onLoadMore
+}: {
+  hasMore: boolean;
+  itemCount: number;
+  onLoadMore: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const onLoadMoreRef = useRef(onLoadMore);
+  const loadRequestedRef = useRef(false);
+
+  useEffect(() => {
+    onLoadMoreRef.current = onLoadMore;
+  }, [onLoadMore]);
+
+  useEffect(() => {
+    loadRequestedRef.current = false;
+  }, [itemCount]);
+
+  useEffect(() => {
+    if (!hasMore) {
+      return;
+    }
+
+    const container = containerRef.current;
+    const sentinel = sentinelRef.current;
+    if (container === null || sentinel === null) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (loadRequestedRef.current || entries.every((entry) => !entry.isIntersecting)) {
+          return;
+        }
+
+        loadRequestedRef.current = true;
+        onLoadMoreRef.current();
+      },
+      {
+        root: container,
+        rootMargin: "120px 0px"
+      }
+    );
+
+    observer.observe(sentinel);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasMore, itemCount]);
+
+  return {
+    containerRef,
+    sentinelRef
+  };
 }
 
 function DateFilterPanel({
