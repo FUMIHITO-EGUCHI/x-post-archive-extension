@@ -16,16 +16,16 @@ export function annotateQuotedPostContainers(): void {
   const articles = document.querySelectorAll<HTMLElement>('article[data-testid="tweet"]');
 
   for (const article of articles) {
-    const container = article.querySelector<HTMLElement>(QUOTED_CONTAINER_SELECTOR);
+    for (const container of article.querySelectorAll<HTMLElement>(QUOTED_CONTAINER_SELECTOR)) {
+      if (container.hasAttribute(ANNOTATION_ATTR)) {
+        continue;
+      }
 
-    if (container === null || container.hasAttribute(ANNOTATION_ATTR)) {
-      continue;
-    }
+      const permalink = extractPermalinkFromFiber(container);
 
-    const permalink = extractPermalinkFromFiber(container);
-
-    if (permalink !== null) {
-      container.setAttribute(ANNOTATION_ATTR, permalink);
+      if (permalink !== null) {
+        container.setAttribute(ANNOTATION_ATTR, permalink);
+      }
     }
   }
 }
@@ -90,6 +90,16 @@ function extractPermalinkFromFiber(element: HTMLElement): string | null {
 
         if (typeof permalink === "string") {
           return permalink;
+        }
+      }
+
+      const link: unknown = Reflect.get(memoizedProps as object, "link");
+
+      if (link !== null && typeof link === "object") {
+        const pathname: unknown = Reflect.get(link as object, "pathname");
+
+        if (typeof pathname === "string" && /\/status\/\d+/.test(pathname)) {
+          return pathname;
         }
       }
     }
