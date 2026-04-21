@@ -470,7 +470,21 @@ function findPermalink(article: ParentNode, exclude: Element | null = null): {
 }
 
 function findQuotedPostContainer(article: HTMLElement): HTMLElement | null {
-  return article.querySelector<HTMLElement>(QUOTED_POST_CONTAINER_SELECTOR);
+  const containers = article.querySelectorAll<HTMLElement>(QUOTED_POST_CONTAINER_SELECTOR);
+
+  for (const container of containers) {
+    if (container.hasAttribute("data-xpa-quoted-permalink")) {
+      return container;
+    }
+  }
+
+  for (const container of containers) {
+    if (container.querySelector('[data-testid="tweetText"]') !== null) {
+      return container;
+    }
+  }
+
+  return containers[0] ?? null;
 }
 
 function extractQuotedPostFromContainer(container: HTMLElement): SavePostInput | null {
