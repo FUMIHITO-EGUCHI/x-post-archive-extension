@@ -12,6 +12,7 @@ export type StickyToolbarProps = {
   language: ArchiveLanguage;
   countLabel: string;
   settingsButtonRef: RefObject<HTMLButtonElement | null>;
+  searchInputRef: RefObject<HTMLInputElement | null>;
   onOpenSettings: () => void;
   onOpenFilter: (tab: FilterModalTab) => void;
   filterChips: StickyToolbarFilterChip[];
@@ -35,6 +36,7 @@ export function StickyToolbar({
   language,
   countLabel,
   settingsButtonRef,
+  searchInputRef,
   onOpenSettings,
   onOpenFilter,
   filterChips,
@@ -62,6 +64,12 @@ export function StickyToolbar({
   }, [keywordFilter]);
 
   useEffect(() => {
+    if (isSearchMode && searchInputRef.current) {
+      searchInputRef.current.focus({ preventScroll: true });
+    }
+  }, [isSearchMode, searchInputRef]);
+
+  useEffect(() => {
     return () => {
       if (debounceTimeoutRef.current !== null) {
         window.clearTimeout(debounceTimeoutRef.current);
@@ -69,66 +77,62 @@ export function StickyToolbar({
     };
   }, []);
 
-  if (isSearchMode) {
-    return (
-      <section
-        className="viewer-sticky-toolbar viewer-sticky-toolbar-search"
-        aria-label={language === "ja" ? "キーワード検索" : "Keyword search"}
-      >
-        <div className="viewer-search-container">
-          <SearchIcon className="viewer-search-icon" />
-          <input
-            className="viewer-search-input"
-            type="search"
-            autoFocus
-            value={searchValue}
-            placeholder={language === "ja" ? "キーワードで検索..." : "Search by keyword..."}
-            onChange={(event) => {
-              const nextValue = event.currentTarget.value;
-              setSearchValue(nextValue);
+  return (
+    <section
+      className={`viewer-sticky-toolbar${isSearchMode ? " viewer-sticky-toolbar-search" : ""}`}
+      aria-label={language === "ja" ? "アーカイブ操作" : "Archive controls"}
+    >
+      {isSearchMode && (
+        <div className="viewer-search-row">
+          <div className="viewer-search-container">
+            <button
+              className="viewer-icon-button"
+              type="button"
+              aria-label={language === "ja" ? "検索を閉じる" : "Close search"}
+              onClick={onCloseSearch}
+            >
+              <SearchCloseIcon />
+            </button>
+            <input
+              ref={searchInputRef}
+              className="viewer-search-input"
+              type="search"
+              value={searchValue}
+              placeholder={language === "ja" ? "キーワードで検索..." : "Search by keyword..."}
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value;
+                setSearchValue(nextValue);
 
-              if (debounceTimeoutRef.current !== null) {
-                window.clearTimeout(debounceTimeoutRef.current);
-              }
+                if (debounceTimeoutRef.current !== null) {
+                  window.clearTimeout(debounceTimeoutRef.current);
+                }
 
-              debounceTimeoutRef.current = window.setTimeout(() => {
-                onKeywordChange(nextValue.trim().length > 0 ? nextValue : null);
-              }, 300);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                onCloseSearch();
-              }
-            }}
-          />
+                debounceTimeoutRef.current = window.setTimeout(() => {
+                  onKeywordChange(nextValue.trim().length > 0 ? nextValue : null);
+                }, 300);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  onCloseSearch();
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="viewer-toolbar-left">
+        {!isSearchMode && (
           <button
             className="viewer-icon-button"
             type="button"
-            aria-label={language === "ja" ? "検索を閉じる" : "Close search"}
-            onClick={onCloseSearch}
+            aria-label={language === "ja" ? "キーワード検索" : "Keyword search"}
+            aria-pressed={keywordFilter !== null && keywordFilter.trim().length > 0}
+            onClick={onOpenSearch}
           >
-            <CloseIcon />
+            <SearchOpenIcon />
           </button>
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section
-      className="viewer-sticky-toolbar"
-      aria-label={language === "ja" ? "アーカイブ操作" : "Archive controls"}
-    >
-      <div className="viewer-toolbar-left">
-        <button
-          className="viewer-icon-button"
-          type="button"
-          aria-label={language === "ja" ? "キーワード検索" : "Keyword search"}
-          aria-pressed={keywordFilter !== null && keywordFilter.trim().length > 0}
-          onClick={onOpenSearch}
-        >
-          <SearchIcon />
-        </button>
+        )}
         <button
           className={
             activeFilterCount > 0
@@ -266,24 +270,26 @@ function GearIcon() {
   );
 }
 
-function SearchIcon({ className }: { className?: string }) {
+function SearchOpenIcon() {
   return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
       <path
         d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.44 4.45 1.06-1.06-4.45-4.44A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z"
         fill="currentColor"
       />
+      <path d="M10.5 22 L8 18.5 L13 18.5 Z" fill="currentColor" />
     </svg>
   );
 }
 
-function CloseIcon() {
+function SearchCloseIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path
-        d="m6.53 5.47 5.47 5.47 5.47-5.47 1.06 1.06L13.06 12l5.47 5.47-1.06 1.06L12 13.06l-5.47 5.47-1.06-1.06L10.94 12 5.47 6.53l1.06-1.06Z"
+        d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.44 4.45 1.06-1.06-4.45-4.44A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z"
         fill="currentColor"
       />
+      <path d="M10.5 1 L8 3.5 L13 3.5 Z" fill="currentColor" />
     </svg>
   );
 }
