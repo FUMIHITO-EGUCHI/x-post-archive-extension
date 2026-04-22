@@ -17,6 +17,19 @@ X（旧Twitter）投稿を1件ずつ保存・検索する Chrome 拡張（Manife
 
 テストと lint は未設定。完了報告前は `npm run typecheck` と `npm run build`、必要な手動確認を行う。
 
+## タスク管理（AI handoff）
+
+タスクは **GitHub Issues + Projects v2** で管理する。旧 `ai-handoff/tasks/` のファイル運用は廃止した。
+
+- 作業開始時: Issue を選んで `status: in-progress` ラベルを付ける
+- 作業中: Issue コメントに逐次追記。本文は objective / scope / checklist のみ編集
+- 完了申請: `status: ready-for-close` ラベル + `## Result` / `## Verification` / `## Changed files` を含むコメント
+- **close は人間のみ**。AI は close しない
+- commit message は `#<issue>` を必須（雑務は `[skip-issue]`）。`commit-msg` hook が強制
+- AI 間 handoff は `docs/handoff/README.md` の雛形に従う
+
+詳細は `docs/handoff/README.md` を参照。
+
 ## ディレクトリ構造
 | パス | 役割 |
 |---|---|
@@ -25,7 +38,8 @@ X（旧Twitter）投稿を1件ずつ保存・検索する Chrome 拡張（Manife
 | `src/features/viewer/` | 閲覧 UI |
 | `src/db/` | Dexie スキーマ、repository |
 | `src/types/` | ドメイン型、メッセージ型 |
-| `ai-handoff/` | Claude と Codex の task packet / findings |
+| `docs/handoff/` | AI handoff（Issue ベース）の運用ガイド |
+| `ai-handoff/archive/` | 旧 handoff 運用の履歴アーカイブ（read-only） |
 
 ## 行動原則
 - 3ステップ以上のタスクは、実装前に目的・手順・未確定事項を整理する
