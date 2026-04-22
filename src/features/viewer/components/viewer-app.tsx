@@ -65,6 +65,7 @@ export function ViewerApp() {
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreInFlightRef = useRef(false);
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const backToArchiveButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousScreenRef = useRef<ViewerScreen>("archive");
   const {
@@ -256,12 +257,16 @@ export function ViewerApp() {
       });
     } else if (previousScreenRef.current === "settings") {
       window.requestAnimationFrame(() => {
-        settingsButtonRef.current?.focus();
+        if (isSearchMode) {
+          searchInputRef.current?.focus();
+        } else {
+          settingsButtonRef.current?.focus();
+        }
       });
     }
 
     previousScreenRef.current = screen;
-  }, [screen]);
+  }, [isSearchMode, screen]);
 
   const selectedTagFilter = useMemo(
     () => availableTags.find(({ tag }) => tag.normalized_name === activeTagFilter) ?? null,
@@ -671,6 +676,7 @@ export function ViewerApp() {
             onSortFieldChange={(field) => {
               void handleSortFieldChange(field);
             }}
+            searchInputRef={searchInputRef}
             settingsButtonRef={settingsButtonRef}
             sortDirection={sortDirection}
             sortField={sortField}

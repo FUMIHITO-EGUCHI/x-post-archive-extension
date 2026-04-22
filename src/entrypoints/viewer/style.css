@@ -909,9 +909,13 @@ body {
 }
 
 .viewer-sticky-toolbar-search {
+  row-gap: 8px;
+}
+
+.viewer-search-row {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  gap: 10px;
 }
 
 .viewer-search-container {
@@ -964,6 +968,7 @@ body {
   flex-wrap: nowrap;
   justify-content: flex-end;
 }
+
 
 .viewer-toolbar-center {
   display: flex;

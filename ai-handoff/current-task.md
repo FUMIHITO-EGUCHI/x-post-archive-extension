@@ -6,19 +6,18 @@
 
 ## Scope
 
-- No active task. The previous task, `2026-04-20-filter-infinite-scroll`, is complete.
+- No active task. `2026-04-21-keyword-search` is implemented and verified, and the dashboard is back to an idle state.
 
 ## Coordination
 
-- task_file: `ai-handoff/tasks/2026-04-21-keyword-search.md`
 - blocked_by: `none`
 - related_findings: `none`
 - needs_from_claude: `none`
-- handoff_to_codex: `ready`
+- handoff_to_codex: `none`
 
 ## Next Action
 
-- next_action: `Codex implements keyword search per task packet.`
+- next_action: `No active implementation task. Stage/commit the keyword-search work or start the next packet when assigned.`
 
 ## Acceptance Criteria
 
@@ -44,6 +43,7 @@
 
 ## Recent Updates
 
+- `2026-04-22 Codex`: reconciled the keyword-search handoff state. `2026-04-21-keyword-search` and its verification packet are complete; `current-task.md` now correctly shows no active task.
 - `2026-04-20 Codex`: completed `2026-04-20-infinite-scroll-and-modal-scrollbar`; archive list now uses IntersectionObserver infinite scroll, the load-more button is gone, loading state remains visible, and filter modal scrollbars are hidden. `npm run typecheck` / `npm run build` / Shared Profile manual verification passed.
 - `2026-04-20 Codex`: completed `2026-04-20-filter-infinite-scroll`; user/tag filter modal option lists now auto-load on scroll end, and modal load-more footer buttons are no longer rendered. `npm run typecheck` / `npm run build` / Shared Profile manual verification passed.
 - `2026-04-20 Codex`: fixed the tag filter modal reset reported after `SPY_FAMILY`; Shared Profile CDP verification now confirms tag options continue from 40 to 80, 120, and 160 without resetting.
@@ -56,6 +56,7 @@
 
 ## Recently Completed
 
+- `2026-04-21-keyword-search`: Viewer header keyword search implemented and verified; typecheck/build/manual verification passed.
 - `2026-04-20-filter-infinite-scroll`: Filter modal user/tag option list infinite scroll implemented; typecheck/build/manual verification passed.
 - `2026-04-20-infinite-scroll-and-modal-scrollbar`: Archive infinite scroll and modal scrollbar hiding implemented; typecheck/build/manual verification passed.
 - `2026-04-20-tag-exclude-filter`: Tag exclude filter implemented; typecheck/build passed.
