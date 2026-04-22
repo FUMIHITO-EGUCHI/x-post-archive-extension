@@ -1,7 +1,7 @@
 # Task Packet: Keyword Search
 
 ## Meta
-- status: active
+- status: done
 - owner: Codex
 - branch: feature/keyword-search
 - priority: medium
@@ -293,3 +293,5 @@ npm run build
 ## Work Log
 
 - `2026-04-21 Claude`: Task packet created. Design reviewed. Ready for Codex handoff.
+- `2026-04-21 Codex`: Implemented all 8 steps. typecheck/build pass.
+- `2026-04-21 Claude`: UI redesigned to Chrome-style inline expansion. 🔍は一括タグ付けの右にアイコンのみ配置。検索モードは toolbar 内を flex で展開し⚙は右端に常時表示。pill-shape trigger と関連 CSS を削除。typecheck/build pass。
