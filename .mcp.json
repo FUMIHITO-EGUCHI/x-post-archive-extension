@@ -10,6 +10,10 @@
       "env": {
         "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS": "1"
       }
+    },
+    "github": {
+      "type": "stdio",
+      "command": "scripts\\github-mcp-stdio.cmd"
     }
   }
 }

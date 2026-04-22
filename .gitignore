@@ -12,6 +12,7 @@ scripts/results/
 .shared-cdp-profile/
 .cdp-test-profile*/
 .cdp-verified-profile/
+tools/github-mcp-server/
 .claude/*
 !.claude/rules/
 !.claude/rules/**
