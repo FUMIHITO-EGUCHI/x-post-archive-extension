@@ -40,7 +40,7 @@ Accepted
 - **AI interface**: [`github/github-mcp-server`](https://github.com/github/github-mcp-server)（MCP stdio）と `gh` CLI を併用
 - **ラベル体系**: `status:` / `owner:` / `priority:` / `type:` / `area:` の 5 軸。`status: done` は作らず **close 状態 = done** と扱う
 - **Issue テンプレ**: `.github/ISSUE_TEMPLATE/{task,investigation,bug}.yml`。blank issue は無効化
-- **Findings（長文調査ノート）**: Secret Gist で管理。Issue 本文または該当コメントからリンク
+- **Findings（長文調査ノート）**: `docs/findings/` に直置き（private repo 前提）。個人情報が混入する例外ケースのみ Secret Gist。Issue からリンク
 - **Commit 参照強制**: `commit-msg` hook が `#<issue>` または `[skip-issue]` の有無を検査（`scripts/check-commit-message.mjs`）
 - **AI 間 handoff**: 構造化コメント（`## Handoff` / From / To / Done so far / Blocker / Next step suggestion / Related）を投稿後、`owner:` ラベルを付け替え
 - **close は人間のみ**: AI は `status: ready-for-close` ラベル + 最終コメント（`## Result` / `## Verification` / `## Changed files`）で申請
@@ -77,7 +77,7 @@ Accepted
 
 - Pros: private repo と別領域で diff 混入なし
 - Cons: ボード機能なし。状態遷移・ラベル・テンプレが使えない。Gist は長文調査向けで、タスク管理には構造不足
-- **Partially adopted**: 長文 findings のみ Secret Gist で残す
+- **Rejected**: 当初は長文 findings を Secret Gist に切り出す案だったが、検索性喪失のコストが大きく、private repo 内の `docs/findings/` 直置きに改めた
 
 ### E. GitHub Issues のみ（Projects v2 なし）
 
@@ -101,7 +101,7 @@ Accepted
 - GitHub の障害時にタスク操作ができない（許容: private repo のため稀)
 - ラベル管理が増える。新規ラベル追加には手作業が必要
 - MCP 経由の操作はトークン消費が Markdown 編集より多い
-- findings を Gist に切り出したため、リポジトリ内検索で原文がヒットしない（Issue 本文からリンクで補完）
+- findings は `docs/findings/` 直置きとし、リポジトリ内検索で原文がヒットする。将来 OSS 化する際は sanitization pass（自分の username / profile path などの置換）を別途実施する想定。現時点では private repo 前提で運用コストを抑える
 
 ### Migration
 

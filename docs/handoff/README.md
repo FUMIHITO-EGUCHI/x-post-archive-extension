@@ -166,12 +166,29 @@ chore: fix typo in docs [skip-issue]
 
 ## 6. Findings / 長文調査ノート
 
-- 原則 **Secret Gist** で管理
-- タイトル: `YYYY-MM-DD <topic>.md`
-- Issue 本文の `## Notes` または該当コメントから Gist URL をリンク
-- リポジトリが private のため、Gist も **Secret** で作る
+- 原則 **`docs/findings/` に直置き**（private repo 前提）
+- ファイル名: `YYYY-MM-DD-<topic>.md`
+- 先頭に frontmatter を付ける:
+  ```yaml
+  ---
+  date: 2026-04-22
+  related-issue: 10
+  status: open | resolved | superseded
+  ---
+  ```
+- Issue 本文の `## Notes` または該当コメントから `docs/findings/...` をリンク
+- 原文が diff に出るが、調査完了時の 1 コミットに収まれば許容
+- findings 自体に close 概念はない。調査 Issue を close したら frontmatter の `status` を `resolved` にする
+
+### 例外: Secret Gist
+
+個人情報（他者の DM / username / 投稿 ID など）が混入する場合のみ Gist を使う。Issue からリンクし、ローカルには持たない。
 
 `ai-handoff/findings/` は archive として残っているが、新規の調査ノートはここに作らない。
+
+### 将来の OSS 化に備えて
+
+リポジトリを公開する際は `docs/findings/` 一式に対し sanitization pass を実施する（自分の X username / user ID / Chrome profile path などの置換）。現時点では private 前提のため不要。
 
 ---
 
