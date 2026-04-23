@@ -117,6 +117,24 @@ export function StickyToolbar({
                 }
               }}
             />
+            <button
+              className="viewer-secondary-button"
+              type="button"
+              disabled={searchValue.trim().length === 0 && keywordFilter === null}
+              onClick={() => {
+                setSearchValue("");
+
+                if (debounceTimeoutRef.current !== null) {
+                  window.clearTimeout(debounceTimeoutRef.current);
+                  debounceTimeoutRef.current = null;
+                }
+
+                onKeywordChange(null);
+                searchInputRef.current?.focus({ preventScroll: true });
+              }}
+            >
+              {language === "ja" ? "クリア" : "Clear"}
+            </button>
           </div>
         </div>
       )}
