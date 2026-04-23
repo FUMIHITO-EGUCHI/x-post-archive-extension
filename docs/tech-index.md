@@ -4,8 +4,8 @@
 詳細仕様を書き直す場ではなく、「どの話題ならどのファイルを先に読むか」を短く示すために使います。
 
 ## Usage Rules
-- まず `ai-handoff/current-task.md` と task packet があればそちらを優先する
-- task packet に `Files To Read First` がない、または広すぎる場合はこの文書から入る
+- まず現在担当している GitHub Issue（objective / scope / checklist / コメント）を優先する
+- Issue に `Files To Read First` 相当の指示がない、または広すぎる場合はこの文書から入る
 - ここに載っているファイルを毎回全部読む前提にしない。今のタスクに関係する行だけを開く
 - 長期的な仕様判断は `docs/requirements.md` や `docs/data-model.md` を参照する
 - 実装ルールと AI 協業ルールは `AGENTS.md` を正とする
@@ -13,8 +13,8 @@
 ## Core Rules And Workflow
 - 全体方針: `AGENTS.md`
 - Claude 専用運用: `CLAUDE.md`
-- handoff の使い方: `ai-handoff/README.md`
-- 現在の作業起点: `ai-handoff/current-task.md`
+- handoff の使い方: `docs/handoff/README.md`
+- 現在の作業起点: 担当 GitHub Issue（`gh issue list --assignee @me` もしくは `owner:` ラベル）
 
 ## Tooling And Build
 - パッケージと scripts: `package.json`
