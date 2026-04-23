@@ -39,6 +39,22 @@ blank issue は無効化している。
 
 ## 3. AI の作業フロー
 
+### 3.0 Issue 作成
+
+作成者は Claude / Codex / human いずれも可。
+
+1. New Issue からテンプレを選ぶ（実装=Task / 調査=Investigation / 不具合=Bug）
+2. 初期ラベルを付ける:
+   - `status: todo`（テンプレで自動付与）
+   - `owner:` 自分で着手するなら自分、他 AI に投げるなら相手
+   - `priority:` `high` / `medium` / `low`
+   - `type:` `feature` / `bug` / `investigation` / `refactor`
+   - `area:` `viewer` / `content` / `background` / `db` / `handoff` / `other`
+3. 自分で即着手するなら 3.1 に進み `status: todo` を外し `status: in-progress` に遷移
+4. 他 AI に投げるなら `status: todo` + `owner: <相手>` で止める。相手が着手時にラベル操作
+
+タスク分解が必要な大きめ Issue は、子 Issue を複数作り親 Issue 本文 checklist に `- [ ] #<子>` で並べる。
+
 ### 3.1 着手
 
 1. ボードか `gh issue list` で自分の担当 Issue を選ぶ

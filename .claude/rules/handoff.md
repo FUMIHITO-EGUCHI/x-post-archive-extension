@@ -32,6 +32,7 @@ paths:
 
 ## 作業フロー
 
+0. **作成**: Claude / Codex / human いずれも作成可。テンプレ選択（task / investigation / bug）→ 初期ラベル `status: todo` + `owner:` + `priority:` + `type:` + `area:`。他 AI に投げる場合は `owner: <相手>` で止める。自分で着手するなら 1 へ。
 1. **着手**: `status: todo` を外し `status: in-progress` を付ける。必要なら `owner:` を自分に。
 2. **進捗**: 意味あるステップごとに Issue コメントを追記（`YYYY-MM-DD <自分>:` で始める）
 3. **ブロック時**: `status: in-progress` を外し `status: blocked` を付け、理由をコメント
