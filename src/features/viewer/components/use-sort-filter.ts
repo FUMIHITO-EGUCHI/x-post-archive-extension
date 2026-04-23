@@ -269,9 +269,6 @@ export function useSortFilter({
 
   async function handleKeywordChange(keyword: string | null) {
     setActiveKeywordFilter(keyword);
-    window.scrollTo({
-      top: 0
-    });
     await loadArchivePage({
       offset: 0,
       limit: DEFAULT_PAGE_SIZE,
