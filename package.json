@@ -12,9 +12,6 @@
     "guard:content-scripts": "npm run build && npm run check:content-script-bundle",
     "precommit:check": "npm run lint && npm run guard:content-scripts",
     "typecheck": "tsc --noEmit",
-    "handoff:check": "node scripts/check-handoff-consistency.mjs",
-    "handoff:sync": "node scripts/sync-handoff.mjs",
-    "handoff:log-changes": "node scripts/log-changes.mjs",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

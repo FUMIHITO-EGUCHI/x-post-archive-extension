@@ -158,8 +158,6 @@
 6. Create the release note in `docs/release-notes/`.
    Start the release note with a short top section that tells the user what improved for them in this release before the technical details.
 7. After creating the release note, ask the user to review and confirm it before continuing.
-8. If the release includes the active task tracked in `ai-handoff/current-task.md`, only mark it complete after its acceptance criteria are satisfied.
-9. When completing the active task in `ai-handoff/current-task.md`, update the dashboard in a fixed way: change `status` to `completed`, clear or replace `next_action` as needed, and move the task into the completed area if that dashboard format is being used.
-10. Do not update `ai-handoff/current-task.md` during release work when the active task is unrelated to the released changes.
-11. Commit only the intended release changes.
-12. Only when the user explicitly instructs it, create the version tag and push both the branch and the tag.
+8. If the release closes any GitHub Issues, reference them in the commit message via `#<issue>` so the commit-msg hook passes. Actual Issue close is performed by the human.
+9. Commit only the intended release changes.
+10. Only when the user explicitly instructs it, create the version tag and push both the branch and the tag.
