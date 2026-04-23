@@ -7,6 +7,7 @@
 - Human view: GitHub Projects v2 **X Archive Handoff**
 - AI interface: [`github/github-mcp-server`](https://github.com/github/github-mcp-server)（MCP）または `gh` CLI
 - 詳細仕様: `SPEC.md`
+- 移行判断の背景: `docs/decisions/0001-task-management-on-github-issues.md`
 
 ---
 
