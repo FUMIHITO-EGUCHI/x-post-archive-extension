@@ -42,20 +42,22 @@
 
 ## 2. Commands / Interfaces
 
-### AI → GitHub Issues（MCP 経由）
+### AI → GitHub Issues（`gh` CLI）
 
-公式 [`github/github-mcp-server`](https://github.com/github/github-mcp-server) を両エージェントの MCP サーバーとして設定する。Codex が MCP 未対応の場合は `gh` CLI で同等操作を行う。
+AI の GitHub 操作は `gh` CLI に一本化する（ADR-0002）。トークン消費と設定管理コストを抑えるため MCP サーバーは使わない。
 
 AI が使う代表的オペレーション:
 
-| 操作 | MCP tool（概略） | gh CLI 同等 |
-|---|---|---|
-| タスク作成 | `create_issue` | `gh issue create --title ... --body ... --label ...` |
-| ステータス変更 | `update_issue` + label 付け替え | `gh issue edit <n> --add-label ... --remove-label ...` |
-| Work Log 追記 | `add_issue_comment` | `gh issue comment <n> --body ...` |
-| 担当変更 | `update_issue` assignee / label | `gh issue edit <n> --add-assignee ... ` |
-| 完了（AI による完了申請） | `add_issue_comment`（検証ログ） + label `status: ready-for-close` | 同上 |
-| close（人間のみ） | — | `gh issue close <n>` |
+| 操作 | gh CLI |
+|---|---|
+| タスク作成 | `gh issue create --title ... --body ... --label ...` |
+| ステータス変更 | `gh issue edit <n> --add-label ... --remove-label ...` |
+| Work Log 追記 | `gh issue comment <n> --body ...` |
+| 担当変更 | `gh issue edit <n> --add-label 'owner: <name>'` |
+| 完了（AI による完了申請） | `gh issue edit <n> --add-label 'status: ready-for-close'` + `gh issue comment ...` |
+| close（人間のみ） | `gh issue close <n>` |
+| 検索 | `gh issue list --search ... --json number,title,labels` |
+| Projects v2 の細部 | `gh api graphql -f query=...` |
 
 ### 人間向けビュー
 

@@ -5,7 +5,7 @@
 
 - Backend: GitHub Issues（private repo）
 - Human view: GitHub Projects v2 **X Archive Handoff**
-- AI interface: [`github/github-mcp-server`](https://github.com/github/github-mcp-server)（MCP）または `gh` CLI
+- AI interface: `gh` CLI（ADR-0002 により MCP から一本化）
 - 詳細仕様: `SPEC.md`
 - 移行判断の背景: `docs/decisions/0001-task-management-on-github-issues.md`
 
