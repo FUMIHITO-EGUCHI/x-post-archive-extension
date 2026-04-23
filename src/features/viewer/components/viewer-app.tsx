@@ -662,7 +662,6 @@ export function ViewerApp() {
             }}
             onCloseSearch={() => {
               setIsSearchMode(false);
-              void handleKeywordChange(null);
             }}
             onKeywordChange={(keyword) => {
               void handleKeywordChange(keyword);
