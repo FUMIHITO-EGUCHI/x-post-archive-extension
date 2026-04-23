@@ -28,7 +28,7 @@ X（旧Twitter）投稿を1件ずつ保存・検索する Chrome 拡張（Manife
 - commit message は `#<issue>` を必須（雑務は `[skip-issue]`）。`commit-msg` hook が強制
 - AI 間 handoff は `docs/handoff/README.md` の雛形に従う
 
-詳細は `docs/handoff/README.md` を参照。
+詳細は `docs/handoff/README.md` を参照。移行判断の背景は `docs/decisions/0001-task-management-on-github-issues.md`。
 
 ## ディレクトリ構造
 | パス | 役割 |
