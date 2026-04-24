@@ -26,6 +26,7 @@ install_hook() {
 }
 
 install_hook "pre-commit"
+install_hook "post-checkout"
 install_hook "commit-msg"
 
 echo "Git hooks installed successfully."
