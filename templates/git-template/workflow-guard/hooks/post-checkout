@@ -11,7 +11,7 @@ if [ "$BRANCH_SWITCH" = "1" ]; then
   if [ "$BRANCH" = "master" ] || [ "$BRANCH" = "main" ]; then
     echo ""
     echo "WARNING: You are on $BRANCH."
-    echo "  To start issue work: sh scripts/start-issue.sh <type> <number> <topic>"
+    echo "  To start issue work: sh .git/workflow-guard/start-issue.sh <type> <number> <topic>"
     echo ""
   fi
 fi

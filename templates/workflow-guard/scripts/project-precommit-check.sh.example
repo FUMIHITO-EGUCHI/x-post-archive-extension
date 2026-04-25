@@ -1,8 +1,0 @@
-#!/bin/sh
-set -e
-
-# Copy this file to scripts/project-precommit-check.sh
-# and replace the commands below with the checks used in your repo.
-
-npm run lint
-npm test

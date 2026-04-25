@@ -38,7 +38,7 @@ if (branch === 'master' || branch === 'main') {
   }
 
   console.error(`[check-branch] direct commit to ${branch} is not allowed.`);
-  console.error('  Start work with: sh scripts/start-issue.sh <type> <number> <topic>');
+  console.error('  Start work with: sh .git/workflow-guard/start-issue.sh <type> <number> <topic>');
   console.error('  For maintenance commits, set ALLOW_MASTER_COMMIT=1');
   exit(1);
 }

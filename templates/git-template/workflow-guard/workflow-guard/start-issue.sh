@@ -8,7 +8,7 @@ NUMBER="$2"
 TOPIC="$3"
 
 if [ -z "$TYPE" ] || [ -z "$NUMBER" ] || [ -z "$TOPIC" ]; then
-  echo "Usage: sh scripts/start-issue.sh <type> <number> <topic>"
+  echo "Usage: sh .git/workflow-guard/start-issue.sh <type> <number> <topic>"
   echo "  type:   feature / fix / refactor / docs / chore"
   echo "  number: issue number (or 'skip' for [skip-issue] work)"
   echo "  topic:  short-topic (lowercase, numbers, hyphens only)"
