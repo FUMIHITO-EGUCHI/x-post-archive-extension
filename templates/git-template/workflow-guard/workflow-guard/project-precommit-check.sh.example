@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+# Create scripts/project-precommit-check.sh in the target repo
+# and replace the commands below with that repo's checks.
+
+npm run lint
+npm test
