@@ -4,7 +4,8 @@ param(
   [string]$ProfileDirName = ".shared-cdp-profile",
   [switch]$ResetProfile,
   [switch]$SkipExtension,
-  [switch]$TakeoverPort
+  [switch]$TakeoverPort,
+  [switch]$AllowNonSharedProfile
 )
 
 Set-StrictMode -Version Latest
@@ -153,6 +154,12 @@ function Write-ReadyInfo {
 
 $repoRoot = Split-Path -Path $PSScriptRoot -Parent
 $browserPath = Find-BrowserExecutable
+$defaultProfileDirName = ".shared-cdp-profile"
+
+if ($ProfileDirName -ne $defaultProfileDirName -and -not $AllowNonSharedProfile) {
+  throw "Refusing non-shared profile '$ProfileDirName'. Use -AllowNonSharedProfile only when an explicit exception is justified."
+}
+
 $profileDir = Join-Path $repoRoot $ProfileDirName
 $extensionDir = Join-Path $repoRoot ".output\chrome-mv3"
 
