@@ -1,0 +1,17 @@
+#!/bin/sh
+# post-checkout hook
+
+PREV_HEAD="$1"
+NEW_HEAD="$2"
+BRANCH_SWITCH="$3"
+
+if [ "$BRANCH_SWITCH" = "1" ]; then
+  BRANCH="$(git branch --show-current)"
+
+  if [ "$BRANCH" = "master" ] || [ "$BRANCH" = "main" ]; then
+    echo ""
+    echo "WARNING: You are on $BRANCH."
+    echo "  To start issue work: sh scripts/start-issue.sh <type> <number> <topic>"
+    echo ""
+  fi
+fi
