@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const scriptPath = path.join(here, 'check-branch.mjs');
+const scriptPath = path.join(here, 'workflow-guard', 'workflow-guard', 'check-branch.mjs');
 
 function runCheck(branch, env = {}) {
   return spawnSync(process.execPath, [scriptPath, branch], {

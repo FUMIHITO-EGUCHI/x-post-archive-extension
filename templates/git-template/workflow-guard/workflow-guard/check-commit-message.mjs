@@ -5,7 +5,7 @@ import { argv, exit } from 'node:process';
 
 const path = argv[2];
 if (!path) {
-  console.error('[commit-msg] usage: node scripts/check-commit-message.mjs <commit-msg-file>');
+  console.error('[commit-msg] usage: node .git/workflow-guard/check-commit-message.mjs <commit-msg-file>');
   exit(2);
 }
 if (!existsSync(path)) {
