@@ -27,6 +27,7 @@ import {
   resumeRefetchProcessing
 } from "../refetch/refetch-coordinator";
 import { clearLogRecords } from "../../db/repositories/logs-repository";
+import { setTweetDetailTemplate } from "../../db/repositories/thread-repository";
 import type {
   AddPostTagByNameResponse,
   BulkAssignTagApplyBatchResponse,
@@ -56,7 +57,8 @@ import type {
   RuntimeResponse,
   SavePostResponse,
   SavePostsBatchResponse,
-  SaveThreadResponse
+  SaveThreadResponse,
+  SetTweetDetailTemplateResponse
 } from "../../types/runtime";
 import { createLogger, createRequestId } from "../logging/logger";
 
@@ -548,6 +550,30 @@ export async function handleRuntimeMessage(
       writeDebugLog(message, requestId);
       return undefined;
     }
+
+    case "tweet-detail-template/set": {
+      const template = await setTweetDetailTemplate(message.template);
+
+      logger.info("tweet_detail_template.set.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          method: template.method,
+          capturedAt: template.captured_at,
+          hasAuthorization: Object.prototype.hasOwnProperty.call(
+            template.headers,
+            "authorization"
+          )
+        }
+      });
+
+      const response: SetTweetDetailTemplateResponse = {
+        type: "tweet-detail-template/set-result",
+        ok: true,
+        capturedAt: template.captured_at
+      };
+      return response;
+    }
   }
 }
 
@@ -582,7 +608,8 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "refetch.complete" ||
     candidate.type === "archive/reset" ||
     candidate.type === "logs/clear" ||
-    candidate.type === "debug/log"
+    candidate.type === "debug/log" ||
+    candidate.type === "tweet-detail-template/set"
   );
 }
 
