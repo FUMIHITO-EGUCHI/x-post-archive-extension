@@ -3,7 +3,8 @@ import {
   requestHasPost,
   requestNotifyRefetchComplete,
   requestSavePost,
-  requestSaveThread
+  requestSaveThread,
+  requestSetTweetDetailTemplate
 } from "../runtime/client";
 import type {
   RefetchCheckMessage,
@@ -51,6 +52,10 @@ import {
   removeSaveThreadButton,
   setSaveThreadButtonState
 } from "./inject-save-thread-button";
+import {
+  TWEET_DETAIL_TEMPLATE_CAPTURED_EVENT,
+  type TweetDetailTemplateCapturedEventDetail
+} from "./tweet-detail-template-events";
 
 const SAVE_BUTTON_SELECTOR = "[data-xpa-save-button]";
 const AUTO_ARCHIVE_ERROR_DISPLAY_MS = 3000;
@@ -68,6 +73,7 @@ let pendingDomReadyListener: (() => void) | null = null;
 let isContentScriptActive = true;
 let autoArchiveActionListenerInstalled = false;
 let refetchMessageListenerInstalled = false;
+let tweetDetailTemplateListenerInstalled = false;
 const pendingAutoArchiveRetryTimers = new Map<string, number>();
 let latestThreadPosts: ReturnType<typeof extractThreadPosts> = [];
 
@@ -75,6 +81,7 @@ export function bootstrapXContentScript(ctx: ContentScriptContext): void {
   isContentScriptActive = true;
   installAutoArchiveActionListener();
   installRefetchMessageListener();
+  installTweetDetailTemplateListener();
   ctx.onInvalidated(() => {
     isContentScriptActive = false;
     initialized = false;
@@ -86,6 +93,7 @@ export function bootstrapXContentScript(ctx: ContentScriptContext): void {
     clearPendingAutoArchiveRetries();
     removeAutoArchiveActionListener();
     removeRefetchMessageListener();
+    removeTweetDetailTemplateListener();
     removeBookmarksImportControls();
     removeLikesImportControls();
     removeSaveThreadButton();
@@ -94,6 +102,78 @@ export function bootstrapXContentScript(ctx: ContentScriptContext): void {
   ensureGraphqlImageCandidateListener();
   ensureGraphqlEngagementListener();
   startWhenBodyReady(ctx);
+}
+
+function installTweetDetailTemplateListener(): void {
+  if (tweetDetailTemplateListenerInstalled) {
+    return;
+  }
+
+  document.addEventListener(
+    TWEET_DETAIL_TEMPLATE_CAPTURED_EVENT,
+    handleTweetDetailTemplateCaptured as EventListener
+  );
+  tweetDetailTemplateListenerInstalled = true;
+}
+
+function removeTweetDetailTemplateListener(): void {
+  if (!tweetDetailTemplateListenerInstalled) {
+    return;
+  }
+
+  document.removeEventListener(
+    TWEET_DETAIL_TEMPLATE_CAPTURED_EVENT,
+    handleTweetDetailTemplateCaptured as EventListener
+  );
+  tweetDetailTemplateListenerInstalled = false;
+}
+
+function handleTweetDetailTemplateCaptured(event: Event): void {
+  const detail = (event as CustomEvent<TweetDetailTemplateCapturedEventDetail>).detail;
+
+  if (!isTweetDetailTemplateCapturedEventDetail(detail)) {
+    return;
+  }
+
+  void requestSetTweetDetailTemplate(detail).catch((error) => {
+    if (isExtensionContextInvalidatedError(error)) {
+      return;
+    }
+
+    console.warn("Failed to save TweetDetail template.", error);
+  });
+}
+
+function isTweetDetailTemplateCapturedEventDetail(
+  value: unknown
+): value is TweetDetailTemplateCapturedEventDetail {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<TweetDetailTemplateCapturedEventDetail>;
+
+  return (
+    typeof candidate.url === "string" &&
+    (candidate.method === "GET" || candidate.method === "POST") &&
+    isStringRecord(candidate.headers) &&
+    isUnknownRecord(candidate.variables) &&
+    (candidate.features === null || isUnknownRecord(candidate.features)) &&
+    (candidate.fieldToggles === null || isUnknownRecord(candidate.fieldToggles)) &&
+    typeof candidate.captured_at === "number" &&
+    Number.isFinite(candidate.captured_at)
+  );
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    isUnknownRecord(value) &&
+    Object.values(value).every((recordValue) => typeof recordValue === "string")
+  );
+}
+
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function installAutoArchiveActionListener(): void {

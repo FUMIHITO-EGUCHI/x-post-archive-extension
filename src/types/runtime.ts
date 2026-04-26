@@ -10,6 +10,7 @@ import type {
   RefetchQueuePriority,
   RefetchStatusRecord
 } from "./refetch";
+import type { TweetDetailTemplateRecord } from "./thread";
 import type {
   ArchiveSummaryRecord,
   ArchiveTagRedirectSummaryRecord,
@@ -157,6 +158,11 @@ export type DebugLogMessage = {
   traceId?: string;
 };
 
+export type SetTweetDetailTemplateMessage = {
+  type: "tweet-detail-template/set";
+  template: Omit<TweetDetailTemplateRecord, "id">;
+};
+
 export type RuntimeMessage =
   | SavePostMessage
   | SavePostsBatchMessage
@@ -182,7 +188,8 @@ export type RuntimeMessage =
   | RefetchCompleteMessage
   | ResetArchiveMessage
   | ClearLogsMessage
-  | DebugLogMessage;
+  | DebugLogMessage
+  | SetTweetDetailTemplateMessage;
 
 export type SavePostResponse = {
   type: "posts/save-result";
@@ -347,6 +354,12 @@ export type RuntimeErrorResponse = {
   message: string;
 };
 
+export type SetTweetDetailTemplateResponse = {
+  type: "tweet-detail-template/set-result";
+  ok: true;
+  capturedAt: number;
+};
+
 export type RuntimeResponse =
   | SavePostResponse
   | SavePostsBatchResponse
@@ -372,4 +385,5 @@ export type RuntimeResponse =
   | RefetchCompleteResponse
   | ResetArchiveResponse
   | ClearLogsResponse
+  | SetTweetDetailTemplateResponse
   | RuntimeErrorResponse;

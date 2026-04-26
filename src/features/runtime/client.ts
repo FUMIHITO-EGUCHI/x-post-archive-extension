@@ -29,8 +29,10 @@ import type {
   RuntimeResponse,
   SavePostResponse,
   SavePostsBatchResponse,
-  SaveThreadResponse
+  SaveThreadResponse,
+  SetTweetDetailTemplateResponse
 } from "../../types/runtime";
+import type { TweetDetailTemplateRecord } from "../../types/thread";
 import type { RefetchQueuePriority } from "../../types/refetch";
 import type { ListPostsPageInput, PostFilterInput } from "../../types/viewer";
 import { ARCHIVE_DB_NAME } from "../../db/constants";
@@ -73,6 +75,21 @@ export async function requestSaveThread(
 
   if (response.type !== "posts/save-thread-result") {
     throw new Error("Unexpected runtime response for save thread request.");
+  }
+
+  return response;
+}
+
+export async function requestSetTweetDetailTemplate(
+  template: Omit<TweetDetailTemplateRecord, "id">
+): Promise<SetTweetDetailTemplateResponse> {
+  const response = await sendMessage({
+    type: "tweet-detail-template/set",
+    template
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "tweet-detail-template/set-result") {
+    throw new Error("Unexpected runtime response for TweetDetail template save request.");
   }
 
   return response;
