@@ -32,6 +32,12 @@ export type SavePostsBatchMessage = {
   traceId?: string;
 };
 
+export type SaveThreadMessage = {
+  type: "posts/save-thread";
+  posts: SavePostInput[];
+  traceId?: string;
+};
+
 export type HasPostMessage = {
   type: "posts/has";
   xPostId: string;
@@ -154,6 +160,7 @@ export type DebugLogMessage = {
 export type RuntimeMessage =
   | SavePostMessage
   | SavePostsBatchMessage
+  | SaveThreadMessage
   | HasPostMessage
   | ListPostsPageMessage
   | ListPostTagSummariesMessage
@@ -188,6 +195,14 @@ export type SavePostsBatchResponse = {
   saved: number;
   duplicates: number;
   failed: number;
+};
+
+export type SaveThreadResponse = {
+  type: "posts/save-thread-result";
+  saved: number;
+  skipped: number;
+  failed: number;
+  threadRootId: string | null;
 };
 
 export type HasPostResponse = {
@@ -335,6 +350,7 @@ export type RuntimeErrorResponse = {
 export type RuntimeResponse =
   | SavePostResponse
   | SavePostsBatchResponse
+  | SaveThreadResponse
   | HasPostResponse
   | ListPostsPageResponse
   | ListPostTagSummariesResponse

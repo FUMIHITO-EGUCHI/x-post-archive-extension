@@ -1,5 +1,10 @@
 import type { ContentScriptContext } from "#imports";
-import { requestHasPost, requestNotifyRefetchComplete, requestSavePost } from "../runtime/client";
+import {
+  requestHasPost,
+  requestNotifyRefetchComplete,
+  requestSavePost,
+  requestSaveThread
+} from "../runtime/client";
 import type {
   RefetchCheckMessage,
   RefetchCheckResponse
@@ -38,6 +43,14 @@ import {
   LIKE_BOOKMARK_ACTION_EVENT,
   type LikeBookmarkActionEventDetail
 } from "./intercept-like-bookmark-actions";
+import { detectThreadPage } from "./detect-thread-page";
+import { extractThreadPosts } from "./extract-thread-posts";
+import {
+  getSaveThreadButton,
+  injectSaveThreadButton,
+  removeSaveThreadButton,
+  setSaveThreadButtonState
+} from "./inject-save-thread-button";
 
 const SAVE_BUTTON_SELECTOR = "[data-xpa-save-button]";
 const AUTO_ARCHIVE_ERROR_DISPLAY_MS = 3000;
@@ -56,6 +69,7 @@ let isContentScriptActive = true;
 let autoArchiveActionListenerInstalled = false;
 let refetchMessageListenerInstalled = false;
 const pendingAutoArchiveRetryTimers = new Map<string, number>();
+let latestThreadPosts: ReturnType<typeof extractThreadPosts> = [];
 
 export function bootstrapXContentScript(ctx: ContentScriptContext): void {
   isContentScriptActive = true;
@@ -74,6 +88,7 @@ export function bootstrapXContentScript(ctx: ContentScriptContext): void {
     removeRefetchMessageListener();
     removeBookmarksImportControls();
     removeLikesImportControls();
+    removeSaveThreadButton();
   });
   ensureGraphqlVideoCandidateListener();
   ensureGraphqlImageCandidateListener();
@@ -179,6 +194,7 @@ function observeDomChanges(ctx: ContentScriptContext): void {
 
 function scanTweetArticles(): void {
   syncLikesImportControls();
+  syncSaveThreadButton();
   const articles = findTweetArticles();
 
   for (const article of articles) {
@@ -196,6 +212,53 @@ function scanTweetArticles(): void {
 
     processedArticlePostIds.set(article, xPostId);
     void attachSaveButton(article);
+  }
+}
+
+function syncSaveThreadButton(): void {
+  const pageContext = detectThreadPage();
+
+  if (pageContext === null || document.body === null) {
+    latestThreadPosts = [];
+    removeSaveThreadButton();
+    return;
+  }
+
+  latestThreadPosts = extractThreadPosts(document, pageContext);
+  const button =
+    getSaveThreadButton() ??
+    injectSaveThreadButton(async () => {
+      await saveVisibleThread();
+    });
+
+  if (latestThreadPosts.length <= 1) {
+    setSaveThreadButtonState(button, "disabled", latestThreadPosts);
+    return;
+  }
+
+  if (!button.disabled || button.textContent === "連投ではありません") {
+    setSaveThreadButtonState(button, "idle", latestThreadPosts);
+  }
+}
+
+async function saveVisibleThread(): Promise<void> {
+  const pageContext = detectThreadPage();
+
+  if (pageContext === null) {
+    throw new Error("Thread page context not found.");
+  }
+
+  const posts = extractThreadPosts(document, pageContext);
+
+  if (posts.length <= 1) {
+    throw new Error("Visible thread has fewer than two OP posts.");
+  }
+
+  latestThreadPosts = posts;
+  const response = await requestSaveThread(posts);
+
+  if (response.failed > 0) {
+    throw new Error("Thread save failed.");
   }
 }
 

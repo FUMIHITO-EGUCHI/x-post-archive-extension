@@ -14,7 +14,8 @@ import {
   renameTag,
   removePostTagByName,
   resumePendingMediaPersistence,
-  saveArchivePost
+  saveArchivePost,
+  saveThread
 } from "../archive/archive-service";
 import { resetExtensionState } from "../archive/archive-maintenance-service";
 import {
@@ -54,7 +55,8 @@ import type {
   RuntimeMessage,
   RuntimeResponse,
   SavePostResponse,
-  SavePostsBatchResponse
+  SavePostsBatchResponse,
+  SaveThreadResponse
 } from "../../types/runtime";
 import { createLogger, createRequestId } from "../logging/logger";
 
@@ -162,6 +164,35 @@ export async function handleRuntimeMessage(
         saved,
         duplicates,
         failed
+      };
+      return response;
+    }
+
+    case "posts/save-thread": {
+      const result = await saveThread(
+        message.posts,
+        message.traceId === undefined ? undefined : { traceId: message.traceId }
+      );
+
+      logger.info("thread.save.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          requestedCount: message.posts.length,
+          saved: result.saved,
+          skipped: result.skipped,
+          failed: result.failed,
+          threadRootId: result.threadRootId,
+          traceId: message.traceId ?? null
+        }
+      });
+
+      const response: SaveThreadResponse = {
+        type: "posts/save-thread-result",
+        saved: result.saved,
+        skipped: result.skipped,
+        failed: result.failed,
+        threadRootId: result.threadRootId
       };
       return response;
     }
@@ -529,6 +560,7 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
   return (
     candidate.type === "posts/save" ||
     candidate.type === "posts/save-batch" ||
+    candidate.type === "posts/save-thread" ||
     candidate.type === "posts/has" ||
     candidate.type === "posts/list-page" ||
     candidate.type === "posts/tags/list" ||
