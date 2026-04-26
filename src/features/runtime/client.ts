@@ -28,7 +28,8 @@ import type {
   RuntimeMessage,
   RuntimeResponse,
   SavePostResponse,
-  SavePostsBatchResponse
+  SavePostsBatchResponse,
+  SaveThreadResponse
 } from "../../types/runtime";
 import type { RefetchQueuePriority } from "../../types/refetch";
 import type { ListPostsPageInput, PostFilterInput } from "../../types/viewer";
@@ -53,6 +54,25 @@ export async function requestSavePost(
 
   if (response.type !== "posts/save-result") {
     throw new Error("Unexpected runtime response for save request.");
+  }
+
+  return response;
+}
+
+export async function requestSaveThread(
+  posts: SavePostInput[],
+  options: {
+    traceId?: string;
+  } = {}
+): Promise<SaveThreadResponse> {
+  const response = await sendMessage({
+    type: "posts/save-thread",
+    posts,
+    ...(options.traceId === undefined ? {} : { traceId: options.traceId })
+  }, SAVE_BATCH_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "posts/save-thread-result") {
+    throw new Error("Unexpected runtime response for save thread request.");
   }
 
   return response;

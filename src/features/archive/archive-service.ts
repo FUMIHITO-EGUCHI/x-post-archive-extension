@@ -244,6 +244,68 @@ export async function saveArchivePost(
   };
 }
 
+export async function saveThread(
+  posts: SavePostInput[],
+  options: {
+    traceId?: string;
+  } = {}
+): Promise<{
+  saved: number;
+  skipped: number;
+  failed: number;
+  threadRootId: string | null;
+}> {
+  if (posts.length === 0) {
+    return {
+      saved: 0,
+      skipped: 0,
+      failed: 0,
+      threadRootId: null
+    };
+  }
+
+  const threadRootId = posts.length > 1 ? posts[0]?.x_post_id ?? null : null;
+  let saved = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const [index, post] of posts.entries()) {
+    const normalizedPost: SavePostInput = {
+      ...post,
+      in_reply_to_post_id:
+        threadRootId === null ? null : index === 0 ? null : posts[index - 1]?.x_post_id ?? null,
+      thread_root_id: threadRootId
+    };
+
+    try {
+      const result = await saveArchivePost(normalizedPost, options);
+
+      if (result.status === "saved") {
+        saved += 1;
+      } else {
+        skipped += 1;
+      }
+    } catch (error) {
+      failed += 1;
+      logger.warn("thread.save.post_failed", {
+        context: {
+          xPostId: post.x_post_id,
+          threadRootId,
+          traceId: options.traceId ?? null,
+          error: formatError(error)
+        }
+      });
+    }
+  }
+
+  return {
+    saved,
+    skipped,
+    failed,
+    threadRootId
+  };
+}
+
 export async function listArchivePostsPage(
   input: ListPostsPageInput
 ): Promise<{
