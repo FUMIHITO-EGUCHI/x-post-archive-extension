@@ -6,9 +6,15 @@ import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
 import type { ArchiveLanguage } from "../../settings/archive-language";
 import { useDialogA11y } from "./use-dialog-a11y";
 
+export type MediaLightboxThreadContext = {
+  postIndexByMediaId: Record<string, number>;
+  totalPosts: number;
+};
+
 export type ActiveMedia = {
   items: MediaRecord[];
   currentIndex: number;
+  threadContext?: MediaLightboxThreadContext;
 };
 
 export type ActiveVideo = {
@@ -176,6 +182,14 @@ export function ImageLightboxDialog({
   onMove: (delta: number) => void;
 }) {
   const currentMedia = activeMedia.items[activeMedia.currentIndex] ?? null;
+  const currentOrdinal = activeMedia.currentIndex + 1;
+  const mediaCount = activeMedia.items.length;
+  const threadContext = activeMedia.threadContext;
+  const threadPostIndex =
+    currentMedia === null
+      ? null
+      : threadContext?.postIndexByMediaId[currentMedia.media_id] ?? null;
+  const shouldShowThreadOrdinal = threadPostIndex !== null && threadContext !== undefined;
 
   return (
     <div
@@ -224,6 +238,19 @@ export function ImageLightboxDialog({
       >
         {language === "ja" ? "閉じる" : "Close"}
       </button>
+      <div
+        className="media-lightbox-counter"
+        aria-label={language === "ja" ? "表示中の画像位置" : "Current image position"}
+      >
+        <span>{`${currentOrdinal} / ${mediaCount}`}</span>
+        {shouldShowThreadOrdinal && (
+          <span>
+            {language === "ja"
+              ? `${threadPostIndex}コマ目 / 全${threadContext.totalPosts}コマ`
+              : `Post ${threadPostIndex} / ${threadContext.totalPosts}`}
+          </span>
+        )}
+      </div>
       <figure
         className="media-lightbox-panel"
         onClick={(event) => {

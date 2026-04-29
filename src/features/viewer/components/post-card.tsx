@@ -8,6 +8,7 @@ import type { ArchiveTagSummaryRecord } from "../../../types/viewer";
 import { createLogger } from "../../logging/logger";
 import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
 import type { ArchiveLanguage } from "../../settings/archive-language";
+import type { MediaLightboxThreadContext } from "./media-lightbox";
 import { TagPickerOverlay } from "./tag-picker-overlay";
 
 const logger = createLogger("viewer");
@@ -24,7 +25,11 @@ export type PostCardProps = {
   onDelete: (xPostId: string) => void;
   onRefetch: (xPostId: string) => void;
   onToggleTagFilter: (normalizedName: string) => void;
-  onOpenMedia: (items: MediaRecord[], currentIndex: number) => void;
+  onOpenMedia: (
+    items: MediaRecord[],
+    currentIndex: number,
+    threadContext?: MediaLightboxThreadContext
+  ) => void;
   onOpenVideo: (media: MediaRecord) => void;
   onToggleTagPicker: (xPostId: string) => void;
   onCloseTagPicker: () => void;

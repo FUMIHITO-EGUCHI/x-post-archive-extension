@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ArchivePostRecord } from "../../../types/archive";
+import type { ArchivePostRecord, MediaRecord } from "../../../types/archive";
 import type { ThreadedPostRecord } from "../../../types/viewer";
 import { requestThread } from "../../runtime/client";
 import { PostCard, type PostCardProps } from "./post-card";
@@ -12,6 +12,34 @@ export function ThreadCard(props: PostCardProps) {
   const [threadPosts, setThreadPosts] = useState<ArchivePostRecord[] | null>(null);
   const [threadStatus, setThreadStatus] = useState<"idle" | "loading" | "error">("idle");
 
+  async function loadThreadPosts(): Promise<ArchivePostRecord[] | null> {
+    if (!isThread) {
+      return [post];
+    }
+
+    if (threadPosts !== null) {
+      return threadPosts;
+    }
+
+    if (threadStatus === "loading") {
+      return null;
+    }
+
+    setThreadStatus("loading");
+
+    try {
+      const response = await requestThread(post.x_post_id);
+      const flattenedPosts =
+        response.thread === null ? [post] : flattenThreadPosts(response.thread);
+      setThreadPosts(flattenedPosts);
+      setThreadStatus("idle");
+      return flattenedPosts;
+    } catch {
+      setThreadStatus("error");
+      return null;
+    }
+  }
+
   async function toggleExpanded(): Promise<void> {
     if (!isThread) {
       return;
@@ -23,22 +51,29 @@ export function ThreadCard(props: PostCardProps) {
     }
 
     setIsExpanded(true);
+    await loadThreadPosts();
+  }
 
-    if (threadPosts !== null || threadStatus === "loading") {
+  async function openThreadSlideshow(): Promise<void> {
+    if (!isThread) {
       return;
     }
 
-    setThreadStatus("loading");
-
-    try {
-      const response = await requestThread(post.x_post_id);
-      const flattenedPosts =
-        response.thread === null ? [post] : flattenThreadPosts(response.thread);
-      setThreadPosts(flattenedPosts);
-      setThreadStatus("idle");
-    } catch {
-      setThreadStatus("error");
+    const loadedThreadPosts = await loadThreadPosts();
+    if (loadedThreadPosts === null) {
+      return;
     }
+
+    const slideshow = createThreadImageSlideshow(loadedThreadPosts);
+
+    if (slideshow.items.length === 0) {
+      return;
+    }
+
+    props.onOpenMedia(slideshow.items, 0, {
+      postIndexByMediaId: slideshow.postIndexByMediaId,
+      totalPosts: loadedThreadPosts.length
+    });
   }
 
   return (
@@ -62,6 +97,16 @@ export function ThreadCard(props: PostCardProps) {
               : language === "ja"
                 ? "スレッドを展開"
                 : "Expand thread"}
+          </button>
+          <button
+            className="viewer-secondary-button thread-card-toggle"
+            type="button"
+            onClick={() => {
+              void openThreadSlideshow();
+            }}
+            disabled={threadStatus === "loading"}
+          >
+            {language === "ja" ? "スライドで読む" : "Read as slides"}
           </button>
         </div>
       )}
@@ -98,4 +143,26 @@ export function ThreadCard(props: PostCardProps) {
 
 function flattenThreadPosts(root: ThreadedPostRecord): ArchivePostRecord[] {
   return [root, ...root.children.flatMap(flattenThreadPosts)];
+}
+
+function createThreadImageSlideshow(posts: ArchivePostRecord[]): {
+  items: MediaRecord[];
+  postIndexByMediaId: Record<string, number>;
+} {
+  const postIndexByMediaId: Record<string, number> = {};
+  const items = posts.flatMap((threadPost, postIndex) =>
+    threadPost.media.filter(isReadyImage).map((media) => {
+      postIndexByMediaId[media.media_id] = postIndex + 1;
+      return media;
+    })
+  );
+
+  return {
+    items,
+    postIndexByMediaId
+  };
+}
+
+function isReadyImage(media: MediaRecord): boolean {
+  return media.media_type === "image" && media.storage_status === "ready";
 }
