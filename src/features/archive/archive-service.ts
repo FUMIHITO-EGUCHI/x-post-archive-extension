@@ -13,6 +13,7 @@ import {
 } from "../../db/repositories/media-repository";
 import {
   addPost,
+  countThreadPosts,
   countPostsByUsername,
   countPosts,
   deletePostRecord,
@@ -23,6 +24,7 @@ import {
   listPostIdsByKeyword,
   listPostIdsByUsername,
   listPostUsernames,
+  listRootOrSinglePostIds,
   getPostsByIds,
   hasPost,
   listPostsSliceBySort,
@@ -320,7 +322,8 @@ export async function listArchivePostsPage(
   const normalizedOffset = normalizePageOffset(input.offset);
   const normalizedLimit = normalizePageLimit(input.limit);
   const matchingPostIds = await resolveFilteredPostIds(input);
-  const totalCount = matchingPostIds === null ? await countPosts() : matchingPostIds.size;
+  const visiblePostIds = await resolveViewerListPostIds(matchingPostIds);
+  const totalCount = visiblePostIds.size;
 
   if (totalCount === 0) {
     return {
@@ -336,25 +339,17 @@ export async function listArchivePostsPage(
     input.sortField === "random"
       ? {
           posts: await listRandomPostsPage(
-            matchingPostIds,
+            visiblePostIds,
             normalizedOffset,
             normalizedLimit,
             normalizeRandomSeed(input.randomSeed)
           ),
           nextCursor: null
         }
-      : matchingPostIds === null
-      ? await listPostsSliceBySort(
-          input.sortField,
-          input.sortDirection,
-          normalizedOffset,
-          normalizedLimit,
-          normalizePostPageCursor(input.cursor)
-        )
       : {
           posts: await listFilteredPostsPage(
             input,
-            matchingPostIds,
+            visiblePostIds,
             normalizedOffset,
             normalizedLimit
           ),
@@ -1263,6 +1258,7 @@ async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePost
   const postIds = posts.map((post) => post.x_post_id);
   const media = await listMediaByPostIds(postIds);
   const postTags = await listPostTagsByPostIds(postIds);
+  const threadCounts = await resolveThreadPostCounts(posts);
   const mediaMap = new Map<string, MediaRecord[]>();
   const tagMap = new Map<string, ArchiveTagRecord[]>();
 
@@ -1290,11 +1286,34 @@ async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePost
     current.push(normalizedItem.tag);
   }
 
-  return posts.map((post) => ({
-    ...post,
-    media: mediaMap.get(post.x_post_id) ?? [],
-    tags: sortArchiveTags(tagMap.get(post.x_post_id) ?? [])
-  }));
+  return posts.map((post) => {
+    const threadPostCount = threadCounts.get(post.x_post_id);
+
+    return {
+      ...post,
+      media: mediaMap.get(post.x_post_id) ?? [],
+      tags: sortArchiveTags(tagMap.get(post.x_post_id) ?? []),
+      ...(threadPostCount === undefined ? {} : { thread_post_count: threadPostCount })
+    };
+  });
+}
+
+async function resolveThreadPostCounts(posts: PostRecord[]): Promise<Map<string, number>> {
+  const rootIds = posts.flatMap((post) => {
+    const threadRootId = normalizeOptionalPostId(post.thread_root_id);
+    return threadRootId === post.x_post_id ? [post.x_post_id] : [];
+  });
+  const uniqueRootIds = [...new Set(rootIds)];
+
+  if (uniqueRootIds.length === 0) {
+    return new Map();
+  }
+
+  const entries = await Promise.all(
+    uniqueRootIds.map(async (rootId) => [rootId, await countThreadPosts(rootId)] as const)
+  );
+
+  return new Map(entries);
 }
 
 function buildThreadedPostTree(
@@ -1509,12 +1528,12 @@ export async function refetchArchivePost(
 }
 
 async function listRandomPostsPage(
-  matchingPostIds: Set<string> | null,
+  matchingPostIds: Set<string>,
   offset: number,
   limit: number,
   randomSeed: number
 ): Promise<PostRecord[]> {
-  const orderedIds = matchingPostIds === null ? await listPostIds() : [...matchingPostIds];
+  const orderedIds = [...matchingPostIds];
 
   if (orderedIds.length === 0) {
     return [];
@@ -1528,6 +1547,28 @@ async function listRandomPostsPage(
   }
 
   return getPostsByIds(selectSeededRandomIds(candidateIds, offset, limit, randomSeed));
+}
+
+async function resolveViewerListPostIds(matchingPostIds: Set<string> | null): Promise<Set<string>> {
+  const rootOrSinglePostIds = new Set(await listRootOrSinglePostIds());
+
+  if (matchingPostIds === null) {
+    return rootOrSinglePostIds;
+  }
+
+  const matchingPosts = await getPostsByIds([...matchingPostIds]);
+  const result = new Set<string>();
+
+  for (const post of matchingPosts) {
+    const threadRootId = normalizeOptionalPostId(post.thread_root_id);
+    const viewerPostId = threadRootId ?? post.x_post_id;
+
+    if (rootOrSinglePostIds.has(viewerPostId)) {
+      result.add(viewerPostId);
+    }
+  }
+
+  return result;
 }
 
 async function getQuotedPostIdSet(): Promise<Set<string>> {
@@ -1654,29 +1695,6 @@ function selectSeededRandomIds(
   }
 
   return ids.slice(offset, selectionEnd);
-}
-
-function normalizePostPageCursor(value: PostPageCursor | null | undefined): PostPageCursor | null {
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  if (
-    (value.sortField !== "saved_at" && value.sortField !== "posted_at") ||
-    (value.sortDirection !== "asc" && value.sortDirection !== "desc") ||
-    !Number.isFinite(value.value) ||
-    typeof value.xPostId !== "string" ||
-    value.xPostId.trim() === ""
-  ) {
-    return null;
-  }
-
-  return {
-    sortField: value.sortField,
-    sortDirection: value.sortDirection,
-    value: value.value,
-    xPostId: value.xPostId
-  };
 }
 
 function createSeededRandom(seed: number): () => number {
