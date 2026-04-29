@@ -28,8 +28,11 @@ import type {
   RuntimeMessage,
   RuntimeResponse,
   SavePostResponse,
-  SavePostsBatchResponse
+  SavePostsBatchResponse,
+  SaveThreadResponse,
+  SetTweetDetailTemplateResponse
 } from "../../types/runtime";
+import type { TweetDetailTemplateRecord } from "../../types/thread";
 import type { RefetchQueuePriority } from "../../types/refetch";
 import type { ListPostsPageInput, PostFilterInput } from "../../types/viewer";
 import { ARCHIVE_DB_NAME } from "../../db/constants";
@@ -53,6 +56,40 @@ export async function requestSavePost(
 
   if (response.type !== "posts/save-result") {
     throw new Error("Unexpected runtime response for save request.");
+  }
+
+  return response;
+}
+
+export async function requestSaveThread(
+  posts: SavePostInput[],
+  options: {
+    traceId?: string;
+  } = {}
+): Promise<SaveThreadResponse> {
+  const response = await sendMessage({
+    type: "posts/save-thread",
+    posts,
+    ...(options.traceId === undefined ? {} : { traceId: options.traceId })
+  }, SAVE_BATCH_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "posts/save-thread-result") {
+    throw new Error("Unexpected runtime response for save thread request.");
+  }
+
+  return response;
+}
+
+export async function requestSetTweetDetailTemplate(
+  template: Omit<TweetDetailTemplateRecord, "id">
+): Promise<SetTweetDetailTemplateResponse> {
+  const response = await sendMessage({
+    type: "tweet-detail-template/set",
+    template
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "tweet-detail-template/set-result") {
+    throw new Error("Unexpected runtime response for TweetDetail template save request.");
   }
 
   return response;

@@ -8,6 +8,7 @@ import type {
 } from "../types/archive";
 import type { LogRecord } from "../types/logger";
 import type { RefetchQueueRecord } from "../types/refetch";
+import type { ThreadExpandQueueRecord, TweetDetailTemplateRecord } from "../types/thread";
 import { resolveKnownBuiltInTagKey } from "../features/settings/archive-language";
 import { ARCHIVE_DB_NAME } from "./constants";
 
@@ -20,6 +21,8 @@ export class ArchiveDatabase extends Dexie {
   post_tags!: Table<PostTagRecord, string>;
   logs!: Table<LogRecord, string>;
   refetch_queue!: Table<RefetchQueueRecord, string>;
+  thread_expand_queue!: Table<ThreadExpandQueueRecord, number>;
+  tweet_detail_template!: Table<TweetDetailTemplateRecord, string>;
 
   constructor() {
     super(ARCHIVE_DB_NAME);
@@ -218,6 +221,35 @@ export class ArchiveDatabase extends Dexie {
         "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, system_key, assigned_at",
       logs: "&log_id, created_at, level, [level+created_at], scope, event, request_id",
       refetch_queue: "&x_post_id, status, priority, enqueued_at, completed_at"
+    });
+
+    this.version(16).stores({
+      posts:
+        "&x_post_id, saved_at, posted_at, reply_count, repost_count, like_count, display_name, quoted_post_id, in_reply_to_post_id, thread_root_id, x_username, [x_username+saved_at]",
+      media: "&media_id, x_post_id, [x_post_id+position], storage_status, saved_at, media_type",
+      tags: "&tag_id, &normalized_name, system_key, display_name, created_at",
+      tag_redirects:
+        "&tag_redirect_id, &source_normalized_name, source_display_name, target_tag_id, created_at",
+      post_tags:
+        "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, system_key, assigned_at",
+      logs: "&log_id, created_at, level, [level+created_at], scope, event, request_id",
+      refetch_queue: "&x_post_id, status, priority, enqueued_at, completed_at"
+    });
+
+    this.version(17).stores({
+      posts:
+        "&x_post_id, saved_at, posted_at, reply_count, repost_count, like_count, display_name, quoted_post_id, in_reply_to_post_id, thread_root_id, x_username, [x_username+saved_at]",
+      media: "&media_id, x_post_id, [x_post_id+position], storage_status, saved_at, media_type",
+      tags: "&tag_id, &normalized_name, system_key, display_name, created_at",
+      tag_redirects:
+        "&tag_redirect_id, &source_normalized_name, source_display_name, target_tag_id, created_at",
+      post_tags:
+        "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, system_key, assigned_at",
+      logs: "&log_id, created_at, level, [level+created_at], scope, event, request_id",
+      refetch_queue: "&x_post_id, status, priority, enqueued_at, completed_at",
+      thread_expand_queue:
+        "++id, &thread_root_id, candidate_post_id, status, next_attempt_at, created_at, updated_at",
+      tweet_detail_template: "&id, captured_at"
     });
   }
 }

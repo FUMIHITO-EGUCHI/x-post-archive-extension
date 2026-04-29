@@ -950,6 +950,14 @@ function parsePostRecord(value: unknown): PostRecord {
     reply_count: requireFiniteNumberValue(value.reply_count, "post.reply_count"),
     repost_count: requireFiniteNumberValue(value.repost_count, "post.repost_count"),
     like_count: requireFiniteNumberValue(value.like_count, "post.like_count"),
+    in_reply_to_post_id:
+      value.in_reply_to_post_id === undefined
+        ? null
+        : requireNullableString(value.in_reply_to_post_id, "post.in_reply_to_post_id"),
+    thread_root_id:
+      value.thread_root_id === undefined
+        ? null
+        : requireNullableString(value.thread_root_id, "post.thread_root_id"),
     quoted_post_id:
       value.quoted_post_id === undefined
         ? null

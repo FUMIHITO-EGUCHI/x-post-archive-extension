@@ -32,6 +32,8 @@ export type PostRecord = {
   reply_count: number;
   repost_count: number;
   like_count: number;
+  in_reply_to_post_id?: string | null;
+  thread_root_id?: string | null;
   quoted_post_id?: string | null;
   saved_at: number;
 };
@@ -121,6 +123,8 @@ export type SavePostInput = {
   reply_count: number;
   repost_count: number;
   like_count: number;
+  in_reply_to_post_id?: string | null;
+  thread_root_id?: string | null;
   quoted_post_id?: string | null;
   media: SaveImageInput[];
   video_candidates?: SaveVideoCandidateInput[];

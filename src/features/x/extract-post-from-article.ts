@@ -10,6 +10,7 @@ import { canonicalizeTwitterImageUrl } from "./twitter-image-url";
 const POST_PATH_PATTERN = /^\/([^/]+)\/status\/(\d+)/;
 const PHOTO_PATH_PATTERN = /\/photo\/(\d+)$/;
 const QUOTED_POST_CONTAINER_SELECTOR = 'div[role="link"][tabindex="0"]';
+const IN_REPLY_TO_POST_ID_ATTR = "data-xpa-in-reply-to-post-id";
 
 export type ExtractedPostBundle = {
   post: SavePostInput;
@@ -54,6 +55,7 @@ export function extractPostFromArticle(article: HTMLElement): ExtractedPostBundl
     reply_count: engagement.reply_count,
     repost_count: engagement.repost_count,
     like_count: engagement.like_count,
+    in_reply_to_post_id: extractInReplyToPostId(article, permalink.xPostId, quotedPostContainer),
     media
   };
 
@@ -519,6 +521,7 @@ function extractQuotedPostFromContainer(container: HTMLElement): SavePostInput |
     reply_count: engagement.reply_count,
     repost_count: engagement.repost_count,
     like_count: engagement.like_count,
+    in_reply_to_post_id: extractInReplyToPostId(container, permalink.xPostId),
     media
   };
 
@@ -555,6 +558,32 @@ function findPermalinkViaReactFiber(container: HTMLElement): {
 
   if (annotated !== null) {
     return parsePermalink(annotated);
+  }
+
+  return null;
+}
+
+function extractInReplyToPostId(
+  root: HTMLElement,
+  currentPostId: string,
+  exclude: Element | null = null
+): string | null {
+  const annotated = normalizePostId(root.getAttribute(IN_REPLY_TO_POST_ID_ATTR));
+
+  if (annotated !== null && annotated !== currentPostId) {
+    return annotated;
+  }
+
+  for (const anchor of root.querySelectorAll<HTMLAnchorElement>('a[href*="/status/"]')) {
+    if (isNodeInsideContainer(anchor, exclude)) {
+      continue;
+    }
+
+    const parsed = parsePermalink(anchor.href);
+
+    if (parsed !== null && parsed.xPostId !== currentPostId) {
+      return parsed.xPostId;
+    }
   }
 
   return null;
@@ -730,6 +759,15 @@ function parsePermalink(href: string): {
   } catch {
     return null;
   }
+}
+
+function normalizePostId(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized === "" ? null : normalized;
 }
 
 function isNodeInsideContainer(node: Node | null, container: Element | null | undefined): boolean {
