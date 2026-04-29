@@ -18,6 +18,7 @@ import type {
   ListPostsPageInput,
   PostPageCursor,
   PostFilterInput,
+  ThreadedPostRecord,
   UserSummary
 } from "./viewer";
 
@@ -47,6 +48,11 @@ export type HasPostMessage = {
 export type ListPostsPageMessage = {
   type: "posts/list-page";
   input: ListPostsPageInput;
+};
+
+export type GetThreadMessage = {
+  type: "posts/thread/get";
+  rootId: string;
 };
 
 export type ListPostTagSummariesMessage = {
@@ -174,6 +180,7 @@ export type RuntimeMessage =
   | SaveThreadMessage
   | HasPostMessage
   | ListPostsPageMessage
+  | GetThreadMessage
   | ListPostTagSummariesMessage
   | RequestUserSummariesMessage
   | GetArchiveSummaryMessage
@@ -230,6 +237,11 @@ export type ListPostsPageResponse = {
   nextOffset: number;
   nextCursor: PostPageCursor | null;
   hasMore: boolean;
+};
+
+export type GetThreadResponse = {
+  type: "posts/thread/get-result";
+  thread: ThreadedPostRecord | null;
 };
 
 export type ListPostTagSummariesResponse = {
@@ -388,6 +400,7 @@ export type RuntimeResponse =
   | SaveThreadResponse
   | HasPostResponse
   | ListPostsPageResponse
+  | GetThreadResponse
   | ListPostTagSummariesResponse
   | UserSummariesResponse
   | GetArchiveSummaryResponse
