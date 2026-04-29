@@ -33,4 +33,8 @@ declare namespace chrome {
       function addListener(callback: () => void): void;
     }
   }
+
+  namespace cookies {
+    function get(details: { url: string; name: string }): Promise<{ value?: string } | undefined>;
+  }
 }
