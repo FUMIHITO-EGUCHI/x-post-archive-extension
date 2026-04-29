@@ -3,6 +3,7 @@ import {
   handleRuntimeMessage
 } from "../features/runtime/handle-runtime-message";
 import { resumePendingMediaPersistence } from "../features/archive/archive-service";
+import { resumeThreadExpandProcessing } from "../features/archive/thread-expand-worker";
 import { resumeRefetchProcessing } from "../features/refetch/refetch-coordinator";
 import { createLogger } from "../features/logging/logger";
 
@@ -17,12 +18,14 @@ export default defineBackground({
       });
       void resumePendingMediaPersistence();
       void resumeRefetchProcessing();
+      void resumeThreadExpandProcessing();
     });
 
     chrome.runtime.onStartup?.addListener?.(() => {
       logger.info("extension.startup");
       void resumePendingMediaPersistence();
       void resumeRefetchProcessing();
+      void resumeThreadExpandProcessing();
     });
 
     chrome.action.onClicked.addListener(() => {
