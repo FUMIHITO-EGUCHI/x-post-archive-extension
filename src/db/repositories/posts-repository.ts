@@ -59,6 +59,22 @@ export async function listRootOrSinglePostIds(): Promise<string[]> {
   ).map(String);
 }
 
+export async function listSinglePostIds(): Promise<string[]> {
+  return (
+    await archiveDb.posts
+      .filter((post) => normalizePostId(post.thread_root_id) === null)
+      .primaryKeys()
+  ).map(String);
+}
+
+export async function listThreadRootPostIds(): Promise<string[]> {
+  return (
+    await archiveDb.posts
+      .filter((post) => normalizePostId(post.thread_root_id) === post.x_post_id)
+      .primaryKeys()
+  ).map(String);
+}
+
 export async function listPostUsernames(): Promise<string[]> {
   return (await archiveDb.posts.orderBy("x_username").uniqueKeys()).map(String);
 }

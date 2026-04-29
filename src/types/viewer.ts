@@ -10,6 +10,7 @@ export type PostSortField =
 
 export type SortDirection = "desc" | "asc";
 export type DateFilterTarget = "saved_at" | "posted_at";
+export type ThreadFilterMode = "all" | "single" | "thread";
 
 export type PostPageCursor = {
   sortField: "saved_at" | "posted_at";
@@ -67,6 +68,7 @@ export type ListPostsPageInput = {
   dateFrom: number | null;
   dateTo: number | null;
   keywordFilter: string | null;
+  threadFilter: ThreadFilterMode;
 };
 
 export type PostFilterInput = Pick<
@@ -78,6 +80,7 @@ export type PostFilterInput = Pick<
   | "dateFrom"
   | "dateTo"
   | "keywordFilter"
+  | "threadFilter"
 >;
 
 export type ViewerSessionRestoreMode = "off" | "filters" | "filters-and-position";
@@ -102,6 +105,7 @@ export type ViewerSessionState = {
   activeDateFilterTarget?: DateFilterTarget | null;
   activeDateFrom?: string | null;
   activeDateTo?: string | null;
+  activeThreadFilter?: ThreadFilterMode;
   loadedCount: number;
   anchorPostId: string | null;
   scrollTop: number;

@@ -25,9 +25,11 @@ import {
   listPostIdsByUsername,
   listPostUsernames,
   listRootOrSinglePostIds,
+  listSinglePostIds,
   getPostsByIds,
   hasPost,
   listPostsSliceBySort,
+  listThreadRootPostIds,
   updatePostFields
 } from "../../db/repositories/posts-repository";
 import {
@@ -82,6 +84,7 @@ import type {
   ListPostsPageInput,
   PostPageCursor,
   PostFilterInput,
+  ThreadFilterMode,
   ThreadedPostRecord,
   UserSummary
 } from "../../types/viewer";
@@ -322,7 +325,7 @@ export async function listArchivePostsPage(
   const normalizedOffset = normalizePageOffset(input.offset);
   const normalizedLimit = normalizePageLimit(input.limit);
   const matchingPostIds = await resolveFilteredPostIds(input);
-  const visiblePostIds = await resolveViewerListPostIds(matchingPostIds);
+  const visiblePostIds = await resolveViewerListPostIds(matchingPostIds, input.threadFilter);
   const totalCount = visiblePostIds.size;
 
   if (totalCount === 0) {
@@ -900,10 +903,13 @@ export async function bulkAssignTagPreview(
     dateFilterTarget: filter.dateFilterTarget,
     dateFrom: filter.dateFrom,
     dateTo: filter.dateTo,
-    keywordFilter: filter.keywordFilter
+    keywordFilter: filter.keywordFilter,
+    threadFilter: filter.threadFilter
   };
   const matchingPostIds = await resolveFilteredPostIds(pageInput);
-  const resolvedPostIds = matchingPostIds === null ? await listPostIds() : [...matchingPostIds];
+  const resolvedPostIds = [
+    ...(await resolveViewerListPostIds(matchingPostIds, pageInput.threadFilter))
+  ];
   const totalMatchCount = resolvedPostIds.length;
 
   const tag =
@@ -1549,11 +1555,14 @@ async function listRandomPostsPage(
   return getPostsByIds(selectSeededRandomIds(candidateIds, offset, limit, randomSeed));
 }
 
-async function resolveViewerListPostIds(matchingPostIds: Set<string> | null): Promise<Set<string>> {
-  const rootOrSinglePostIds = new Set(await listRootOrSinglePostIds());
+async function resolveViewerListPostIds(
+  matchingPostIds: Set<string> | null,
+  threadFilter: ThreadFilterMode
+): Promise<Set<string>> {
+  const viewerPostIdSet = new Set(await listViewerPostIdsByThreadFilter(threadFilter));
 
   if (matchingPostIds === null) {
-    return rootOrSinglePostIds;
+    return viewerPostIdSet;
   }
 
   const matchingPosts = await getPostsByIds([...matchingPostIds]);
@@ -1563,12 +1572,23 @@ async function resolveViewerListPostIds(matchingPostIds: Set<string> | null): Pr
     const threadRootId = normalizeOptionalPostId(post.thread_root_id);
     const viewerPostId = threadRootId ?? post.x_post_id;
 
-    if (rootOrSinglePostIds.has(viewerPostId)) {
+    if (viewerPostIdSet.has(viewerPostId)) {
       result.add(viewerPostId);
     }
   }
 
   return result;
+}
+
+async function listViewerPostIdsByThreadFilter(threadFilter: ThreadFilterMode): Promise<string[]> {
+  switch (threadFilter) {
+    case "single":
+      return listSinglePostIds();
+    case "thread":
+      return listThreadRootPostIds();
+    case "all":
+      return listRootOrSinglePostIds();
+  }
 }
 
 async function getQuotedPostIdSet(): Promise<Set<string>> {

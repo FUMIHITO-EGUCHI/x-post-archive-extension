@@ -989,6 +989,34 @@ body {
   gap: 8px;
 }
 
+.viewer-thread-filter-segment {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border: 1px solid rgba(16, 32, 51, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.viewer-thread-filter-option {
+  min-height: 36px;
+  border: 0;
+  border-radius: 10px;
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--color-text-sub);
+  font: inherit;
+  font-size: calc(12px * var(--viewer-font-scale));
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.viewer-thread-filter-option-active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
 .viewer-filter-open-badge,
 .viewer-filter-tab-badge {
   display: inline-grid;
@@ -2432,6 +2460,7 @@ body {
 :root[data-theme="dark"] .viewer-log-clear-button,
 :root[data-theme="dark"] .viewer-log-export-option,
 :root[data-theme="dark"] .viewer-secondary-button,
+:root[data-theme="dark"] .viewer-thread-filter-segment,
 :root[data-theme="dark"] .viewer-tag-option-btn,
 :root[data-theme="dark"] .tag-input,
 :root[data-theme="dark"] .tag-picker-input {
@@ -2580,6 +2609,11 @@ body {
 
 :root[data-theme="dark"] .viewer-secondary-button-active {
   border-color: var(--color-accent-soft-strong);
+  background: var(--color-accent);
+  color: var(--color-inverse-text);
+}
+
+:root[data-theme="dark"] .viewer-thread-filter-option-active {
   background: var(--color-accent);
   color: var(--color-inverse-text);
 }
@@ -2786,6 +2820,16 @@ body {
 
   .viewer-toolbar-count {
     width: 100%;
+  }
+
+  .viewer-thread-filter-segment {
+    width: 100%;
+  }
+
+  .viewer-thread-filter-option {
+    flex: 1 1 0;
+    padding-right: 8px;
+    padding-left: 8px;
   }
 
   .viewer-settings-tabs {

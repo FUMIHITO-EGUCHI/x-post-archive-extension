@@ -5,7 +5,8 @@ import type {
   ListPostsPageInput,
   PostPageCursor,
   PostSortField,
-  SortDirection
+  SortDirection,
+  ThreadFilterMode
 } from "../../../types/viewer";
 import { createLogger } from "../../logging/logger";
 import { requestPostsPage } from "../../runtime/client";
@@ -25,6 +26,7 @@ export type LoadArchivePageInput = {
   dateFrom: string | null;
   dateTo: string | null;
   keywordFilter: string | null;
+  threadFilter: ThreadFilterMode;
   append: boolean;
 };
 
@@ -63,6 +65,7 @@ export function useArchiveLoader() {
         excludeTagFilter: input.excludeTagFilter,
         authorFilter: input.authorFilter,
         keywordFilter: input.keywordFilter,
+        threadFilter: input.threadFilter,
         ...buildDateFilterRequest(input.dateFilterTarget, input.dateFrom, input.dateTo)
       });
 

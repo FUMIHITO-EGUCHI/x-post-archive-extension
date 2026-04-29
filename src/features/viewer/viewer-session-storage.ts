@@ -2,6 +2,7 @@ import type {
   DateFilterTarget,
   PostSortField,
   SortDirection,
+  ThreadFilterMode,
   ViewerSessionRestoreMode,
   ViewerSessionState
 } from "../../types/viewer";
@@ -72,6 +73,8 @@ function isViewerSessionState(value: unknown): value is ViewerSessionState {
     (candidate.activeDateTo === undefined ||
       candidate.activeDateTo === null ||
       typeof candidate.activeDateTo === "string") &&
+    (candidate.activeThreadFilter === undefined ||
+      isThreadFilterMode(candidate.activeThreadFilter)) &&
     typeof candidate.loadedCount === "number" &&
     Number.isFinite(candidate.loadedCount) &&
     candidate.loadedCount >= 0 &&
@@ -102,4 +105,8 @@ function isSortDirection(value: unknown): value is SortDirection {
 
 function isDateFilterTarget(value: unknown): value is DateFilterTarget {
   return value === "saved_at" || value === "posted_at";
+}
+
+function isThreadFilterMode(value: unknown): value is ThreadFilterMode {
+  return value === "all" || value === "single" || value === "thread";
 }
