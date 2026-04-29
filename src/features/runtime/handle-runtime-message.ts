@@ -18,6 +18,7 @@ import {
   saveArchivePost,
   saveThread
 } from "../archive/archive-service";
+import { resumeThreadExpandProcessing } from "../archive/thread-expand-worker";
 import { resetExtensionState } from "../archive/archive-maintenance-service";
 import {
   cancelRefetch,
@@ -131,6 +132,7 @@ export async function handleRuntimeMessage(
               status: result.status,
               post: result.post
             };
+      void resumeThreadExpandProcessing();
       return response;
     }
 
@@ -174,6 +176,7 @@ export async function handleRuntimeMessage(
         duplicates,
         failed
       };
+      void resumeThreadExpandProcessing();
       return response;
     }
 
@@ -203,6 +206,7 @@ export async function handleRuntimeMessage(
         failed: result.failed,
         threadRootId: result.threadRootId
       };
+      void resumeThreadExpandProcessing();
       return response;
     }
 

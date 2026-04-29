@@ -11,6 +11,7 @@ import {
   updateMediaAfterWrite,
   updateMediaPreview
 } from "../../db/repositories/media-repository";
+import { enqueueThreadExpand } from "../../db/repositories/thread-repository";
 import {
   addPost,
   countThreadPosts,
@@ -114,6 +115,7 @@ export async function saveArchivePost(
   input: SavePostInput,
   options?: {
     traceId?: string;
+    enqueueThreadExpand?: boolean;
   }
 ): Promise<{
   status: "saved" | "duplicate";
@@ -123,6 +125,7 @@ export async function saveArchivePost(
   input: SavePostInput,
   options: {
     traceId?: string;
+    enqueueThreadExpand?: boolean;
   } = {}
 ): Promise<{
   status: "saved" | "duplicate";
@@ -181,6 +184,13 @@ export async function saveArchivePost(
     if (duplicateMediaWork.persistRecords.length > 0) {
       enqueueMediaPersistence(duplicateMediaWork.persistRecords, options.traceId);
     }
+
+    await enqueueThreadExpandIfCandidate(input, {
+      traceId: options.traceId,
+      enabled: options.enqueueThreadExpand !== false,
+      normalizedInReplyToPostId,
+      normalizedThreadRootId
+    });
 
     return {
       status: "duplicate",
@@ -242,6 +252,13 @@ export async function saveArchivePost(
     }
   });
 
+  await enqueueThreadExpandIfCandidate(input, {
+    traceId: options.traceId,
+    enabled: options.enqueueThreadExpand !== false,
+    normalizedInReplyToPostId,
+    normalizedThreadRootId
+  });
+
   return {
     status: "saved",
     post
@@ -252,6 +269,7 @@ export async function saveThread(
   posts: SavePostInput[],
   options: {
     traceId?: string;
+    enqueueThreadExpand?: boolean;
   } = {}
 ): Promise<{
   saved: number;
@@ -1174,6 +1192,49 @@ function enqueueMediaPersistence(media: MediaRecord[], traceId?: string): void {
       });
     }
   });
+}
+
+async function enqueueThreadExpandIfCandidate(
+  input: SavePostInput,
+  options: {
+    enabled: boolean;
+    normalizedInReplyToPostId: string | null;
+    normalizedThreadRootId: string | null;
+    traceId: string | undefined;
+  }
+): Promise<void> {
+  if (!options.enabled || options.normalizedInReplyToPostId === null) {
+    return;
+  }
+
+  const threadRootIdEstimate = options.normalizedThreadRootId ?? options.normalizedInReplyToPostId;
+
+  try {
+    const record = await enqueueThreadExpand({
+      candidate_post_id: input.x_post_id,
+      thread_root_id: threadRootIdEstimate
+    });
+
+    logger.info("thread_expand.enqueue.completed", {
+      context: {
+        candidatePostId: input.x_post_id,
+        threadRootId: threadRootIdEstimate,
+        queueId: record.id ?? null,
+        status: record.status,
+        traceId: options.traceId ?? null
+      }
+    });
+  } catch (error) {
+    logger.warn("thread_expand.enqueue.failed", {
+      message: "Failed to enqueue thread expansion.",
+      context: {
+        candidatePostId: input.x_post_id,
+        threadRootId: threadRootIdEstimate,
+        error,
+        traceId: options.traceId ?? null
+      }
+    });
+  }
 }
 
 async function waitForInactiveMediaPersistence(media: MediaRecord[]): Promise<void> {
