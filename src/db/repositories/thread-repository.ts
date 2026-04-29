@@ -19,10 +19,15 @@ export async function enqueueThreadExpand(
   const nextAttemptAt = normalizeTimestamp(input.next_attempt_at, now);
 
   if (existing !== undefined) {
+    if (existing.status === "pending" || existing.status === "in_progress") {
+      return existing;
+    }
+
     const updated: ThreadExpandQueueRecord = {
       ...existing,
       candidate_post_id: input.candidate_post_id,
       status: "pending",
+      retry_count: 0,
       last_error: null,
       updated_at: now,
       next_attempt_at: nextAttemptAt
