@@ -104,6 +104,23 @@ export async function markThreadExpandFailed(
   });
 }
 
+export async function markThreadExpandPendingRetry(
+  id: number,
+  error: string,
+  nextAttemptAt: number,
+  now = Date.now()
+): Promise<void> {
+  const existing = await getThreadExpandQueueRecord(id);
+
+  await archiveDb.thread_expand_queue.update(id, {
+    status: "pending",
+    retry_count: (existing?.retry_count ?? 0) + 1,
+    last_error: error,
+    updated_at: now,
+    next_attempt_at: nextAttemptAt
+  });
+}
+
 export async function deleteThreadExpandQueueRecord(id: number): Promise<void> {
   await archiveDb.thread_expand_queue.delete(id);
 }
