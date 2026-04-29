@@ -5,6 +5,7 @@ import {
   deleteArchiveTagRedirect,
   deleteArchivePost,
   getArchiveSummary,
+  hydrateThreadTree,
   listArchiveTagRedirectSummaries,
   listArchiveUserSummaries,
   hasSavedPost,
@@ -43,6 +44,7 @@ import type {
   DebugLogMessage,
   FetchTweetDetailResponse,
   GetArchiveSummaryResponse,
+  GetThreadResponse,
   HasPostResponse,
   ListTagRedirectsResponse,
   ListPostTagSummariesResponse,
@@ -241,6 +243,23 @@ export async function handleRuntimeMessage(
         nextOffset: result.nextOffset,
         nextCursor: result.nextCursor,
         hasMore: result.hasMore
+      };
+      return response;
+    }
+
+    case "posts/thread/get": {
+      const thread = await hydrateThreadTree(message.rootId);
+      logger.debug("posts.thread_get.completed", {
+        requestId,
+        context: {
+          type: message.type,
+          rootId: message.rootId,
+          found: thread !== null
+        }
+      });
+      const response: GetThreadResponse = {
+        type: "posts/thread/get-result",
+        thread
       };
       return response;
     }
@@ -630,6 +649,7 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/save-thread" ||
     candidate.type === "posts/has" ||
     candidate.type === "posts/list-page" ||
+    candidate.type === "posts/thread/get" ||
     candidate.type === "posts/tags/list" ||
     candidate.type === "users/summaries" ||
     candidate.type === "posts/summary" ||
