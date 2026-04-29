@@ -10,6 +10,7 @@ import type {
   RefetchQueuePriority,
   RefetchStatusRecord
 } from "./refetch";
+import type { TweetDetailTemplateRecord } from "./thread";
 import type {
   ArchiveSummaryRecord,
   ArchiveTagRedirectSummaryRecord,
@@ -28,6 +29,12 @@ export type SavePostMessage = {
 
 export type SavePostsBatchMessage = {
   type: "posts/save-batch";
+  posts: SavePostInput[];
+  traceId?: string;
+};
+
+export type SaveThreadMessage = {
+  type: "posts/save-thread";
   posts: SavePostInput[];
   traceId?: string;
 };
@@ -151,9 +158,15 @@ export type DebugLogMessage = {
   traceId?: string;
 };
 
+export type SetTweetDetailTemplateMessage = {
+  type: "tweet-detail-template/set";
+  template: Omit<TweetDetailTemplateRecord, "id">;
+};
+
 export type RuntimeMessage =
   | SavePostMessage
   | SavePostsBatchMessage
+  | SaveThreadMessage
   | HasPostMessage
   | ListPostsPageMessage
   | ListPostTagSummariesMessage
@@ -175,7 +188,8 @@ export type RuntimeMessage =
   | RefetchCompleteMessage
   | ResetArchiveMessage
   | ClearLogsMessage
-  | DebugLogMessage;
+  | DebugLogMessage
+  | SetTweetDetailTemplateMessage;
 
 export type SavePostResponse = {
   type: "posts/save-result";
@@ -188,6 +202,14 @@ export type SavePostsBatchResponse = {
   saved: number;
   duplicates: number;
   failed: number;
+};
+
+export type SaveThreadResponse = {
+  type: "posts/save-thread-result";
+  saved: number;
+  skipped: number;
+  failed: number;
+  threadRootId: string | null;
 };
 
 export type HasPostResponse = {
@@ -332,9 +354,16 @@ export type RuntimeErrorResponse = {
   message: string;
 };
 
+export type SetTweetDetailTemplateResponse = {
+  type: "tweet-detail-template/set-result";
+  ok: true;
+  capturedAt: number;
+};
+
 export type RuntimeResponse =
   | SavePostResponse
   | SavePostsBatchResponse
+  | SaveThreadResponse
   | HasPostResponse
   | ListPostsPageResponse
   | ListPostTagSummariesResponse
@@ -356,4 +385,5 @@ export type RuntimeResponse =
   | RefetchCompleteResponse
   | ResetArchiveResponse
   | ClearLogsResponse
+  | SetTweetDetailTemplateResponse
   | RuntimeErrorResponse;

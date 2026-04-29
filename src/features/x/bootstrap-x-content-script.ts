@@ -1,5 +1,11 @@
 import type { ContentScriptContext } from "#imports";
-import { requestHasPost, requestNotifyRefetchComplete, requestSavePost } from "../runtime/client";
+import {
+  requestHasPost,
+  requestNotifyRefetchComplete,
+  requestSavePost,
+  requestSaveThread,
+  requestSetTweetDetailTemplate
+} from "../runtime/client";
 import type {
   RefetchCheckMessage,
   RefetchCheckResponse
@@ -38,6 +44,18 @@ import {
   LIKE_BOOKMARK_ACTION_EVENT,
   type LikeBookmarkActionEventDetail
 } from "./intercept-like-bookmark-actions";
+import { detectThreadPage } from "./detect-thread-page";
+import { extractThreadPosts } from "./extract-thread-posts";
+import {
+  getSaveThreadButton,
+  injectSaveThreadButton,
+  removeSaveThreadButton,
+  setSaveThreadButtonState
+} from "./inject-save-thread-button";
+import {
+  TWEET_DETAIL_TEMPLATE_CAPTURED_EVENT,
+  type TweetDetailTemplateCapturedEventDetail
+} from "./tweet-detail-template-events";
 
 const SAVE_BUTTON_SELECTOR = "[data-xpa-save-button]";
 const AUTO_ARCHIVE_ERROR_DISPLAY_MS = 3000;
@@ -55,12 +73,15 @@ let pendingDomReadyListener: (() => void) | null = null;
 let isContentScriptActive = true;
 let autoArchiveActionListenerInstalled = false;
 let refetchMessageListenerInstalled = false;
+let tweetDetailTemplateListenerInstalled = false;
 const pendingAutoArchiveRetryTimers = new Map<string, number>();
+let latestThreadPosts: ReturnType<typeof extractThreadPosts> = [];
 
 export function bootstrapXContentScript(ctx: ContentScriptContext): void {
   isContentScriptActive = true;
   installAutoArchiveActionListener();
   installRefetchMessageListener();
+  installTweetDetailTemplateListener();
   ctx.onInvalidated(() => {
     isContentScriptActive = false;
     initialized = false;
@@ -72,13 +93,87 @@ export function bootstrapXContentScript(ctx: ContentScriptContext): void {
     clearPendingAutoArchiveRetries();
     removeAutoArchiveActionListener();
     removeRefetchMessageListener();
+    removeTweetDetailTemplateListener();
     removeBookmarksImportControls();
     removeLikesImportControls();
+    removeSaveThreadButton();
   });
   ensureGraphqlVideoCandidateListener();
   ensureGraphqlImageCandidateListener();
   ensureGraphqlEngagementListener();
   startWhenBodyReady(ctx);
+}
+
+function installTweetDetailTemplateListener(): void {
+  if (tweetDetailTemplateListenerInstalled) {
+    return;
+  }
+
+  document.addEventListener(
+    TWEET_DETAIL_TEMPLATE_CAPTURED_EVENT,
+    handleTweetDetailTemplateCaptured as EventListener
+  );
+  tweetDetailTemplateListenerInstalled = true;
+}
+
+function removeTweetDetailTemplateListener(): void {
+  if (!tweetDetailTemplateListenerInstalled) {
+    return;
+  }
+
+  document.removeEventListener(
+    TWEET_DETAIL_TEMPLATE_CAPTURED_EVENT,
+    handleTweetDetailTemplateCaptured as EventListener
+  );
+  tweetDetailTemplateListenerInstalled = false;
+}
+
+function handleTweetDetailTemplateCaptured(event: Event): void {
+  const detail = (event as CustomEvent<TweetDetailTemplateCapturedEventDetail>).detail;
+
+  if (!isTweetDetailTemplateCapturedEventDetail(detail)) {
+    return;
+  }
+
+  void requestSetTweetDetailTemplate(detail).catch((error) => {
+    if (isExtensionContextInvalidatedError(error)) {
+      return;
+    }
+
+    console.warn("Failed to save TweetDetail template.", error);
+  });
+}
+
+function isTweetDetailTemplateCapturedEventDetail(
+  value: unknown
+): value is TweetDetailTemplateCapturedEventDetail {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<TweetDetailTemplateCapturedEventDetail>;
+
+  return (
+    typeof candidate.url === "string" &&
+    (candidate.method === "GET" || candidate.method === "POST") &&
+    isStringRecord(candidate.headers) &&
+    isUnknownRecord(candidate.variables) &&
+    (candidate.features === null || isUnknownRecord(candidate.features)) &&
+    (candidate.fieldToggles === null || isUnknownRecord(candidate.fieldToggles)) &&
+    typeof candidate.captured_at === "number" &&
+    Number.isFinite(candidate.captured_at)
+  );
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    isUnknownRecord(value) &&
+    Object.values(value).every((recordValue) => typeof recordValue === "string")
+  );
+}
+
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function installAutoArchiveActionListener(): void {
@@ -179,6 +274,7 @@ function observeDomChanges(ctx: ContentScriptContext): void {
 
 function scanTweetArticles(): void {
   syncLikesImportControls();
+  syncSaveThreadButton();
   const articles = findTweetArticles();
 
   for (const article of articles) {
@@ -196,6 +292,53 @@ function scanTweetArticles(): void {
 
     processedArticlePostIds.set(article, xPostId);
     void attachSaveButton(article);
+  }
+}
+
+function syncSaveThreadButton(): void {
+  const pageContext = detectThreadPage();
+
+  if (pageContext === null || document.body === null) {
+    latestThreadPosts = [];
+    removeSaveThreadButton();
+    return;
+  }
+
+  latestThreadPosts = extractThreadPosts(document, pageContext);
+  const button =
+    getSaveThreadButton() ??
+    injectSaveThreadButton(async () => {
+      await saveVisibleThread();
+    });
+
+  if (latestThreadPosts.length <= 1) {
+    setSaveThreadButtonState(button, "disabled", latestThreadPosts);
+    return;
+  }
+
+  if (!button.disabled || button.textContent === "連投ではありません") {
+    setSaveThreadButtonState(button, "idle", latestThreadPosts);
+  }
+}
+
+async function saveVisibleThread(): Promise<void> {
+  const pageContext = detectThreadPage();
+
+  if (pageContext === null) {
+    throw new Error("Thread page context not found.");
+  }
+
+  const posts = extractThreadPosts(document, pageContext);
+
+  if (posts.length <= 1) {
+    throw new Error("Visible thread has fewer than two OP posts.");
+  }
+
+  latestThreadPosts = posts;
+  const response = await requestSaveThread(posts);
+
+  if (response.failed > 0) {
+    throw new Error("Thread save failed.");
   }
 }
 

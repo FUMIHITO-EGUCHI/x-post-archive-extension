@@ -133,12 +133,17 @@ export async function saveArchivePost(
     Date.now()
   );
   const existing = await getPost(input.x_post_id);
-  const normalizedQuotedPostId = normalizeQuotedPostId(input.quoted_post_id);
+  const normalizedQuotedPostId = normalizeOptionalPostId(input.quoted_post_id);
+  const normalizedInReplyToPostId = normalizeOptionalPostId(input.in_reply_to_post_id);
+  const normalizedThreadRootId = normalizeOptionalPostId(input.thread_root_id);
 
   if (existing !== undefined) {
     const duplicateMediaWork = await prepareDuplicateMediaWork(input);
-    const shouldUpdateQuotedPostId =
-      normalizedQuotedPostId !== null && existing.quoted_post_id !== normalizedQuotedPostId;
+    const updatedFields = buildDuplicatePostFieldUpdate(existing, {
+      quoted_post_id: normalizedQuotedPostId,
+      in_reply_to_post_id: normalizedInReplyToPostId,
+      thread_root_id: normalizedThreadRootId
+    });
 
     logger.info("post.save.duplicate_detected", {
       context: {
@@ -159,10 +164,8 @@ export async function saveArchivePost(
       }
     }
 
-    if (shouldUpdateQuotedPostId) {
-      await updatePostFields(input.x_post_id, {
-        quoted_post_id: normalizedQuotedPostId
-      });
+    if (Object.keys(updatedFields).length > 0) {
+      await updatePostFields(input.x_post_id, updatedFields);
     }
 
     try {
@@ -177,13 +180,7 @@ export async function saveArchivePost(
 
     return {
       status: "duplicate",
-      post:
-        shouldUpdateQuotedPostId
-          ? {
-              ...existing,
-              quoted_post_id: normalizedQuotedPostId
-            }
-          : existing
+      post: Object.keys(updatedFields).length > 0 ? { ...existing, ...updatedFields } : existing
     };
   }
 
@@ -198,6 +195,8 @@ export async function saveArchivePost(
     reply_count: input.reply_count,
     repost_count: input.repost_count,
     like_count: input.like_count,
+    in_reply_to_post_id: normalizedInReplyToPostId,
+    thread_root_id: normalizedThreadRootId,
     quoted_post_id: normalizedQuotedPostId,
     saved_at: savedAt
   };
@@ -242,6 +241,68 @@ export async function saveArchivePost(
   return {
     status: "saved",
     post
+  };
+}
+
+export async function saveThread(
+  posts: SavePostInput[],
+  options: {
+    traceId?: string;
+  } = {}
+): Promise<{
+  saved: number;
+  skipped: number;
+  failed: number;
+  threadRootId: string | null;
+}> {
+  if (posts.length === 0) {
+    return {
+      saved: 0,
+      skipped: 0,
+      failed: 0,
+      threadRootId: null
+    };
+  }
+
+  const threadRootId = posts.length > 1 ? posts[0]?.x_post_id ?? null : null;
+  let saved = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const [index, post] of posts.entries()) {
+    const normalizedPost: SavePostInput = {
+      ...post,
+      in_reply_to_post_id:
+        threadRootId === null ? null : index === 0 ? null : posts[index - 1]?.x_post_id ?? null,
+      thread_root_id: threadRootId
+    };
+
+    try {
+      const result = await saveArchivePost(normalizedPost, options);
+
+      if (result.status === "saved") {
+        saved += 1;
+      } else {
+        skipped += 1;
+      }
+    } catch (error) {
+      failed += 1;
+      logger.warn("thread.save.post_failed", {
+        context: {
+          xPostId: post.x_post_id,
+          threadRootId,
+          traceId: options.traceId ?? null,
+          error: formatError(error)
+        }
+      });
+    }
+  }
+
+  return {
+    saved,
+    skipped,
+    failed,
+    threadRootId
   };
 }
 
@@ -1293,7 +1354,11 @@ export async function refetchArchivePost(
   const preparedMediaUpdate = prepareRefetchedMediaUpdate(xPostId, input, existingMedia);
   await waitForInactiveMediaPersistence(preparedMediaUpdate.removedRecords);
   const normalizedQuotedPostId =
-    normalizeQuotedPostId(input.quoted_post_id) ?? existingPost.quoted_post_id ?? null;
+    normalizeOptionalPostId(input.quoted_post_id) ?? existingPost.quoted_post_id ?? null;
+  const normalizedInReplyToPostId =
+    normalizeOptionalPostId(input.in_reply_to_post_id) ?? existingPost.in_reply_to_post_id ?? null;
+  const normalizedThreadRootId =
+    normalizeOptionalPostId(input.thread_root_id) ?? existingPost.thread_root_id ?? null;
   const removedMediaPaths = preparedMediaUpdate.removedRecords.flatMap((record) =>
     [record.opfs_path, record.preview_image_opfs_path].filter(
       (path): path is string => typeof path === "string" && path.trim() !== ""
@@ -1310,6 +1375,8 @@ export async function refetchArchivePost(
     reply_count: input.reply_count,
     repost_count: input.repost_count,
     like_count: input.like_count,
+    in_reply_to_post_id: normalizedInReplyToPostId,
+    thread_root_id: normalizedThreadRootId,
     quoted_post_id: normalizedQuotedPostId
   };
 
@@ -1323,6 +1390,8 @@ export async function refetchArchivePost(
       reply_count: updatedPost.reply_count,
       repost_count: updatedPost.repost_count,
       like_count: updatedPost.like_count,
+      in_reply_to_post_id: normalizedInReplyToPostId,
+      thread_root_id: normalizedThreadRootId,
       quoted_post_id: normalizedQuotedPostId
     });
 
@@ -1875,6 +1944,22 @@ function validateSavePostInput(input: SavePostInput): void {
     throw new Error("Invalid quoted_post_id.");
   }
 
+  if (
+    input.in_reply_to_post_id !== undefined &&
+    input.in_reply_to_post_id !== null &&
+    (typeof input.in_reply_to_post_id !== "string" || input.in_reply_to_post_id.trim() === "")
+  ) {
+    throw new Error("Invalid in_reply_to_post_id.");
+  }
+
+  if (
+    input.thread_root_id !== undefined &&
+    input.thread_root_id !== null &&
+    (typeof input.thread_root_id !== "string" || input.thread_root_id.trim() === "")
+  ) {
+    throw new Error("Invalid thread_root_id.");
+  }
+
   if (typeof input.post_text !== "string") {
     throw new Error("Invalid post_text.");
   }
@@ -2018,13 +2103,41 @@ function normalizeKeywordFilter(value: string | null | undefined): string | null
   return trimmedValue === "" ? null : trimmedValue;
 }
 
-function normalizeQuotedPostId(value: string | null | undefined): string | null {
+function normalizeOptionalPostId(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
     return null;
   }
 
   const normalized = value.trim();
   return normalized === "" ? null : normalized;
+}
+
+function buildDuplicatePostFieldUpdate(
+  existing: PostRecord,
+  fields: {
+    quoted_post_id: string | null;
+    in_reply_to_post_id: string | null;
+    thread_root_id: string | null;
+  }
+): Partial<PostRecord> {
+  const update: Partial<PostRecord> = {};
+
+  if (fields.quoted_post_id !== null && existing.quoted_post_id !== fields.quoted_post_id) {
+    update.quoted_post_id = fields.quoted_post_id;
+  }
+
+  if (
+    fields.in_reply_to_post_id !== null &&
+    existing.in_reply_to_post_id !== fields.in_reply_to_post_id
+  ) {
+    update.in_reply_to_post_id = fields.in_reply_to_post_id;
+  }
+
+  if (fields.thread_root_id !== null && existing.thread_root_id !== fields.thread_root_id) {
+    update.thread_root_id = fields.thread_root_id;
+  }
+
+  return update;
 }
 
 function prepareRefetchedMediaUpdate(
