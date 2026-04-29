@@ -22,7 +22,7 @@ import {
   type StickyToolbarFilterChip
 } from "./sticky-toolbar";
 import { UnifiedFilterModal } from "./unified-filter-modal";
-import { PostCard } from "./post-card";
+import { ThreadCard } from "./thread-card";
 import { SettingsScreen } from "./settings-screen";
 import {
   ImageLightboxDialog,
@@ -711,7 +711,7 @@ export function ViewerApp() {
             {posts.length > 0 && (
               <div className="viewer-list">
                 {posts.map((post) => (
-                  <PostCard
+                  <ThreadCard
                     key={post.x_post_id}
                     post={post}
                     language={language}

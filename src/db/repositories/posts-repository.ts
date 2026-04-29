@@ -40,8 +40,23 @@ export async function countPosts(): Promise<number> {
   return archiveDb.posts.count();
 }
 
+export async function countThreadPosts(rootId: string): Promise<number> {
+  return archiveDb.posts.where("thread_root_id").equals(rootId).count();
+}
+
 export async function listPostIds(): Promise<string[]> {
   return archiveDb.posts.toCollection().primaryKeys();
+}
+
+export async function listRootOrSinglePostIds(): Promise<string[]> {
+  return (
+    await archiveDb.posts
+      .filter((post) => {
+        const threadRootId = normalizePostId(post.thread_root_id);
+        return threadRootId === null || threadRootId === post.x_post_id;
+      })
+      .primaryKeys()
+  ).map(String);
 }
 
 export async function listPostUsernames(): Promise<string[]> {
