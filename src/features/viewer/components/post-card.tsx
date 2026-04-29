@@ -12,7 +12,7 @@ import { TagPickerOverlay } from "./tag-picker-overlay";
 
 const logger = createLogger("viewer");
 
-type PostCardProps = {
+export type PostCardProps = {
   post: ArchivePostRecord;
   language: ArchiveLanguage;
   deletingId: string | null;
@@ -51,6 +51,8 @@ export function PostCard({
   onAddTag,
   onRemoveTag
 }: PostCardProps) {
+  const threadPostCount = post.thread_post_count ?? 1;
+
   function openPostImage(media: MediaRecord): void {
     if (media.media_type === "video") {
       return;
@@ -75,6 +77,13 @@ export function PostCard({
           <p className="post-username">
             <span>{post.display_name}</span>
             <span className="post-handle">@{post.x_username}</span>
+            {threadPostCount > 1 && (
+              <span className="post-thread-badge">
+                {language === "ja"
+                  ? `全${formatCount(threadPostCount, language)}件`
+                  : `${formatCount(threadPostCount, language)} posts`}
+              </span>
+            )}
           </p>
           <div className="post-date-list">
             <p className="post-date">
