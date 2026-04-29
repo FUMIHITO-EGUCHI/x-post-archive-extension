@@ -22,3 +22,10 @@ export type TweetDetailTemplateRecord = {
   fieldToggles: Record<string, unknown> | null;
   captured_at: number;
 };
+
+export type TweetDetailClientError =
+  | "template-missing"
+  | "not-logged-in"
+  | "auth-stale"
+  | "rate-limited"
+  | "unknown";
