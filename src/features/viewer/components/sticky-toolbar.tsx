@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import type { PostSortField, SortDirection } from "../../../types/viewer";
+import type { PostSortField, SortDirection, ThreadFilterMode } from "../../../types/viewer";
 import type { ArchiveLanguage } from "../../settings/archive-language";
 
 export type FilterModalTab = "user" | "tag" | "date";
 
 export type StickyToolbarFilterChip = {
-  key: FilterModalTab;
+  key: FilterModalTab | "thread";
 };
 
 export type StickyToolbarProps = {
@@ -20,6 +20,7 @@ export type StickyToolbarProps = {
   isBulkTagDisabled: boolean;
   isSearchMode: boolean;
   keywordFilter: string | null;
+  threadFilter: ThreadFilterMode;
   sortField: PostSortField;
   sortDirection: SortDirection;
   onSortFieldChange: (field: PostSortField) => void;
@@ -29,6 +30,7 @@ export type StickyToolbarProps = {
   onOpenSearch: () => void;
   onCloseSearch: () => void;
   onKeywordChange: (keyword: string | null) => void;
+  onThreadFilterChange: (threadFilter: ThreadFilterMode) => void;
   onClearAllFilters: () => void;
 };
 
@@ -44,6 +46,7 @@ export function StickyToolbar({
   isBulkTagDisabled,
   isSearchMode,
   keywordFilter,
+  threadFilter,
   sortField,
   sortDirection,
   onSortFieldChange,
@@ -53,6 +56,7 @@ export function StickyToolbar({
   onOpenSearch,
   onCloseSearch,
   onKeywordChange,
+  onThreadFilterChange,
   onClearAllFilters
 }: StickyToolbarProps) {
   const activeFilterCount = filterChips.length;
@@ -176,6 +180,31 @@ export function StickyToolbar({
         >
           {language === "ja" ? "一括タグ付け" : "Bulk tag"}
         </button>
+        <div
+          className="viewer-thread-filter-segment"
+          role="group"
+          aria-label={language === "ja" ? "投稿種別" : "Post type"}
+        >
+          {(["all", "single", "thread"] as const).map((value) => (
+            <button
+              key={value}
+              className={
+                threadFilter === value
+                  ? "viewer-thread-filter-option viewer-thread-filter-option-active"
+                  : "viewer-thread-filter-option"
+              }
+              type="button"
+              aria-pressed={threadFilter === value}
+              onClick={() => {
+                if (threadFilter !== value) {
+                  onThreadFilterChange(value);
+                }
+              }}
+            >
+              {formatThreadFilterLabel(value, language)}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div
@@ -275,6 +304,20 @@ export function StickyToolbar({
       </div>
     </section>
   );
+}
+
+function formatThreadFilterLabel(
+  value: ThreadFilterMode,
+  language: ArchiveLanguage
+): string {
+  switch (value) {
+    case "single":
+      return language === "ja" ? "単発のみ" : "Singles";
+    case "thread":
+      return language === "ja" ? "連投のみ" : "Threads";
+    case "all":
+      return language === "ja" ? "すべて" : "All";
+  }
 }
 
 function GearIcon() {

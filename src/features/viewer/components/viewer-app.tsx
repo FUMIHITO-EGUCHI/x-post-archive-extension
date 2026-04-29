@@ -4,7 +4,8 @@ import type { ArchiveTagRecord } from "../../../types/archive";
 import type {
   DateFilterTarget,
   PostSortField,
-  SortDirection
+  SortDirection,
+  ThreadFilterMode
 } from "../../../types/viewer";
 import {
   requestDeletePost
@@ -106,6 +107,8 @@ export function ViewerApp() {
     activeAuthorFilter,
     setActiveAuthorFilter,
     activeKeywordFilter,
+    activeThreadFilter,
+    setActiveThreadFilter,
     activeDateFilterTarget,
     setActiveDateFilterTarget,
     activeDateFrom,
@@ -124,6 +127,7 @@ export function ViewerApp() {
     handleApplyDateFilter: applyDateFilter,
     handleClearDateFilter: clearDateFilter,
     handleKeywordChange,
+    handleThreadFilterChange,
     handleClearAllFilters: clearAllFilters,
     handleLoadMore: loadMorePosts
   } = sortFilter;
@@ -167,6 +171,7 @@ export function ViewerApp() {
     activeDateTo,
     activeExcludeTagFilter,
     activeTagFilter,
+    activeThreadFilter,
     postsLength: posts.length,
     screen,
     sessionRestoreMode,
@@ -316,6 +321,7 @@ export function ViewerApp() {
         let nextDateFilterTarget: DateFilterTarget | null = null;
         let nextDateFrom: string | null = null;
         let nextDateTo: string | null = null;
+        let nextThreadFilter: ThreadFilterMode = "all";
         let initialLimit = DEFAULT_PAGE_SIZE;
 
         if (nextSessionRestoreMode !== "off" && savedSession !== null) {
@@ -327,6 +333,7 @@ export function ViewerApp() {
           nextDateFilterTarget = savedSession.activeDateFilterTarget ?? null;
           nextDateFrom = savedSession.activeDateFrom ?? null;
           nextDateTo = savedSession.activeDateTo ?? null;
+          nextThreadFilter = savedSession.activeThreadFilter ?? "all";
 
           if (nextExcludeTagFilter === nextTagFilter) {
             nextExcludeTagFilter = null;
@@ -350,6 +357,7 @@ export function ViewerApp() {
         setActiveDateFilterTarget(nextDateFilterTarget);
         setActiveDateFrom(nextDateFrom);
         setActiveDateTo(nextDateTo);
+        setActiveThreadFilter(nextThreadFilter);
         setDateFilterDraftTarget(nextDateFilterTarget ?? DEFAULT_DATE_FILTER_TARGET);
         setDateFilterDraftFrom(nextDateFrom ?? "");
         setDateFilterDraftTo(nextDateTo ?? "");
@@ -369,6 +377,7 @@ export function ViewerApp() {
             dateFrom: nextDateFrom,
             dateTo: nextDateTo,
             keywordFilter: null,
+            threadFilter: nextThreadFilter,
             append: false
           })
         ]);
@@ -411,6 +420,7 @@ export function ViewerApp() {
         authorFilter: activeAuthorFilter,
         ...getCurrentDateFilterInput(),
         keywordFilter: activeKeywordFilter,
+        threadFilter: activeThreadFilter,
         append: false
       })
     ]);
@@ -453,6 +463,7 @@ export function ViewerApp() {
         authorFilter: activeAuthorFilter,
         ...getCurrentDateFilterInput(),
         keywordFilter: activeKeywordFilter,
+        threadFilter: activeThreadFilter,
         append: false
       })
     ]);
@@ -491,6 +502,7 @@ export function ViewerApp() {
         authorFilter: activeAuthorFilter,
         ...getCurrentDateFilterInput(),
         keywordFilter: activeKeywordFilter,
+        threadFilter: activeThreadFilter,
         append: false
       })
     ]);
@@ -613,6 +625,12 @@ export function ViewerApp() {
     });
   }
 
+  if (activeThreadFilter !== "all") {
+    filterChips.push({
+      key: "thread"
+    });
+  }
+
   const firstActiveFilterTab: FilterModalTab =
     activeAuthorFilter !== null
       ? "user"
@@ -647,6 +665,7 @@ export function ViewerApp() {
             isSearchMode={isSearchMode}
             keywordFilter={activeKeywordFilter}
             language={language}
+            threadFilter={activeThreadFilter}
             onOpenBulkTag={() => {
               setIsBulkTagModalOpen(true);
             }}
@@ -665,6 +684,9 @@ export function ViewerApp() {
             }}
             onKeywordChange={(keyword) => {
               void handleKeywordChange(keyword);
+            }}
+            onThreadFilterChange={(threadFilter) => {
+              void handleThreadFilterChange(threadFilter);
             }}
             onReshuffle={() => {
               void handleReshuffle();

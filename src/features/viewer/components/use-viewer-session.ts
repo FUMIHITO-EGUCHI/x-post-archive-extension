@@ -3,6 +3,7 @@ import type {
   DateFilterTarget,
   PostSortField,
   SortDirection,
+  ThreadFilterMode,
   ViewerSessionRestoreMode
 } from "../../../types/viewer";
 import { createLogger } from "../../logging/logger";
@@ -26,6 +27,7 @@ type UseViewerSessionOptions = {
   activeDateTo: string | null;
   activeExcludeTagFilter: string | null;
   activeTagFilter: string | null;
+  activeThreadFilter: ThreadFilterMode;
   postsLength: number;
   screen: ViewerScreen;
   sessionRestoreMode: ViewerSessionRestoreMode;
@@ -42,6 +44,7 @@ export function useViewerSession({
   activeDateTo,
   activeExcludeTagFilter,
   activeTagFilter,
+  activeThreadFilter,
   postsLength,
   screen,
   sessionRestoreMode,
@@ -71,6 +74,7 @@ export function useViewerSession({
           activeDateFilterTarget,
           activeDateFrom,
           activeDateTo,
+          activeThreadFilter,
           loadedCount: postsLength,
           anchorPostId:
             effectiveSessionRestoreMode === "filters-and-position"
@@ -98,6 +102,7 @@ export function useViewerSession({
       activeDateTo,
       activeExcludeTagFilter,
       activeTagFilter,
+      activeThreadFilter,
       postsLength,
       sessionRestoreMode,
       sortDirection,
@@ -157,6 +162,7 @@ export function useViewerSession({
     activeDateTo,
     activeExcludeTagFilter,
     activeTagFilter,
+    activeThreadFilter,
     persistCurrentViewerSession,
     postsLength,
     screen,
@@ -204,6 +210,7 @@ export function useViewerSession({
     activeDateTo,
     activeExcludeTagFilter,
     activeTagFilter,
+    activeThreadFilter,
     persistCurrentViewerSession,
     postsLength,
     screen,

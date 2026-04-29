@@ -3,7 +3,8 @@ import type {
   DateFilterTarget,
   PostFilterInput,
   PostSortField,
-  SortDirection
+  SortDirection,
+  ThreadFilterMode
 } from "../../../types/viewer";
 import type { LoadArchivePageInput } from "./use-archive-loader";
 
@@ -30,6 +31,7 @@ export function useSortFilter({
   const [activeDateFrom, setActiveDateFrom] = useState<string | null>(null);
   const [activeDateTo, setActiveDateTo] = useState<string | null>(null);
   const [activeKeywordFilter, setActiveKeywordFilter] = useState<string | null>(null);
+  const [activeThreadFilter, setActiveThreadFilter] = useState<ThreadFilterMode>("all");
 
   function getCurrentDateFilterInput() {
     return {
@@ -47,7 +49,8 @@ export function useSortFilter({
       dateFilterTarget: activeDateFilterTarget,
       dateFrom: toDateFilterStartTimestamp(activeDateFrom),
       dateTo: toDateFilterEndTimestamp(activeDateTo),
-      keywordFilter: activeKeywordFilter
+      keywordFilter: activeKeywordFilter,
+      threadFilter: activeThreadFilter
     };
   }
 
@@ -77,6 +80,7 @@ export function useSortFilter({
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       keywordFilter: activeKeywordFilter,
+      threadFilter: activeThreadFilter,
       ...getCurrentDateFilterInput(),
       append: false
     });
@@ -102,6 +106,7 @@ export function useSortFilter({
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       keywordFilter: activeKeywordFilter,
+      threadFilter: activeThreadFilter,
       ...getCurrentDateFilterInput(),
       append: false
     });
@@ -123,6 +128,7 @@ export function useSortFilter({
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       keywordFilter: activeKeywordFilter,
+      threadFilter: activeThreadFilter,
       ...getCurrentDateFilterInput(),
       append: false
     });
@@ -153,6 +159,7 @@ export function useSortFilter({
       excludeTagFilter: nextExcludeValue,
       authorFilter: activeAuthorFilter,
       keywordFilter: activeKeywordFilter,
+      threadFilter: activeThreadFilter,
       ...getCurrentDateFilterInput(),
       append: false
     });
@@ -181,6 +188,7 @@ export function useSortFilter({
       excludeTagFilter: nextValue,
       authorFilter: activeAuthorFilter,
       keywordFilter: activeKeywordFilter,
+      threadFilter: activeThreadFilter,
       ...getCurrentDateFilterInput(),
       append: false
     });
@@ -204,6 +212,7 @@ export function useSortFilter({
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: nextValue,
       keywordFilter: activeKeywordFilter,
+      threadFilter: activeThreadFilter,
       ...getCurrentDateFilterInput(),
       append: false
     });
@@ -235,6 +244,7 @@ export function useSortFilter({
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       keywordFilter: activeKeywordFilter,
+      threadFilter: activeThreadFilter,
       dateFilterTarget,
       dateFrom,
       dateTo,
@@ -260,6 +270,7 @@ export function useSortFilter({
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       keywordFilter: activeKeywordFilter,
+      threadFilter: activeThreadFilter,
       dateFilterTarget: null,
       dateFrom: null,
       dateTo: null,
@@ -280,6 +291,28 @@ export function useSortFilter({
       authorFilter: activeAuthorFilter,
       ...getCurrentDateFilterInput(),
       keywordFilter: keyword,
+      threadFilter: activeThreadFilter,
+      append: false
+    });
+  }
+
+  async function handleThreadFilterChange(nextValue: ThreadFilterMode) {
+    setActiveThreadFilter(nextValue);
+    window.scrollTo({
+      top: 0
+    });
+    await loadArchivePage({
+      offset: 0,
+      limit: DEFAULT_PAGE_SIZE,
+      sortField,
+      sortDirection,
+      ...getRandomSeedInput(),
+      tagFilter: activeTagFilter,
+      excludeTagFilter: activeExcludeTagFilter,
+      authorFilter: activeAuthorFilter,
+      keywordFilter: activeKeywordFilter,
+      threadFilter: nextValue,
+      ...getCurrentDateFilterInput(),
       append: false
     });
   }
@@ -292,6 +325,7 @@ export function useSortFilter({
     setActiveDateFrom(null);
     setActiveDateTo(null);
     setActiveKeywordFilter(null);
+    setActiveThreadFilter("all");
     closeFilterModal();
     window.scrollTo({
       top: 0
@@ -309,6 +343,7 @@ export function useSortFilter({
       dateFrom: null,
       dateTo: null,
       keywordFilter: null,
+      threadFilter: "all",
       append: false
     });
   }
@@ -324,6 +359,7 @@ export function useSortFilter({
       excludeTagFilter: activeExcludeTagFilter,
       authorFilter: activeAuthorFilter,
       keywordFilter: activeKeywordFilter,
+      threadFilter: activeThreadFilter,
       ...getCurrentDateFilterInput(),
       append: true
     });
@@ -344,6 +380,8 @@ export function useSortFilter({
     setActiveAuthorFilter,
     activeKeywordFilter,
     setActiveKeywordFilter,
+    activeThreadFilter,
+    setActiveThreadFilter,
     activeDateFilterTarget,
     setActiveDateFilterTarget,
     activeDateFrom,
@@ -362,6 +400,7 @@ export function useSortFilter({
     handleApplyDateFilter,
     handleClearDateFilter,
     handleKeywordChange,
+    handleThreadFilterChange,
     handleClearAllFilters,
     handleLoadMore
   };
