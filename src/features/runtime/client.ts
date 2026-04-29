@@ -10,6 +10,7 @@ import type {
   DebugLogMessage,
   FetchTweetDetailResponse,
   GetArchiveSummaryResponse,
+  GetThreadResponse,
   HasPostResponse,
   ListTagRedirectsResponse,
   ListPostTagSummariesResponse,
@@ -134,6 +135,19 @@ export async function requestPostsPage(
 
   if (response.type !== "posts/list-page-result") {
     throw new Error("Unexpected runtime response for page list request.");
+  }
+
+  return response;
+}
+
+export async function requestThread(rootId: string): Promise<GetThreadResponse> {
+  const response = await sendMessage({
+    type: "posts/thread/get",
+    rootId
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "posts/thread/get-result") {
+    throw new Error("Unexpected runtime response for thread request.");
   }
 
   return response;
