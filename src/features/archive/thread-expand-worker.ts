@@ -91,7 +91,8 @@ async function processThreadExpandRecord(record: ThreadExpandQueueRecord): Promi
     }
 
     const saveResult = await saveThread(result.posts, {
-      traceId: `thread-expand:${record.thread_root_id}:${attempt}`
+      traceId: `thread-expand:${record.thread_root_id}:${attempt}`,
+      enqueueThreadExpand: false
     });
 
     if (saveResult.failed > 0) {
