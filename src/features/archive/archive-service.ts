@@ -13,15 +13,18 @@ import {
 } from "../../db/repositories/media-repository";
 import {
   addPost,
+  countThreadPosts,
   countPostsByUsername,
   countPosts,
   deletePostRecord,
   getPost,
   getLatestPostByUsername,
+  getThread,
   listPostIds,
   listPostIdsByKeyword,
   listPostIdsByUsername,
   listPostUsernames,
+  listRootOrSinglePostIds,
   getPostsByIds,
   hasPost,
   listPostsSliceBySort,
@@ -79,6 +82,7 @@ import type {
   ListPostsPageInput,
   PostPageCursor,
   PostFilterInput,
+  ThreadedPostRecord,
   UserSummary
 } from "../../types/viewer";
 import {
@@ -318,7 +322,8 @@ export async function listArchivePostsPage(
   const normalizedOffset = normalizePageOffset(input.offset);
   const normalizedLimit = normalizePageLimit(input.limit);
   const matchingPostIds = await resolveFilteredPostIds(input);
-  const totalCount = matchingPostIds === null ? await countPosts() : matchingPostIds.size;
+  const visiblePostIds = await resolveViewerListPostIds(matchingPostIds);
+  const totalCount = visiblePostIds.size;
 
   if (totalCount === 0) {
     return {
@@ -334,25 +339,17 @@ export async function listArchivePostsPage(
     input.sortField === "random"
       ? {
           posts: await listRandomPostsPage(
-            matchingPostIds,
+            visiblePostIds,
             normalizedOffset,
             normalizedLimit,
             normalizeRandomSeed(input.randomSeed)
           ),
           nextCursor: null
         }
-      : matchingPostIds === null
-      ? await listPostsSliceBySort(
-          input.sortField,
-          input.sortDirection,
-          normalizedOffset,
-          normalizedLimit,
-          normalizePostPageCursor(input.cursor)
-        )
       : {
           posts: await listFilteredPostsPage(
             input,
-            matchingPostIds,
+            visiblePostIds,
             normalizedOffset,
             normalizedLimit
           ),
@@ -366,6 +363,17 @@ export async function listArchivePostsPage(
     nextOffset: normalizedOffset + pageResult.posts.length,
     nextCursor: pageResult.nextCursor
   };
+}
+
+export async function hydrateThreadTree(rootId: string): Promise<ThreadedPostRecord | null> {
+  const posts = await getThread(rootId);
+
+  if (posts.length === 0) {
+    return null;
+  }
+
+  const hydratedPosts = await hydrateArchivePosts(posts);
+  return buildThreadedPostTree(rootId, hydratedPosts);
 }
 
 export async function listArchiveTagSummaries(): Promise<ArchiveTagSummaryRecord[]> {
@@ -1250,6 +1258,7 @@ async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePost
   const postIds = posts.map((post) => post.x_post_id);
   const media = await listMediaByPostIds(postIds);
   const postTags = await listPostTagsByPostIds(postIds);
+  const threadCounts = await resolveThreadPostCounts(posts);
   const mediaMap = new Map<string, MediaRecord[]>();
   const tagMap = new Map<string, ArchiveTagRecord[]>();
 
@@ -1277,11 +1286,93 @@ async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePost
     current.push(normalizedItem.tag);
   }
 
-  return posts.map((post) => ({
-    ...post,
-    media: mediaMap.get(post.x_post_id) ?? [],
-    tags: sortArchiveTags(tagMap.get(post.x_post_id) ?? [])
-  }));
+  return posts.map((post) => {
+    const threadPostCount = threadCounts.get(post.x_post_id);
+
+    return {
+      ...post,
+      media: mediaMap.get(post.x_post_id) ?? [],
+      tags: sortArchiveTags(tagMap.get(post.x_post_id) ?? []),
+      ...(threadPostCount === undefined ? {} : { thread_post_count: threadPostCount })
+    };
+  });
+}
+
+async function resolveThreadPostCounts(posts: PostRecord[]): Promise<Map<string, number>> {
+  const rootIds = posts.flatMap((post) => {
+    const threadRootId = normalizeOptionalPostId(post.thread_root_id);
+    return threadRootId === post.x_post_id ? [post.x_post_id] : [];
+  });
+  const uniqueRootIds = [...new Set(rootIds)];
+
+  if (uniqueRootIds.length === 0) {
+    return new Map();
+  }
+
+  const entries = await Promise.all(
+    uniqueRootIds.map(async (rootId) => [rootId, await countThreadPosts(rootId)] as const)
+  );
+
+  return new Map(entries);
+}
+
+function buildThreadedPostTree(
+  rootId: string,
+  posts: ArchivePostRecord[]
+): ThreadedPostRecord | null {
+  const nodes = new Map<string, ThreadedPostRecord>(
+    posts.map((post) => [
+      post.x_post_id,
+      {
+        ...post,
+        children: []
+      }
+    ])
+  );
+  const root = nodes.get(rootId) ?? nodes.get(posts[0]?.x_post_id ?? "");
+
+  if (root === undefined) {
+    return null;
+  }
+
+  for (const post of posts) {
+    const node = nodes.get(post.x_post_id);
+
+    if (node === undefined || node.x_post_id === root.x_post_id) {
+      continue;
+    }
+
+    const parentId = normalizeOptionalPostId(post.in_reply_to_post_id);
+    const parent = parentId === null ? undefined : nodes.get(parentId);
+
+    if (parent !== undefined) {
+      parent.children.push(node);
+    }
+  }
+
+  sortThreadedPostChildren(root, new Set<string>());
+  return root;
+}
+
+function sortThreadedPostChildren(post: ThreadedPostRecord, seen: Set<string>): void {
+  if (seen.has(post.x_post_id)) {
+    return;
+  }
+
+  seen.add(post.x_post_id);
+  post.children.sort(compareThreadedPosts);
+
+  for (const child of post.children) {
+    sortThreadedPostChildren(child, seen);
+  }
+}
+
+function compareThreadedPosts(left: ThreadedPostRecord, right: ThreadedPostRecord): number {
+  if (left.posted_at !== right.posted_at) {
+    return left.posted_at - right.posted_at;
+  }
+
+  return left.x_post_id.localeCompare(right.x_post_id);
 }
 
 async function listFilteredPostsPage(
@@ -1437,12 +1528,12 @@ export async function refetchArchivePost(
 }
 
 async function listRandomPostsPage(
-  matchingPostIds: Set<string> | null,
+  matchingPostIds: Set<string>,
   offset: number,
   limit: number,
   randomSeed: number
 ): Promise<PostRecord[]> {
-  const orderedIds = matchingPostIds === null ? await listPostIds() : [...matchingPostIds];
+  const orderedIds = [...matchingPostIds];
 
   if (orderedIds.length === 0) {
     return [];
@@ -1456,6 +1547,28 @@ async function listRandomPostsPage(
   }
 
   return getPostsByIds(selectSeededRandomIds(candidateIds, offset, limit, randomSeed));
+}
+
+async function resolveViewerListPostIds(matchingPostIds: Set<string> | null): Promise<Set<string>> {
+  const rootOrSinglePostIds = new Set(await listRootOrSinglePostIds());
+
+  if (matchingPostIds === null) {
+    return rootOrSinglePostIds;
+  }
+
+  const matchingPosts = await getPostsByIds([...matchingPostIds]);
+  const result = new Set<string>();
+
+  for (const post of matchingPosts) {
+    const threadRootId = normalizeOptionalPostId(post.thread_root_id);
+    const viewerPostId = threadRootId ?? post.x_post_id;
+
+    if (rootOrSinglePostIds.has(viewerPostId)) {
+      result.add(viewerPostId);
+    }
+  }
+
+  return result;
 }
 
 async function getQuotedPostIdSet(): Promise<Set<string>> {
@@ -1582,29 +1695,6 @@ function selectSeededRandomIds(
   }
 
   return ids.slice(offset, selectionEnd);
-}
-
-function normalizePostPageCursor(value: PostPageCursor | null | undefined): PostPageCursor | null {
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  if (
-    (value.sortField !== "saved_at" && value.sortField !== "posted_at") ||
-    (value.sortDirection !== "asc" && value.sortDirection !== "desc") ||
-    !Number.isFinite(value.value) ||
-    typeof value.xPostId !== "string" ||
-    value.xPostId.trim() === ""
-  ) {
-    return null;
-  }
-
-  return {
-    sortField: value.sortField,
-    sortDirection: value.sortDirection,
-    value: value.value,
-    xPostId: value.xPostId
-  };
 }
 
 function createSeededRandom(seed: number): () => number {
