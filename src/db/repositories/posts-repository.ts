@@ -16,6 +16,11 @@ export async function getPostsByIds(xPostIds: string[]): Promise<PostRecord[]> {
   return records.filter((record): record is PostRecord => record !== undefined);
 }
 
+export async function getThread(rootId: string): Promise<PostRecord[]> {
+  const posts = await archiveDb.posts.where("thread_root_id").equals(rootId).toArray();
+  return sortThreadPosts(rootId, posts);
+}
+
 export async function hasPost(xPostId: string): Promise<boolean> {
   return (await getPost(xPostId)) !== undefined;
 }
@@ -140,4 +145,74 @@ function buildPostPageCursor(
 
 export async function deletePostRecord(xPostId: string): Promise<void> {
   await archiveDb.posts.delete(xPostId);
+}
+
+function sortThreadPosts(rootId: string, posts: PostRecord[]): PostRecord[] {
+  if (posts.length <= 1) {
+    return posts;
+  }
+
+  const postsById = new Map(posts.map((post) => [post.x_post_id, post] as const));
+  const childrenByParentId = new Map<string, PostRecord[]>();
+
+  for (const post of posts) {
+    const parentId = normalizePostId(post.in_reply_to_post_id);
+
+    if (parentId === null || !postsById.has(parentId)) {
+      continue;
+    }
+
+    const siblings = childrenByParentId.get(parentId) ?? [];
+    siblings.push(post);
+    childrenByParentId.set(parentId, siblings);
+  }
+
+  for (const siblings of childrenByParentId.values()) {
+    siblings.sort(compareThreadPosts);
+  }
+
+  const ordered: PostRecord[] = [];
+  const seen = new Set<string>();
+  let current = postsById.get(rootId) ?? findThreadRootCandidate(rootId, posts);
+
+  while (current !== undefined && !seen.has(current.x_post_id)) {
+    ordered.push(current);
+    seen.add(current.x_post_id);
+    current = childrenByParentId.get(current.x_post_id)?.find((post) => !seen.has(post.x_post_id));
+  }
+
+  const remaining = posts
+    .filter((post) => !seen.has(post.x_post_id))
+    .sort(compareThreadPosts);
+
+  return [...ordered, ...remaining];
+}
+
+function findThreadRootCandidate(rootId: string, posts: PostRecord[]): PostRecord | undefined {
+  const postIds = new Set(posts.map((post) => post.x_post_id));
+  return (
+    posts.find((post) => post.x_post_id === rootId) ??
+    posts.find((post) => {
+      const parentId = normalizePostId(post.in_reply_to_post_id);
+      return parentId === null || !postIds.has(parentId);
+    }) ??
+    posts.sort(compareThreadPosts)[0]
+  );
+}
+
+function compareThreadPosts(left: PostRecord, right: PostRecord): number {
+  if (left.posted_at !== right.posted_at) {
+    return left.posted_at - right.posted_at;
+  }
+
+  return left.x_post_id.localeCompare(right.x_post_id);
+}
+
+function normalizePostId(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized === "" ? null : normalized;
 }

@@ -18,6 +18,7 @@ import {
   deletePostRecord,
   getPost,
   getLatestPostByUsername,
+  getThread,
   listPostIds,
   listPostIdsByKeyword,
   listPostIdsByUsername,
@@ -79,6 +80,7 @@ import type {
   ListPostsPageInput,
   PostPageCursor,
   PostFilterInput,
+  ThreadedPostRecord,
   UserSummary
 } from "../../types/viewer";
 import {
@@ -366,6 +368,17 @@ export async function listArchivePostsPage(
     nextOffset: normalizedOffset + pageResult.posts.length,
     nextCursor: pageResult.nextCursor
   };
+}
+
+export async function hydrateThreadTree(rootId: string): Promise<ThreadedPostRecord | null> {
+  const posts = await getThread(rootId);
+
+  if (posts.length === 0) {
+    return null;
+  }
+
+  const hydratedPosts = await hydrateArchivePosts(posts);
+  return buildThreadedPostTree(rootId, hydratedPosts);
 }
 
 export async function listArchiveTagSummaries(): Promise<ArchiveTagSummaryRecord[]> {
@@ -1282,6 +1295,65 @@ async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePost
     media: mediaMap.get(post.x_post_id) ?? [],
     tags: sortArchiveTags(tagMap.get(post.x_post_id) ?? [])
   }));
+}
+
+function buildThreadedPostTree(
+  rootId: string,
+  posts: ArchivePostRecord[]
+): ThreadedPostRecord | null {
+  const nodes = new Map<string, ThreadedPostRecord>(
+    posts.map((post) => [
+      post.x_post_id,
+      {
+        ...post,
+        children: []
+      }
+    ])
+  );
+  const root = nodes.get(rootId) ?? nodes.get(posts[0]?.x_post_id ?? "");
+
+  if (root === undefined) {
+    return null;
+  }
+
+  for (const post of posts) {
+    const node = nodes.get(post.x_post_id);
+
+    if (node === undefined || node.x_post_id === root.x_post_id) {
+      continue;
+    }
+
+    const parentId = normalizeOptionalPostId(post.in_reply_to_post_id);
+    const parent = parentId === null ? undefined : nodes.get(parentId);
+
+    if (parent !== undefined) {
+      parent.children.push(node);
+    }
+  }
+
+  sortThreadedPostChildren(root, new Set<string>());
+  return root;
+}
+
+function sortThreadedPostChildren(post: ThreadedPostRecord, seen: Set<string>): void {
+  if (seen.has(post.x_post_id)) {
+    return;
+  }
+
+  seen.add(post.x_post_id);
+  post.children.sort(compareThreadedPosts);
+
+  for (const child of post.children) {
+    sortThreadedPostChildren(child, seen);
+  }
+}
+
+function compareThreadedPosts(left: ThreadedPostRecord, right: ThreadedPostRecord): number {
+  if (left.posted_at !== right.posted_at) {
+    return left.posted_at - right.posted_at;
+  }
+
+  return left.x_post_id.localeCompare(right.x_post_id);
 }
 
 async function listFilteredPostsPage(
