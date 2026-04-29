@@ -134,5 +134,6 @@ export type SavePostInput = {
 export type ArchivePostRecord = PostRecord & {
   media: MediaRecord[];
   tags: ArchiveTagRecord[];
+  thread_post_count?: number;
   quoted_post?: ArchivePostRecord;
 };

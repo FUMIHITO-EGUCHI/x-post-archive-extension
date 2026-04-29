@@ -1,4 +1,4 @@
-import type { ArchiveTagRecord } from "./archive";
+import type { ArchivePostRecord, ArchiveTagRecord } from "./archive";
 
 export type PostSortField =
   | "random"
@@ -47,6 +47,10 @@ export type ArchiveSummaryRecord = {
   accountCount: number;
   tagCount: number;
   mediaBytes: number;
+};
+
+export type ThreadedPostRecord = ArchivePostRecord & {
+  children: ThreadedPostRecord[];
 };
 
 export type ListPostsPageInput = {
