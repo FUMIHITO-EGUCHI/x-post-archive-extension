@@ -730,10 +730,11 @@ export function ViewerApp() {
                     onToggleTagFilter={(normalizedName) => {
                       void handleToggleTagFilter(normalizedName);
                     }}
-                    onOpenMedia={(items, currentIndex) => {
+                    onOpenMedia={(items, currentIndex, threadContext) => {
                       mediaLightbox.setActiveMedia({
                         items,
-                        currentIndex
+                        currentIndex,
+                        ...(threadContext === undefined ? {} : { threadContext })
                       });
                     }}
                     onOpenVideo={(media) => {
