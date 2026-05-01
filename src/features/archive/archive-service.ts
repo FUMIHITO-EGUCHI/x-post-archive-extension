@@ -14,7 +14,7 @@ import {
 import { enqueueThreadExpand } from "../../db/repositories/thread-repository";
 import {
   addPost,
-  countThreadPosts,
+  countThreadPostsByRoots,
   countPostsByUsername,
   countPosts,
   deletePostRecord,
@@ -1370,11 +1370,7 @@ async function resolveThreadPostCounts(posts: PostRecord[]): Promise<Map<string,
     return new Map();
   }
 
-  const entries = await Promise.all(
-    uniqueRootIds.map(async (rootId) => [rootId, await countThreadPosts(rootId)] as const)
-  );
-
-  return new Map(entries);
+  return countThreadPostsByRoots(uniqueRootIds);
 }
 
 function buildThreadedPostTree(
