@@ -44,6 +44,33 @@ export async function countThreadPosts(rootId: string): Promise<number> {
   return archiveDb.posts.where("thread_root_id").equals(rootId).count();
 }
 
+export async function countThreadPostsByRoots(rootIds: string[]): Promise<Map<string, number>> {
+  const normalizedRootIds = [...new Set(rootIds.map(normalizePostId).filter(isNonNullString))];
+
+  if (normalizedRootIds.length === 0) {
+    return new Map();
+  }
+
+  const posts = await archiveDb.posts.where("thread_root_id").anyOf(normalizedRootIds).toArray();
+  const counts = new Map<string, number>();
+
+  for (const rootId of normalizedRootIds) {
+    counts.set(rootId, 0);
+  }
+
+  for (const post of posts) {
+    const threadRootId = normalizePostId(post.thread_root_id);
+
+    if (threadRootId === null) {
+      continue;
+    }
+
+    counts.set(threadRootId, (counts.get(threadRootId) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
 export async function listPostIds(): Promise<string[]> {
   return archiveDb.posts.toCollection().primaryKeys();
 }
@@ -230,4 +257,8 @@ function normalizePostId(value: string | null | undefined): string | null {
 
   const normalized = value.trim();
   return normalized === "" ? null : normalized;
+}
+
+function isNonNullString(value: string | null): value is string {
+  return value !== null;
 }
