@@ -1,3 +1,5 @@
+import type { ThreadExpandQueueSummary } from "./thread";
+
 export type MediaType = "image" | "video";
 
 export type MediaStorageStatus = "pending" | "ready" | "failed";
@@ -135,5 +137,6 @@ export type ArchivePostRecord = PostRecord & {
   media: MediaRecord[];
   tags: ArchiveTagRecord[];
   thread_post_count?: number;
+  thread_expand_queue?: ThreadExpandQueueSummary;
   quoted_post?: ArchivePostRecord;
 };

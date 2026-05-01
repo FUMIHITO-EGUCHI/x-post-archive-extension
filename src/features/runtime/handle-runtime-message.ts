@@ -5,6 +5,7 @@ import {
   deleteArchiveTagRedirect,
   deleteArchivePost,
   getArchiveSummary,
+  getThreadExpandQueueSummary,
   hydrateThreadTree,
   listArchiveTagRedirectSummaries,
   listArchiveUserSummaries,
@@ -14,10 +15,12 @@ import {
   mergeTags,
   renameTag,
   removePostTagByName,
+  retryThreadExpandQueue,
   resumePendingMediaPersistence,
   saveArchivePost,
   saveThread
 } from "../archive/archive-service";
+import { resumeThreadExpandProcessing } from "../archive/thread-expand-worker";
 import { resetExtensionState } from "../archive/archive-maintenance-service";
 import {
   cancelRefetch,
@@ -45,6 +48,7 @@ import type {
   FetchTweetDetailResponse,
   GetArchiveSummaryResponse,
   GetThreadResponse,
+  GetThreadExpandQueueStatusResponse,
   HasPostResponse,
   ListTagRedirectsResponse,
   ListPostTagSummariesResponse,
@@ -62,6 +66,7 @@ import type {
   RuntimeErrorResponse,
   RuntimeMessage,
   RuntimeResponse,
+  RetryThreadExpandResponse,
   SavePostResponse,
   SavePostsBatchResponse,
   SaveThreadResponse,
@@ -260,6 +265,28 @@ export async function handleRuntimeMessage(
       const response: GetThreadResponse = {
         type: "posts/thread/get-result",
         thread
+      };
+      return response;
+    }
+
+    case "thread-expand/status": {
+      const response: GetThreadExpandQueueStatusResponse = {
+        type: "thread-expand/status",
+        record: await getThreadExpandQueueSummary(message.threadRootId)
+      };
+      return response;
+    }
+
+    case "thread-expand/retry": {
+      const record = await retryThreadExpandQueue(message.threadRootId);
+
+      if (record !== null) {
+        void resumeThreadExpandProcessing();
+      }
+
+      const response: RetryThreadExpandResponse = {
+        type: "thread-expand/retry",
+        record
       };
       return response;
     }
@@ -650,6 +677,8 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "posts/has" ||
     candidate.type === "posts/list-page" ||
     candidate.type === "posts/thread/get" ||
+    candidate.type === "thread-expand/status" ||
+    candidate.type === "thread-expand/retry" ||
     candidate.type === "posts/tags/list" ||
     candidate.type === "users/summaries" ||
     candidate.type === "posts/summary" ||

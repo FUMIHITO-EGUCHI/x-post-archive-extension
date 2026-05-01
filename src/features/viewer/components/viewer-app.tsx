@@ -749,6 +749,9 @@ export function ViewerApp() {
                     onRefetch={(xPostId) => {
                       void handleRefetchPost(xPostId);
                     }}
+                    onThreadExpandComplete={() => {
+                      void refreshArchive();
+                    }}
                     onToggleTagFilter={(normalizedName) => {
                       void handleToggleTagFilter(normalizedName);
                     }}

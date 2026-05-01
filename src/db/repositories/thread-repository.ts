@@ -62,6 +62,18 @@ export async function getThreadExpandQueueRecordByRoot(
   return archiveDb.thread_expand_queue.where("thread_root_id").equals(threadRootId).first();
 }
 
+export async function listThreadExpandQueueRecordsByRoots(
+  threadRootIds: string[]
+): Promise<ThreadExpandQueueRecord[]> {
+  const uniqueRootIds = [...new Set(threadRootIds)];
+
+  if (uniqueRootIds.length === 0) {
+    return [];
+  }
+
+  return archiveDb.thread_expand_queue.where("thread_root_id").anyOf(uniqueRootIds).toArray();
+}
+
 export async function listThreadExpandQueueRecordsByStatus(
   status: ThreadExpandQueueStatus
 ): Promise<ThreadExpandQueueRecord[]> {
@@ -119,6 +131,29 @@ export async function markThreadExpandPendingRetry(
     updated_at: now,
     next_attempt_at: nextAttemptAt
   });
+}
+
+export async function resetThreadExpandQueueRecordByRoot(
+  threadRootId: string,
+  now = Date.now()
+): Promise<ThreadExpandQueueRecord | undefined> {
+  const existing = await getThreadExpandQueueRecordByRoot(threadRootId);
+
+  if (existing === undefined) {
+    return undefined;
+  }
+
+  const updated: ThreadExpandQueueRecord = {
+    ...existing,
+    status: "pending",
+    retry_count: 0,
+    last_error: null,
+    updated_at: now,
+    next_attempt_at: now
+  };
+
+  await archiveDb.thread_expand_queue.put(updated);
+  return updated;
 }
 
 export async function deleteThreadExpandQueueRecord(id: number): Promise<void> {
