@@ -1468,6 +1468,31 @@ body {
   font-size: calc(13px * var(--viewer-font-scale));
 }
 
+.thread-expand-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 5px 6px 5px 12px;
+  border: 1px solid rgba(180, 83, 9, 0.18);
+  border-radius: 999px;
+  background: var(--color-warning-soft);
+  color: var(--color-warning-text);
+  font-size: calc(13px * var(--viewer-font-scale));
+  font-weight: 700;
+}
+
+.thread-expand-state-failed {
+  border-color: rgba(185, 28, 28, 0.16);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-text);
+}
+
+.thread-expand-state .thread-card-toggle {
+  min-height: 30px;
+  padding: 6px 10px;
+}
+
 .thread-card-expanded-list {
   display: grid;
   gap: 10px;
@@ -2616,6 +2641,18 @@ body {
 :root[data-theme="dark"] .viewer-thread-filter-option-active {
   background: var(--color-accent);
   color: var(--color-inverse-text);
+}
+
+:root[data-theme="dark"] .thread-expand-state {
+  border-color: rgba(255, 173, 31, 0.24);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-text);
+}
+
+:root[data-theme="dark"] .thread-expand-state-failed {
+  border-color: rgba(244, 33, 46, 0.22);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-text);
 }
 
 :root[data-theme="dark"] .tag-chip {

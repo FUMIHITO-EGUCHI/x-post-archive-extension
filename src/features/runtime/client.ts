@@ -11,6 +11,7 @@ import type {
   FetchTweetDetailResponse,
   GetArchiveSummaryResponse,
   GetThreadResponse,
+  GetThreadExpandQueueStatusResponse,
   HasPostResponse,
   ListTagRedirectsResponse,
   ListPostTagSummariesResponse,
@@ -29,6 +30,7 @@ import type {
   RemovePostTagByNameResponse,
   RuntimeMessage,
   RuntimeResponse,
+  RetryThreadExpandResponse,
   SavePostResponse,
   SavePostsBatchResponse,
   SaveThreadResponse,
@@ -148,6 +150,36 @@ export async function requestThread(rootId: string): Promise<GetThreadResponse> 
 
   if (response.type !== "posts/thread/get-result") {
     throw new Error("Unexpected runtime response for thread request.");
+  }
+
+  return response;
+}
+
+export async function requestThreadExpandQueueStatus(
+  threadRootId: string
+): Promise<GetThreadExpandQueueStatusResponse> {
+  const response = await sendMessage({
+    type: "thread-expand/status",
+    threadRootId
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "thread-expand/status") {
+    throw new Error("Unexpected runtime response for thread expand status request.");
+  }
+
+  return response;
+}
+
+export async function requestRetryThreadExpand(
+  threadRootId: string
+): Promise<RetryThreadExpandResponse> {
+  const response = await sendMessage({
+    type: "thread-expand/retry",
+    threadRootId
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "thread-expand/retry") {
+    throw new Error("Unexpected runtime response for thread expand retry request.");
   }
 
   return response;

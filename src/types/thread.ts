@@ -12,6 +12,11 @@ export type ThreadExpandQueueRecord = {
   next_attempt_at: number;
 };
 
+export type ThreadExpandQueueSummary = Pick<
+  ThreadExpandQueueRecord,
+  "thread_root_id" | "status" | "retry_count" | "last_error" | "next_attempt_at" | "updated_at"
+>;
+
 export type TweetDetailTemplateRecord = {
   id: "current";
   url: string;

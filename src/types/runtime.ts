@@ -10,7 +10,11 @@ import type {
   RefetchQueuePriority,
   RefetchStatusRecord
 } from "./refetch";
-import type { TweetDetailClientError, TweetDetailTemplateRecord } from "./thread";
+import type {
+  ThreadExpandQueueSummary,
+  TweetDetailClientError,
+  TweetDetailTemplateRecord
+} from "./thread";
 import type {
   ArchiveSummaryRecord,
   ArchiveTagRedirectSummaryRecord,
@@ -53,6 +57,16 @@ export type ListPostsPageMessage = {
 export type GetThreadMessage = {
   type: "posts/thread/get";
   rootId: string;
+};
+
+export type GetThreadExpandQueueStatusMessage = {
+  type: "thread-expand/status";
+  threadRootId: string;
+};
+
+export type RetryThreadExpandMessage = {
+  type: "thread-expand/retry";
+  threadRootId: string;
 };
 
 export type ListPostTagSummariesMessage = {
@@ -181,6 +195,8 @@ export type RuntimeMessage =
   | HasPostMessage
   | ListPostsPageMessage
   | GetThreadMessage
+  | GetThreadExpandQueueStatusMessage
+  | RetryThreadExpandMessage
   | ListPostTagSummariesMessage
   | RequestUserSummariesMessage
   | GetArchiveSummaryMessage
@@ -242,6 +258,16 @@ export type ListPostsPageResponse = {
 export type GetThreadResponse = {
   type: "posts/thread/get-result";
   thread: ThreadedPostRecord | null;
+};
+
+export type GetThreadExpandQueueStatusResponse = {
+  type: "thread-expand/status";
+  record: ThreadExpandQueueSummary | null;
+};
+
+export type RetryThreadExpandResponse = {
+  type: "thread-expand/retry";
+  record: ThreadExpandQueueSummary | null;
 };
 
 export type ListPostTagSummariesResponse = {
@@ -401,6 +427,8 @@ export type RuntimeResponse =
   | HasPostResponse
   | ListPostsPageResponse
   | GetThreadResponse
+  | GetThreadExpandQueueStatusResponse
+  | RetryThreadExpandResponse
   | ListPostTagSummariesResponse
   | UserSummariesResponse
   | GetArchiveSummaryResponse

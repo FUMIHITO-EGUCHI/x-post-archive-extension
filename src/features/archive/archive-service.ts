@@ -61,6 +61,11 @@ import {
   getTagByNormalizedName,
   updateTag
 } from "../../db/repositories/tags-repository";
+import {
+  getThreadExpandQueueRecordByRoot,
+  listThreadExpandQueueRecordsByRoots,
+  resetThreadExpandQueueRecordByRoot
+} from "../../db/repositories/thread-repository";
 import { resolveKnownBuiltInTagKey } from "../settings/archive-language";
 import type {
   ArchivePostRecord,
@@ -76,6 +81,7 @@ import type {
   TagRedirectRecord,
   TagSource
 } from "../../types/archive";
+import type { ThreadExpandQueueSummary } from "../../types/thread";
 import type {
   ArchiveTagRedirectSummaryRecord,
   ArchiveSummaryRecord,
@@ -377,6 +383,20 @@ export async function hydrateThreadTree(rootId: string): Promise<ThreadedPostRec
 
   const hydratedPosts = await hydrateArchivePosts(posts);
   return buildThreadedPostTree(rootId, hydratedPosts);
+}
+
+export async function getThreadExpandQueueSummary(
+  threadRootId: string
+): Promise<ThreadExpandQueueSummary | null> {
+  const record = await getThreadExpandQueueRecordByRoot(threadRootId);
+  return record === undefined ? null : toThreadExpandQueueSummary(record);
+}
+
+export async function retryThreadExpandQueue(
+  threadRootId: string
+): Promise<ThreadExpandQueueSummary | null> {
+  const record = await resetThreadExpandQueueRecordByRoot(threadRootId);
+  return record === undefined ? null : toThreadExpandQueueSummary(record);
 }
 
 export async function listArchiveTagSummaries(): Promise<ArchiveTagSummaryRecord[]> {
@@ -1265,6 +1285,7 @@ async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePost
   const media = await listMediaByPostIds(postIds);
   const postTags = await listPostTagsByPostIds(postIds);
   const threadCounts = await resolveThreadPostCounts(posts);
+  const threadExpandQueue = await resolveThreadExpandQueueSummaries(posts);
   const mediaMap = new Map<string, MediaRecord[]>();
   const tagMap = new Map<string, ArchiveTagRecord[]>();
 
@@ -1294,12 +1315,16 @@ async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePost
 
   return posts.map((post) => {
     const threadPostCount = threadCounts.get(post.x_post_id);
+    const threadExpandQueueSummary = threadExpandQueue.get(post.x_post_id);
 
     return {
       ...post,
       media: mediaMap.get(post.x_post_id) ?? [],
       tags: sortArchiveTags(tagMap.get(post.x_post_id) ?? []),
-      ...(threadPostCount === undefined ? {} : { thread_post_count: threadPostCount })
+      ...(threadPostCount === undefined ? {} : { thread_post_count: threadPostCount }),
+      ...(threadExpandQueueSummary === undefined
+        ? {}
+        : { thread_expand_queue: threadExpandQueueSummary })
     };
   });
 }
@@ -1320,6 +1345,34 @@ async function resolveThreadPostCounts(posts: PostRecord[]): Promise<Map<string,
   );
 
   return new Map(entries);
+}
+
+async function resolveThreadExpandQueueSummaries(
+  posts: PostRecord[]
+): Promise<Map<string, ThreadExpandQueueSummary>> {
+  const records = await listThreadExpandQueueRecordsByRoots(posts.map((post) => post.x_post_id));
+
+  return new Map(
+    records.map((record) => [record.thread_root_id, toThreadExpandQueueSummary(record)] as const)
+  );
+}
+
+function toThreadExpandQueueSummary(record: {
+  thread_root_id: string;
+  status: ThreadExpandQueueSummary["status"];
+  retry_count: number;
+  last_error: string | null;
+  next_attempt_at: number;
+  updated_at: number;
+}): ThreadExpandQueueSummary {
+  return {
+    thread_root_id: record.thread_root_id,
+    status: record.status,
+    retry_count: record.retry_count,
+    last_error: record.last_error,
+    next_attempt_at: record.next_attempt_at,
+    updated_at: record.updated_at
+  };
 }
 
 function buildThreadedPostTree(
