@@ -26,7 +26,7 @@ function installFetchCapture(): void {
   const originalFetch = window.fetch.bind(window);
 
   window.fetch = async (...args) => {
-    void captureFetchTemplate(args);
+    captureFetchTemplate(args).catch(() => {});
     return originalFetch(...args);
   };
 }
@@ -59,7 +59,7 @@ function installXhrCapture(): void {
       });
     }
 
-    originalOpen.call(this, method, url, async ?? true, username ?? undefined, password ?? undefined);
+    originalOpen.call(this, method, url, async ?? true, username ?? null, password ?? null);
   };
 
   XMLHttpRequest.prototype.setRequestHeader = function patchedSetRequestHeader(
@@ -93,7 +93,7 @@ function installXhrCapture(): void {
 
 async function captureFetchTemplate(args: Parameters<typeof fetch>): Promise<void> {
   const [input, init] = args;
-  const request = await readFetchRequest(input, init);
+  const request = readFetchRequest(input, init);
 
   if (request === null) {
     return;
@@ -102,33 +102,21 @@ async function captureFetchTemplate(args: Parameters<typeof fetch>): Promise<voi
   captureTemplate(request);
 }
 
-async function readFetchRequest(
+function readFetchRequest(
   input: RequestInfo | URL,
   init: RequestInit | undefined
-): Promise<{
+): {
   url: string;
   method: string;
   headers: Record<string, string>;
   body?: BodyInit | null;
-} | null> {
+} | null {
   if (input instanceof Request) {
-    const headers = mergeHeaders(input.headers, init?.headers);
-    const method = init?.method ?? input.method;
-    let body = init?.body ?? null;
-
-    if (body === null && method.toUpperCase() === "POST") {
-      try {
-        body = await input.clone().text();
-      } catch {
-        body = null;
-      }
-    }
-
     return {
       url: input.url,
-      method,
-      headers,
-      body
+      method: init?.method ?? input.method,
+      headers: mergeHeaders(input.headers, init?.headers),
+      body: init?.body ?? null
     };
   }
 
