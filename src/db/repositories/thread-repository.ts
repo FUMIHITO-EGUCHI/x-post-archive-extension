@@ -73,6 +73,17 @@ export async function listThreadExpandQueueRecordsByStatus(
   return archiveDb.thread_expand_queue.where("status").equals(status).toArray();
 }
 
+export async function resetInProgressThreadExpands(now = Date.now()): Promise<number> {
+  return archiveDb.thread_expand_queue
+    .where("status")
+    .equals("in_progress")
+    .modify({
+      status: "pending",
+      updated_at: now,
+      next_attempt_at: now
+    });
+}
+
 export async function dequeueNextPendingThreadExpand(
   now = Date.now()
 ): Promise<ThreadExpandQueueRecord | undefined> {
