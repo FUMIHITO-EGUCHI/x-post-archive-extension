@@ -28,7 +28,9 @@ X（旧Twitter）投稿を1件ずつ保存・検索する Chrome 拡張（Manife
 - commit message は `#<issue>` を必須（雑務は `[skip-issue]`）。`commit-msg` hook が強制
 - AI 間 handoff は `docs/handoff/README.md` の雛形に従う
 
-詳細は `docs/handoff/README.md` を参照。移行判断の背景は `docs/decisions/0001-task-management-on-github-issues.md`。
+詳細は `docs/handoff/README.md` を参照。AI 実行制御（GitHub Actions ルーティング、`model:` ラベル運用、コスト管理）は `docs/handoff/ai-execution.md`。移行判断の背景は `docs/decisions/0001-task-management-on-github-issues.md`。
+
+- Issue 作成時に `model:` ラベル（`cheap-ok` / `standard` / `strong-required`）を1つ付与。判断材料は `task.yml` の "強いモデルを要する兆候" チェックボックス（Dexie スキーマ変更・認可・state管理 等）
 
 ## ディレクトリ構造
 | パス | 役割 |
