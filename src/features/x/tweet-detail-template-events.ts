@@ -1,6 +1,21 @@
 export const TWEET_DETAIL_TEMPLATE_CAPTURED_EVENT =
   "x-post-archive:tweet-detail-template-captured";
 
+const TWEET_DETAIL_ALLOWED_HOSTS = new Set(["x.com", "twitter.com"]);
+const TWEET_DETAIL_PATH_PATTERN = /^\/i\/api\/graphql\/[^/]+\/TweetDetail$/;
+
+export function isValidTweetDetailUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    return (
+      TWEET_DETAIL_ALLOWED_HOSTS.has(url.hostname) &&
+      TWEET_DETAIL_PATH_PATTERN.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export type TweetDetailTemplateCapturedEventDetail = {
   url: string;
   method: "GET" | "POST";
