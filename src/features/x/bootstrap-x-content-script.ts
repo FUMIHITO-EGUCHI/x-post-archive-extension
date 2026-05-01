@@ -54,6 +54,7 @@ import {
 } from "./inject-save-thread-button";
 import {
   TWEET_DETAIL_TEMPLATE_CAPTURED_EVENT,
+  isValidTweetDetailUrl,
   type TweetDetailTemplateCapturedEventDetail
 } from "./tweet-detail-template-events";
 
@@ -155,6 +156,7 @@ function isTweetDetailTemplateCapturedEventDetail(
 
   return (
     typeof candidate.url === "string" &&
+    isValidTweetDetailUrl(candidate.url) &&
     (candidate.method === "GET" || candidate.method === "POST") &&
     isStringRecord(candidate.headers) &&
     isUnknownRecord(candidate.variables) &&
