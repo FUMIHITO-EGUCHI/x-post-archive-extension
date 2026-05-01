@@ -1,6 +1,7 @@
 import type { SavePostInput } from "../../types/archive";
 import type { TweetDetailClientError, TweetDetailTemplateRecord } from "../../types/thread";
 import { collectTweetRecords, extractThreadFromTweetDetail } from "./extract-thread-from-tweet-detail";
+import { isValidTweetDetailUrl } from "./tweet-detail-template-events";
 
 export type TweetDetailResponse =
   | {
@@ -34,7 +35,7 @@ export async function fetchTweetDetail(
 ): Promise<TweetDetailResponse> {
   const template = await dependencies.getTemplate?.();
 
-  if (template === undefined) {
+  if (template === undefined || !isValidTweetDetailUrl(template.url)) {
     return {
       ok: false,
       error: "template-missing"
@@ -131,17 +132,27 @@ export function buildTweetDetailRequest(
   };
 }
 
+const ALLOWED_TEMPLATE_HEADERS = new Set([
+  "authorization",
+  "x-csrf-token",
+  "x-twitter-active-user",
+  "x-twitter-auth-type",
+  "x-twitter-client-language",
+  "x-client-transaction-id",
+  "x-client-uuid",
+  "accept-language",
+  "content-type"
+]);
+
 function sanitizeTemplateHeaders(headers: Record<string, string>): Record<string, string> {
   const sanitized: Record<string, string> = {};
 
   for (const [rawName, value] of Object.entries(headers)) {
     const name = rawName.toLowerCase();
 
-    if (name === "cookie" || name === "content-length" || name.startsWith(":")) {
-      continue;
+    if (ALLOWED_TEMPLATE_HEADERS.has(name)) {
+      sanitized[name] = value;
     }
-
-    sanitized[name] = value;
   }
 
   return sanitized;
