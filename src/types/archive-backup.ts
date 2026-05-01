@@ -27,4 +27,5 @@ export type ArchiveBackupSummary = {
   tagRedirectCount: number;
   postTagCount: number;
   fileCount: number;
+  fileBytes: number;
 };

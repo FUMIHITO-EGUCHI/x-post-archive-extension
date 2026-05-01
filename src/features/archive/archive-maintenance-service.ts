@@ -707,7 +707,8 @@ export function summarizeBackup(backup: ArchiveBackupManifest): ArchiveBackupSum
     tagCount: backup.data.tags.length,
     tagRedirectCount: backup.data.tag_redirects.length,
     postTagCount: backup.data.post_tags.length,
-    fileCount: backup.data.files.length
+    fileCount: backup.data.files.length,
+    fileBytes: backup.data.files.reduce((total, file) => total + file.byte_size, 0)
   };
 }
 

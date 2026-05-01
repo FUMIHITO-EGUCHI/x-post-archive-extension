@@ -610,12 +610,27 @@ function formatBackupSummary(summary: ArchiveBackupSummary, language: ArchiveLan
     `${formatCount(summary.postCount, language)} ${language === "ja" ? "投稿" : "posts"}`,
     `${formatCount(summary.mediaCount, language)} ${language === "ja" ? "メディア" : "media"}`,
     `${formatCount(summary.tagCount, language)} ${language === "ja" ? "タグ" : "tags"}`,
-    `${formatCount(summary.fileCount, language)} ${language === "ja" ? "ファイル" : "files"}`
+    `${formatCount(summary.fileCount, language)} ${language === "ja" ? "ファイル" : "files"}`,
+    `${formatBytes(summary.fileBytes, language)} ${language === "ja" ? "ファイル容量" : "file payload"}`
   ].join(", ");
 }
 
 function formatCount(value: number, language: ArchiveLanguage): string {
   return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
+}
+
+function formatBytes(value: number, language: ArchiveLanguage): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let currentValue = value;
+  let unitIndex = 0;
+
+  while (currentValue >= 1024 && unitIndex < units.length - 1) {
+    currentValue /= 1024;
+    unitIndex += 1;
+  }
+
+  const digits = currentValue >= 100 || unitIndex === 0 ? 0 : 1;
+  return `${currentValue.toFixed(digits)} ${units[unitIndex]}`;
 }
 
 function ProgressMessage({ progress }: { progress: ArchiveTransferProgress }) {

@@ -332,11 +332,11 @@ export function SettingsBasicPanel({
 
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
-          <h3>{isJapanese ? "ストレージ使用量" : "Storage usage"}</h3>
+          <h3>{isJapanese ? "ストレージ見積もり" : "Storage estimates"}</h3>
           <p>
             {isJapanese
-              ? "この拡張機能がブラウザ内で使っている保存容量の目安です。"
-              : "See roughly how much browser storage this extension is using."}
+              ? "ブラウザの quota API による推定値と、この拡張機能が記録している保存済みメディア容量を分けて表示します。"
+              : "Compare the browser quota API estimate with the archived media bytes recorded by this extension."}
           </p>
         </div>
         {storageEstimate.status === "unsupported" ? (
@@ -348,11 +348,11 @@ export function SettingsBasicPanel({
         ) : (
           <dl className="viewer-settings-metric-list">
             <div className="viewer-settings-metric">
-              <dt>{isJapanese ? "使用中" : "Used"}</dt>
+              <dt>{isJapanese ? "ブラウザ推定使用量" : "Browser-estimated usage"}</dt>
               <dd>{formatBytes(storageEstimate.usage, language)}</dd>
             </div>
             <div className="viewer-settings-metric">
-              <dt>{isJapanese ? "空き" : "Available"}</dt>
+              <dt>{isJapanese ? "ブラウザ推定空き容量" : "Browser-estimated available"}</dt>
               <dd>{formatBytes(storageEstimate.available, language)}</dd>
             </div>
             <div className="viewer-settings-metric">
@@ -360,10 +360,22 @@ export function SettingsBasicPanel({
               <dd>{formatBytes(storageEstimate.quota, language)}</dd>
             </div>
             <div className="viewer-settings-metric">
-              <dt>{isJapanese ? "保存済みメディア総量" : "Saved media total"}</dt>
+              <dt>{isJapanese ? "保存済みメディア合計" : "Saved media bytes"}</dt>
               <dd>{formatBytes(archiveSummary.mediaBytes, language)}</dd>
             </div>
           </dl>
+        )}
+        <p className="viewer-settings-inline-note">
+          {isJapanese
+            ? "ブラウザ推定使用量は navigator.storage.estimate() の値です。保存済みメディア合計は IndexedDB の media.byte_size 合算です。バックアップ ZIP には、これに加えて manifest とプレビュー画像も含まれます。"
+            : "Browser-estimated usage comes from navigator.storage.estimate(). Saved media bytes are the sum of IndexedDB media.byte_size values. Backup ZIPs also include the manifest and preview images."}
+        </p>
+        {shouldShowStorageMismatchNote(storageEstimate.usage, archiveSummary.mediaBytes) && (
+          <p className="viewer-message viewer-message-warning">
+            {isJapanese
+              ? "ブラウザ推定使用量が保存済みメディア合計より小さいため、quota API が OPFS 実ファイル量を過小表示している可能性があります。バックアップ容量の確認には、バックアップ完了時のファイル容量を参照してください。"
+              : "Browser-estimated usage is lower than saved media bytes, so the quota API may be under-reporting OPFS file usage. Use the file payload shown after backup export when checking backup size."}
+          </p>
         )}
       </section>
 
@@ -438,6 +450,14 @@ function formatBytes(value: number | null, language: ArchiveLanguage): string {
 
 function formatCount(value: number, language: ArchiveLanguage): string {
   return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
+}
+
+function shouldShowStorageMismatchNote(usage: number | null, mediaBytes: number): boolean {
+  if (usage === null || !Number.isFinite(usage) || mediaBytes <= 0) {
+    return false;
+  }
+
+  return usage < mediaBytes;
 }
 
 function handleOptionGroupKeyDown<T extends string>(
