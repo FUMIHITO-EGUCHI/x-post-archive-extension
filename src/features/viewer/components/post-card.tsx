@@ -8,6 +8,7 @@ import type { ArchiveTagSummaryRecord } from "../../../types/viewer";
 import { createLogger } from "../../logging/logger";
 import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
 import type { ArchiveLanguage } from "../../settings/archive-language";
+import { safeHref } from "../utils/safe-href";
 import { TagPickerOverlay } from "./tag-picker-overlay";
 
 const logger = createLogger("viewer");
@@ -52,6 +53,7 @@ export function PostCard({
   onRemoveTag
 }: PostCardProps) {
   const threadPostCount = post.thread_post_count ?? 1;
+  const postHref = safeHref(post.post_url);
 
   function openPostImage(media: MediaRecord): void {
     if (media.media_type === "video") {
@@ -261,9 +263,13 @@ export function PostCard({
         </div>
       </div>
 
-      <a className="post-link" href={post.post_url} target="_blank" rel="noreferrer">
-        {language === "ja" ? "元投稿を開く" : "Open original post"}
-      </a>
+      {postHref === undefined ? (
+        <span className="post-link">{language === "ja" ? "元投稿を開く" : "Open original post"}</span>
+      ) : (
+        <a className="post-link" href={postHref} target="_blank" rel="noreferrer">
+          {language === "ja" ? "元投稿を開く" : "Open original post"}
+        </a>
+      )}
     </article>
   );
 }
@@ -279,6 +285,8 @@ function QuotedPostCard({
   onOpenMedia: (post: ArchivePostRecord, media: MediaRecord) => void;
   onOpenVideo: (media: MediaRecord) => void;
 }) {
+  const postHref = safeHref(post.post_url);
+
   return (
     <section
       className="quoted-post-card"
@@ -316,9 +324,15 @@ function QuotedPostCard({
         </div>
       )}
 
-      <a className="quoted-post-link" href={post.post_url} target="_blank" rel="noreferrer">
-        {language === "ja" ? "引用元を開く" : "Open quoted post"}
-      </a>
+      {postHref === undefined ? (
+        <span className="quoted-post-link">
+          {language === "ja" ? "引用元を開く" : "Open quoted post"}
+        </span>
+      ) : (
+        <a className="quoted-post-link" href={postHref} target="_blank" rel="noreferrer">
+          {language === "ja" ? "引用元を開く" : "Open quoted post"}
+        </a>
+      )}
     </section>
   );
 }
