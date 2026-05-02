@@ -33,7 +33,6 @@ import {
   getTweetDetailTemplate,
   setTweetDetailTemplate
 } from "../../db/repositories/thread-repository";
-import { fetchTweetDetail } from "../x/tweet-detail-client";
 import type {
   AddPostTagByNameResponse,
   BulkAssignTagApplyBatchResponse,
@@ -43,7 +42,6 @@ import type {
   DeletePostMessage,
   DeletePostResponse,
   DebugLogMessage,
-  FetchTweetDetailResponse,
   GetArchiveSummaryResponse,
   GetThreadResponse,
   HasPostResponse,
@@ -602,42 +600,6 @@ export async function handleRuntimeMessage(
       };
       return response;
     }
-
-    case "tweet-detail/fetch": {
-      const result = await fetchTweetDetail(message.focalTweetId, {
-        getTemplate: getTweetDetailTemplate
-      });
-
-      logger.info("tweet_detail.fetch.completed", {
-        requestId,
-        context: {
-          type: message.type,
-          focalTweetId: message.focalTweetId,
-          ok: result.ok,
-          tweetCount: result.ok ? result.tweetCount : null,
-          chainPostCount: result.ok ? result.posts.length : null,
-          error: result.ok ? null : result.error,
-          status: result.ok ? null : result.status ?? null
-        }
-      });
-
-      const response: FetchTweetDetailResponse = result.ok
-        ? {
-            type: "tweet-detail/fetch-result",
-            ok: true,
-            focalTweetId: result.focalTweetId,
-            posts: result.posts,
-            tweetCount: result.tweetCount
-          }
-        : {
-            type: "tweet-detail/fetch-result",
-            ok: false,
-            error: result.error,
-            ...(result.status === undefined ? {} : { status: result.status }),
-            ...(result.message === undefined ? {} : { message: result.message })
-          };
-      return response;
-    }
   }
 }
 
@@ -674,8 +636,7 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "archive/reset" ||
     candidate.type === "logs/clear" ||
     candidate.type === "debug/log" ||
-    candidate.type === "tweet-detail-template/set" ||
-    candidate.type === "tweet-detail/fetch"
+    candidate.type === "tweet-detail-template/set"
   );
 }
 
