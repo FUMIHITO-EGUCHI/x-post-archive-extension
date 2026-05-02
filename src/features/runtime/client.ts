@@ -96,6 +96,23 @@ export async function requestSetTweetDetailTemplate(
   return response;
 }
 
+export async function requestThreadExpandAuthStaleCheck(): Promise<{
+  hasAuthStaleItems: boolean;
+  count: number;
+}> {
+  const response = await sendMessage({
+    type: "thread-expand/auth-stale-check"
+  }, DEFAULT_RUNTIME_TIMEOUT_MS);
+
+  if (response.type !== "thread-expand/auth-stale-check-result") {
+    throw new Error("Unexpected runtime response for thread expand auth stale check.");
+  }
+
+  return {
+    hasAuthStaleItems: response.hasAuthStaleItems,
+    count: response.count
+  };
+}
 export async function requestHasPost(xPostId: string): Promise<boolean> {
   const response = await sendMessage({
     type: "posts/has",

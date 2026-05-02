@@ -169,6 +169,9 @@ export type SetTweetDetailTemplateMessage = {
   template: Omit<TweetDetailTemplateRecord, "id">;
 };
 
+export type ThreadExpandAuthStaleCheckMessage = {
+  type: "thread-expand/auth-stale-check";
+};
 export type RuntimeMessage =
   | SavePostMessage
   | SavePostsBatchMessage
@@ -196,7 +199,8 @@ export type RuntimeMessage =
   | ResetArchiveMessage
   | ClearLogsMessage
   | DebugLogMessage
-  | SetTweetDetailTemplateMessage;
+  | SetTweetDetailTemplateMessage
+  | ThreadExpandAuthStaleCheckMessage;
 
 export type SavePostResponse = {
   type: "posts/save-result";
@@ -372,6 +376,11 @@ export type SetTweetDetailTemplateResponse = {
   capturedAt: number;
 };
 
+export type ThreadExpandAuthStaleCheckResponse = {
+  type: "thread-expand/auth-stale-check-result";
+  hasAuthStaleItems: boolean;
+  count: number;
+};
 export type RuntimeResponse =
   | SavePostResponse
   | SavePostsBatchResponse
@@ -399,4 +408,5 @@ export type RuntimeResponse =
   | ResetArchiveResponse
   | ClearLogsResponse
   | SetTweetDetailTemplateResponse
+  | ThreadExpandAuthStaleCheckResponse
   | RuntimeErrorResponse;

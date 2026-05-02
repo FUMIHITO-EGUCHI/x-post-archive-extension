@@ -1285,6 +1285,32 @@ body {
   color: #8a5a00;
 }
 
+.template-stale-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.template-stale-notice-body {
+  display: grid;
+  gap: 4px;
+}
+
+.template-stale-notice-title,
+.template-stale-notice-text {
+  margin: 0;
+}
+
+.template-stale-notice-title {
+  font-weight: 700;
+}
+
+.template-stale-notice-dismiss {
+  flex-shrink: 0;
+}
+
 .viewer-settings-action-row {
   display: flex;
   flex-wrap: wrap;

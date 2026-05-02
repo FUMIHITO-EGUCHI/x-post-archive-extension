@@ -46,6 +46,7 @@ import {
   formatEmptyArchiveMessage,
   normalizeDateInputValue
 } from "./viewer-formatters";
+import { TemplateStaleNotice } from "./template-stale-notice";
 
 type ViewerScreen = "archive" | "settings";
 const DEFAULT_PAGE_SIZE = 50;
@@ -683,6 +684,8 @@ export function ViewerApp() {
 
           <section className="viewer-list-panel" ref={archiveSectionRef}>
             <h2 className="viewer-visually-hidden">{language === "ja" ? "一覧" : "Archive"}</h2>
+
+            <TemplateStaleNotice language={language} />
 
             {status === "loading" && (
               <p className="viewer-message">
