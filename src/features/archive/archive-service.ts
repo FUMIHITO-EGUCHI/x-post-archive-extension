@@ -28,6 +28,7 @@ import {
   listRootOrSinglePostIds,
   getPostsByIds,
   hasPost,
+  buildPostPageCursor,
   listPostsSliceBySort,
   updatePostFields
 } from "../../db/repositories/posts-repository";
@@ -362,17 +363,15 @@ export async function listArchivePostsPage(
             normalizedLimit,
             normalizeRandomSeed(input.randomSeed)
           ),
-          nextCursor: null
+          nextCursor: null as PostPageCursor | null
         }
-      : {
-          posts: await listFilteredPostsPage(
-            input,
-            visiblePostIds,
-            normalizedOffset,
-            normalizedLimit
-          ),
-          nextCursor: null
-        };
+      : await listFilteredPostsPage(
+          input,
+          visiblePostIds,
+          normalizedOffset,
+          normalizedLimit,
+          resolveKeysetCursor(input)
+        );
 
   return {
     posts: await hydrateArchivePosts(pageResult.posts),
@@ -381,6 +380,22 @@ export async function listArchivePostsPage(
     nextOffset: normalizedOffset + pageResult.posts.length,
     nextCursor: pageResult.nextCursor
   };
+}
+
+function resolveKeysetCursor(input: ListPostsPageInput): PostPageCursor | null {
+  // Why: a stale cursor from a different sort/direction would index into the wrong compound index
+  // and silently return mis-ordered results. Drop it on mismatch — the caller falls back to offset.
+  const cursor = input.cursor ?? null;
+
+  if (cursor === null || input.sortField === "random") {
+    return null;
+  }
+
+  if (cursor.sortField !== input.sortField || cursor.sortDirection !== input.sortDirection) {
+    return null;
+  }
+
+  return cursor;
 }
 
 export async function hydrateThreadTree(rootId: string): Promise<ThreadedPostRecord | null> {
@@ -1436,34 +1451,43 @@ async function listFilteredPostsPage(
   input: ListPostsPageInput,
   matchingPostIds: Set<string>,
   offset: number,
-  limit: number
-): Promise<PostRecord[]> {
+  limit: number,
+  startCursor: PostPageCursor | null
+): Promise<{ posts: PostRecord[]; nextCursor: PostPageCursor | null }> {
+  if (input.sortField === "random") {
+    throw new Error("listFilteredPostsPage cannot be used with random sort.");
+  }
+
+  const sortField = input.sortField;
   const results: PostRecord[] = [];
   const scanChunkSize = Math.max(limit * 3, 100);
+  // When startCursor is provided we resume from where the client left off, so offset is irrelevant.
+  // When it's null we still need the legacy offset path (e.g. filter changes that reset the cursor
+  // but keep a non-zero scroll position).
+  const offsetToSkip = startCursor === null ? offset : 0;
   let skippedMatches = 0;
-  let scanOffset = 0;
+  let cursor: PostPageCursor | null = startCursor;
 
   while (results.length < limit) {
-    const chunkResult = await listPostsSliceBySort(
-      input.sortField,
+    const chunk = await listPostsSliceBySort(
+      sortField,
       input.sortDirection,
-      scanOffset,
+      cursor,
       scanChunkSize
     );
-    const chunk = chunkResult.posts;
 
     if (chunk.length === 0) {
       break;
     }
 
-    scanOffset += chunk.length;
+    cursor = buildPostPageCursor(chunk[chunk.length - 1], sortField, input.sortDirection);
 
     for (const post of chunk) {
       if (!matchingPostIds.has(post.x_post_id)) {
         continue;
       }
 
-      if (skippedMatches < offset) {
+      if (skippedMatches < offsetToSkip) {
         skippedMatches += 1;
         continue;
       }
@@ -1476,7 +1500,15 @@ async function listFilteredPostsPage(
     }
   }
 
-  return results;
+  // results.length < limit means the underlying scan exhausted the dataset, so there is no
+  // next page. Returning null avoids the ambiguity of a non-null cursor that would lead the
+  // client into an empty follow-up query.
+  const nextCursor =
+    results.length < limit
+      ? null
+      : buildPostPageCursor(results[results.length - 1], sortField, input.sortDirection);
+
+  return { posts: results, nextCursor };
 }
 
 export async function refetchArchivePost(
