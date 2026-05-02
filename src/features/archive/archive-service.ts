@@ -1500,11 +1500,13 @@ async function listFilteredPostsPage(
     }
   }
 
-  const nextCursor = buildPostPageCursor(
-    results[results.length - 1],
-    sortField,
-    input.sortDirection
-  );
+  // results.length < limit means the underlying scan exhausted the dataset, so there is no
+  // next page. Returning null avoids the ambiguity of a non-null cursor that would lead the
+  // client into an empty follow-up query.
+  const nextCursor =
+    results.length < limit
+      ? null
+      : buildPostPageCursor(results[results.length - 1], sortField, input.sortDirection);
 
   return { posts: results, nextCursor };
 }
