@@ -1,7 +1,12 @@
 import { archiveDb } from "../archive-database";
 import Dexie from "dexie";
 import type { PostRecord } from "../../types/archive";
-import type { PostPageCursor, PostSortField, SortDirection } from "../../types/viewer";
+import type {
+  KeysetPostSortField,
+  PostPageCursor,
+  PostSortField,
+  SortDirection
+} from "../../types/viewer";
 
 export async function getPost(xPostId: string): Promise<PostRecord | undefined> {
   return archiveDb.posts.get(xPostId);
@@ -126,62 +131,46 @@ export async function listPostIdsWithZeroEngagementCounts(): Promise<string[]> {
 }
 
 export async function listPostsSliceBySort(
-  sortField: PostSortField,
+  sortField: KeysetPostSortField,
   sortDirection: SortDirection,
-  offset: number,
-  limit: number,
-  cursor: PostPageCursor | null = null
-): Promise<{
-  posts: PostRecord[];
-  nextCursor: PostPageCursor | null;
-}> {
-  if (sortField === "random") {
-    throw new Error("Random ordering requires a viewer-provided seed and should be resolved upstream.");
-  }
-
-  const canUseCursor =
+  cursor: PostPageCursor | null,
+  limit: number
+): Promise<PostRecord[]> {
+  const compoundIndex = `[${sortField}+x_post_id]`;
+  const cursorMatchesQuery =
     cursor !== null &&
     cursor.sortField === sortField &&
-    cursor.sortDirection === sortDirection &&
-    (sortField === "saved_at" || sortField === "posted_at");
+    cursor.sortDirection === sortDirection;
+  const cursorKey: [number, string] | null = cursorMatchesQuery
+    ? [cursor.value, cursor.xPostId]
+    : null;
 
-  const ordered = canUseCursor
-    ? sortDirection === "desc"
-      ? archiveDb.posts.where(sortField).below(cursor.value).reverse()
-      : archiveDb.posts.where(sortField).above(cursor.value)
-    : sortDirection === "desc"
-      ? archiveDb.posts.orderBy(sortField).reverse().offset(offset)
-      : archiveDb.posts.orderBy(sortField).offset(offset);
+  const collection =
+    cursorKey === null
+      ? sortDirection === "desc"
+        ? archiveDb.posts.orderBy(compoundIndex).reverse()
+        : archiveDb.posts.orderBy(compoundIndex)
+      : sortDirection === "desc"
+        ? archiveDb.posts.where(compoundIndex).below(cursorKey).reverse()
+        : archiveDb.posts.where(compoundIndex).above(cursorKey);
 
-  const posts = await ordered.limit(limit).toArray();
-
-  return {
-    posts,
-    nextCursor: buildPostPageCursor(posts, sortField, sortDirection, limit)
-  };
+  return collection.limit(limit).toArray();
 }
 
-function buildPostPageCursor(
-  posts: PostRecord[],
+export function buildPostPageCursor(
+  post: PostRecord | undefined,
   sortField: PostSortField,
-  sortDirection: SortDirection,
-  limit: number
+  sortDirection: SortDirection
 ): PostPageCursor | null {
-  if (posts.length < limit || (sortField !== "saved_at" && sortField !== "posted_at")) {
-    return null;
-  }
-
-  const lastPost = posts[posts.length - 1];
-
-  if (lastPost === undefined) {
+  if (post === undefined || sortField === "random") {
     return null;
   }
 
   return {
     sortField,
     sortDirection,
-    value: lastPost[sortField],
-    xPostId: lastPost.x_post_id
+    value: post[sortField],
+    xPostId: post.x_post_id
   };
 }
 

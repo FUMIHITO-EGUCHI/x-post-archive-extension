@@ -11,8 +11,10 @@ export type PostSortField =
 export type SortDirection = "desc" | "asc";
 export type DateFilterTarget = "saved_at" | "posted_at";
 
+export type KeysetPostSortField = Exclude<PostSortField, "random">;
+
 export type PostPageCursor = {
-  sortField: "saved_at" | "posted_at";
+  sortField: KeysetPostSortField;
   sortDirection: SortDirection;
   value: number;
   xPostId: string;
