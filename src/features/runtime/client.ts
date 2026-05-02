@@ -8,7 +8,6 @@ import type {
   DeleteTagRedirectResponse,
   DeletePostResponse,
   DebugLogMessage,
-  FetchTweetDetailResponse,
   GetArchiveSummaryResponse,
   GetThreadResponse,
   HasPostResponse,
@@ -92,21 +91,6 @@ export async function requestSetTweetDetailTemplate(
 
   if (response.type !== "tweet-detail-template/set-result") {
     throw new Error("Unexpected runtime response for TweetDetail template save request.");
-  }
-
-  return response;
-}
-
-export async function requestFetchTweetDetail(
-  focalTweetId: string
-): Promise<FetchTweetDetailResponse> {
-  const response = await sendMessage({
-    type: "tweet-detail/fetch",
-    focalTweetId
-  }, DEFAULT_RUNTIME_TIMEOUT_MS);
-
-  if (response.type !== "tweet-detail/fetch-result") {
-    throw new Error("Unexpected runtime response for TweetDetail fetch request.");
   }
 
   return response;
