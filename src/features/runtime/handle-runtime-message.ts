@@ -30,6 +30,8 @@ import {
 } from "../refetch/refetch-coordinator";
 import { clearLogRecords } from "../../db/repositories/logs-repository";
 import {
+  countThreadExpandAuthStaleRecords,
+  resetThreadExpandAuthStaleRecords,
   getTweetDetailTemplate,
   setTweetDetailTemplate
 } from "../../db/repositories/thread-repository";
@@ -64,7 +66,8 @@ import type {
   SavePostResponse,
   SavePostsBatchResponse,
   SaveThreadResponse,
-  SetTweetDetailTemplateResponse
+  SetTweetDetailTemplateResponse,
+  ThreadExpandAuthStaleCheckResponse
 } from "../../types/runtime";
 import { createLogger, createRequestId } from "../logging/logger";
 
@@ -579,6 +582,7 @@ export async function handleRuntimeMessage(
 
     case "tweet-detail-template/set": {
       const template = await setTweetDetailTemplate(message.template);
+      const resetCount = await resetThreadExpandAuthStaleRecords();
 
       logger.info("tweet_detail_template.set.completed", {
         requestId,
@@ -586,6 +590,7 @@ export async function handleRuntimeMessage(
           type: message.type,
           method: template.method,
           capturedAt: template.captured_at,
+          resetAuthStaleCount: resetCount,
           hasAuthorization: Object.prototype.hasOwnProperty.call(
             template.headers,
             "authorization"
@@ -597,6 +602,19 @@ export async function handleRuntimeMessage(
         type: "tweet-detail-template/set-result",
         ok: true,
         capturedAt: template.captured_at
+      };
+      if (resetCount > 0) {
+        void resumeThreadExpandProcessing();
+      }
+      return response;
+    }
+
+    case "thread-expand/auth-stale-check": {
+      const count = await countThreadExpandAuthStaleRecords();
+      const response: ThreadExpandAuthStaleCheckResponse = {
+        type: "thread-expand/auth-stale-check-result",
+        hasAuthStaleItems: count > 0,
+        count
       };
       return response;
     }
@@ -636,7 +654,8 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "archive/reset" ||
     candidate.type === "logs/clear" ||
     candidate.type === "debug/log" ||
-    candidate.type === "tweet-detail-template/set"
+    candidate.type === "tweet-detail-template/set" ||
+    candidate.type === "thread-expand/auth-stale-check"
   );
 }
 
