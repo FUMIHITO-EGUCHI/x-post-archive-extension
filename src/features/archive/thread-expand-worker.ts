@@ -5,7 +5,8 @@ import {
   listThreadExpandQueueRecordsByStatus,
   markThreadExpandFailed,
   markThreadExpandInProgress,
-  markThreadExpandPendingRetry
+  markThreadExpandPendingRetry,
+  resetInProgressThreadExpands
 } from "../../db/repositories/thread-repository";
 import type { ThreadExpandQueueRecord } from "../../types/thread";
 import { createLogger } from "../logging/logger";
@@ -34,6 +35,7 @@ export async function resumeThreadExpandProcessing(): Promise<void> {
   }
 
   clearScheduledResume();
+  await recoverInterruptedThreadExpandRecords();
 
   const nextRecord = await dequeueNextPendingThreadExpand();
 
@@ -49,6 +51,21 @@ export async function resumeThreadExpandProcessing(): Promise<void> {
   });
 
   return processingPromise;
+}
+
+async function recoverInterruptedThreadExpandRecords(): Promise<void> {
+  const recoveredCount = await resetInProgressThreadExpands();
+
+  if (recoveredCount === 0) {
+    return;
+  }
+
+  logger.warn("thread_expand.in_progress_recovered", {
+    message: "Recovered interrupted thread expansion queue records.",
+    context: {
+      recoveredCount
+    }
+  });
 }
 
 export function getThreadExpandBackoffMs(retryCount: number): number | null {
