@@ -10,6 +10,12 @@ import {
 import type { ThreadExpandQueueRecord } from "../../types/thread";
 import { createLogger } from "../logging/logger";
 import { saveThread } from "./archive-service";
+import {
+  getChromeAlarmsApi,
+  THREAD_EXPAND_RESUME_ALARM,
+  THREAD_EXPAND_RESUME_ALARM_PERIOD_MINUTES,
+  type ChromeAlarm
+} from "./chrome-alarms";
 import { fetchTweetDetail } from "../x/tweet-detail-client";
 
 const THREAD_EXPAND_THROTTLE_MS = 5_000;
@@ -36,6 +42,8 @@ export async function resumeThreadExpandProcessing(): Promise<void> {
     return;
   }
 
+  await ensureThreadExpandResumeAlarm();
+
   processingPromise = runThreadExpandLoop().finally(() => {
     processingPromise = null;
   });
@@ -45,6 +53,10 @@ export async function resumeThreadExpandProcessing(): Promise<void> {
 
 export function getThreadExpandBackoffMs(retryCount: number): number | null {
   return THREAD_EXPAND_BACKOFF_MS[retryCount] ?? null;
+}
+
+export function isThreadExpandResumeAlarm(alarm: ChromeAlarm): boolean {
+  return alarm.name === THREAD_EXPAND_RESUME_ALARM;
 }
 
 async function runThreadExpandLoop(): Promise<void> {
@@ -182,8 +194,11 @@ async function scheduleNextPendingResume(): Promise<void> {
   }, null);
 
   if (nextAttemptAt === null) {
+    await clearThreadExpandResumeAlarm();
     return;
   }
+
+  await ensureThreadExpandResumeAlarm();
 
   const delayMs = Math.max(0, nextAttemptAt - Date.now());
   scheduledResumeTimer = globalThis.setTimeout(() => {
@@ -205,4 +220,26 @@ function wait(durationMs: number): Promise<void> {
   return new Promise((resolve) => {
     globalThis.setTimeout(resolve, durationMs);
   });
+}
+
+async function ensureThreadExpandResumeAlarm(): Promise<void> {
+  const alarmsApi = getChromeAlarmsApi();
+
+  if (alarmsApi === null) {
+    return;
+  }
+
+  await alarmsApi.create(THREAD_EXPAND_RESUME_ALARM, {
+    periodInMinutes: THREAD_EXPAND_RESUME_ALARM_PERIOD_MINUTES
+  });
+}
+
+async function clearThreadExpandResumeAlarm(): Promise<void> {
+  const alarmsApi = getChromeAlarmsApi();
+
+  if (alarmsApi === null) {
+    return;
+  }
+
+  await alarmsApi.clear(THREAD_EXPAND_RESUME_ALARM);
 }
