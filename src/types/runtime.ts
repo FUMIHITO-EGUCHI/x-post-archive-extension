@@ -10,7 +10,7 @@ import type {
   RefetchQueuePriority,
   RefetchStatusRecord
 } from "./refetch";
-import type { TweetDetailClientError, TweetDetailTemplateRecord } from "./thread";
+import type { TweetDetailTemplateRecord } from "./thread";
 import type {
   ArchiveSummaryRecord,
   ArchiveTagRedirectSummaryRecord,
@@ -169,11 +169,6 @@ export type SetTweetDetailTemplateMessage = {
   template: Omit<TweetDetailTemplateRecord, "id">;
 };
 
-export type FetchTweetDetailMessage = {
-  type: "tweet-detail/fetch";
-  focalTweetId: string;
-};
-
 export type RuntimeMessage =
   | SavePostMessage
   | SavePostsBatchMessage
@@ -201,8 +196,7 @@ export type RuntimeMessage =
   | ResetArchiveMessage
   | ClearLogsMessage
   | DebugLogMessage
-  | SetTweetDetailTemplateMessage
-  | FetchTweetDetailMessage;
+  | SetTweetDetailTemplateMessage;
 
 export type SavePostResponse = {
   type: "posts/save-result";
@@ -378,22 +372,6 @@ export type SetTweetDetailTemplateResponse = {
   capturedAt: number;
 };
 
-export type FetchTweetDetailResponse =
-  | {
-      type: "tweet-detail/fetch-result";
-      ok: true;
-      focalTweetId: string;
-      posts: SavePostInput[];
-      tweetCount: number;
-    }
-  | {
-      type: "tweet-detail/fetch-result";
-      ok: false;
-      error: TweetDetailClientError;
-      status?: number;
-      message?: string;
-    };
-
 export type RuntimeResponse =
   | SavePostResponse
   | SavePostsBatchResponse
@@ -421,5 +399,4 @@ export type RuntimeResponse =
   | ResetArchiveResponse
   | ClearLogsResponse
   | SetTweetDetailTemplateResponse
-  | FetchTweetDetailResponse
   | RuntimeErrorResponse;
