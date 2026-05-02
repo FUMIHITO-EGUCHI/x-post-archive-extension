@@ -168,6 +168,34 @@ export async function clearTweetDetailTemplate(): Promise<void> {
   await archiveDb.tweet_detail_template.delete("current");
 }
 
+export async function countThreadExpandAuthStaleRecords(): Promise<number> {
+  return archiveDb.thread_expand_queue
+    .filter(
+      (record) =>
+        record.last_error === "auth-stale" &&
+        (record.status === "failed" || record.status === "pending")
+    )
+    .count();
+}
+
+export async function resetThreadExpandAuthStaleRecords(
+  now = Date.now()
+): Promise<number> {
+  return archiveDb.thread_expand_queue
+    .filter(
+      (record) =>
+        record.last_error === "auth-stale" &&
+        (record.status === "failed" || record.status === "pending")
+    )
+    .modify({
+      status: "pending",
+      retry_count: 0,
+      last_error: null,
+      updated_at: now,
+      next_attempt_at: now
+    });
+}
+
 function compareThreadExpandQueueRecords(
   left: ThreadExpandQueueRecord,
   right: ThreadExpandQueueRecord
