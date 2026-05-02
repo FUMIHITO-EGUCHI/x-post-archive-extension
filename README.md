@@ -1,24 +1,35 @@
 # X Post Archive Extension
 
-Version `0.16.0`
+Version `0.20.0`
 
 X の投稿を 1 件ずつ保存して、あとから一覧で見返すための Chrome 拡張です。
-初版では保存、一覧、削除だけに絞っています。
+保存・検索・閲覧に集中し、X クローンではなく個人用アーカイブ兼検索ツールとして機能します。
 
 ## Stack
 
-- WXT
-- TypeScript
-- React
-- IndexedDB
-- Dexie
+- WXT 0.20.x + Chrome Extension Manifest V3
+- TypeScript 5.9.x (strict)
+- React 19.1.x（viewer UI のみ）
+- IndexedDB / Dexie 4.2.x
+- @zip.js/zip.js（バックアップ・復元）
 
-## Current MVP
+## Features
 
-- X の投稿ごとに保存ボタンを表示
-- `x_post_id`, `x_username`, `post_text`, `post_url`, `saved_at` を保存
-- viewer で保存済み投稿を新しい順に表示
-- viewer から投稿を削除
+### 保存
+- X 各投稿に保存ボタンを表示し、本文・著者・投稿日時・添付メディアを保存
+- 連投（OP の self-reply chain）をスレッド単位で保存。likes import や通常保存中も自動で続編まで揃える
+- 引用元投稿の ID とパーマリンクを保存
+
+### 閲覧（viewer）
+- 保存日 / 投稿日 / リプライ・リポスト・いいね数 / ランダム順でソート
+- タグ・ユーザー・期間・キーワードでフィルター
+- スレッドはルート投稿に集約し、インライン展開で全コマを縦に表示
+- ライトボックスで画像・動画を全画面表示（i/N、Xコマ目/全Nコマ表示）
+- 設定パネルで表示挙動とアクセシビリティを調整
+
+### バックアップ
+- アーカイブ全体を zip でエクスポート
+- 復元はマージ型（既存レコードを破壊しない）
 
 ## Commands
 
