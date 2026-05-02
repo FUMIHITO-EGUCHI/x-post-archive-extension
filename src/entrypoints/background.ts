@@ -3,10 +3,13 @@ import {
   handleRuntimeMessage
 } from "../features/runtime/handle-runtime-message";
 import { resumePendingMediaPersistence } from "../features/archive/archive-service";
-import { resumeThreadExpandProcessing } from "../features/archive/thread-expand-worker";
+import { getChromeAlarmsApi } from "../features/archive/chrome-alarms";
+import {
+  isThreadExpandResumeAlarm,
+  resumeThreadExpandProcessing
+} from "../features/archive/thread-expand-worker";
 import { resumeRefetchProcessing } from "../features/refetch/refetch-coordinator";
 import { createLogger } from "../features/logging/logger";
-
 const logger = createLogger("background");
 
 export default defineBackground({
@@ -25,6 +28,20 @@ export default defineBackground({
       logger.info("extension.startup");
       void resumePendingMediaPersistence();
       void resumeRefetchProcessing();
+      void resumeThreadExpandProcessing();
+    });
+
+    getChromeAlarmsApi()?.onAlarm.addListener((alarm) => {
+      if (!isThreadExpandResumeAlarm(alarm)) {
+        return;
+      }
+
+      logger.debug("thread_expand.alarm.fired", {
+        context: {
+          alarmName: alarm.name
+        }
+      });
+
       void resumeThreadExpandProcessing();
     });
 
