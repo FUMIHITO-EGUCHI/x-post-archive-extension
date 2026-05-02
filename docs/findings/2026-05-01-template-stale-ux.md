@@ -31,8 +31,11 @@ status: open
 `handle-runtime-message.ts` の `tweet-detail-template/set` ハンドラで、テンプレート保存後に:
 ```ts
 await db.thread_expand_queue
-  .where("last_error").equals("auth-stale")
-  .and(r => r.status === "failed" || r.status === "pending")
+  .filter(
+    r =>
+      r.last_error === "auth-stale" &&
+      (r.status === "failed" || r.status === "pending")
+  )
   .modify({
     status: "pending",
     retry_count: 0,
@@ -47,7 +50,10 @@ await db.thread_expand_queue
 新 runtime message `"thread-expand/auth-stale-check"`:
 - Request: `{ type: "thread-expand/auth-stale-check" }`
 - Response: `{ type: "thread-expand/auth-stale-check-result", hasAuthStaleItems: boolean }`
-- 実装: `db.thread_expand_queue.where("last_error").equals("auth-stale").count() > 0`
+- 実装:
+  ```ts
+  (await db.thread_expand_queue.filter(r => r.last_error === "auth-stale").count()) > 0
+  ```
 
 新コンポーネント `<TemplateStaleNotice>` を `viewer-app.tsx` に追加:
 - マウント時 + 60 秒ごとにポーリング
@@ -79,5 +85,7 @@ await db.thread_expand_queue
 ## 注意点
 
 - `modify()` は Dexie の bulk update。失敗しても既存レコードは壊れない（worst case: auto-reset されないだけ）
+- `last_error` は非インデックスなので `.where("last_error")` は使えない。`filter()` で絞る
+- `pending` を対象に含めるのは、1〜2 回目の `auth-stale` 失敗では `markThreadExpandPendingRetry()` により `status: "pending", last_error: "auth-stale"` のまま backoff 待機になるため
 - `pending` に戻す際は worker が resume 済みである必要がある（#53 の配線修正と組み合わせて使う）
 - バナーは viewer のみ。content script には出さない（viewer ルールに従う）
