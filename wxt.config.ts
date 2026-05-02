@@ -7,7 +7,7 @@ export default defineConfig({
   manifest: {
     name: "X Post Archive Extension",
     description: "Save X posts and review them later in a simple archive viewer.",
-    permissions: ["storage", "unlimitedStorage", "cookies"],
+    permissions: ["storage", "unlimitedStorage", "cookies", "alarms"],
     host_permissions: [
       "https://x.com/*",
       "https://twitter.com/*",
