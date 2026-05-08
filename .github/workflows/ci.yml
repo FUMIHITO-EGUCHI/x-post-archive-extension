@@ -3,14 +3,35 @@ name: ci
 on:
   push:
     branches: [master]
+    # ドキュメントのみの変更では CI を回さない。コードと CI 設定は除外しない。
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.gitignore'
+      - 'samples/**'
+      - 'ai-handoff/**'
+      - 'tasks/**'
+      - 'templates/**'
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.gitignore'
+      - 'samples/**'
+      - 'ai-handoff/**'
+      - 'tasks/**'
+      - 'templates/**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  verify:
     name: typecheck + lint + build
     runs-on: ubuntu-latest
     steps:
