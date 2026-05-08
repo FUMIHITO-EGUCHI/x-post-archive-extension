@@ -69,3 +69,11 @@ Chrome では `.output/chrome-mv3/` を unpacked extension として読み込み
 - [mvp-plan](./docs/mvp-plan.md)
 - [data-model](./docs/data-model.md)
 - [implementation-steps](./docs/implementation-steps.md)
+
+## License
+
+This project is released under the [MIT License](./LICENSE).
+
+## Privacy
+
+The extension stores data only locally on the user's device and does not transmit any data to the developer or any third party. See [PRIVACY.md](./PRIVACY.md) for details.
