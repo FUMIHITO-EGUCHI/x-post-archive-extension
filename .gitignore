@@ -17,3 +17,10 @@ tools/github-mcp-server/
 !.claude/rules/
 !.claude/rules/**
 
+# 旧 AI handoff 系（Issue 運用へ移行済み。再混入防止）
+ai-handoff/
+tasks/
+
+# Codex worktree（ローカル開発環境）
+.codex-worktrees/
+

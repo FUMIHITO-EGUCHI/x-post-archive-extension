@@ -1,7 +1,6 @@
 ---
 paths:
   - docs/handoff/**/*.md
-  - ai-handoff/**/*.md
   - .github/ISSUE_TEMPLATE/**
 ---
 
@@ -15,7 +14,7 @@ paths:
 - タスクの状態・担当・経過はすべて **GitHub Issue** にある
 - Issue 本文の編集は objective / scope / checklist のメンテナンスのみ
 - 経過・考察・結果は **Issue コメント** に追記する（本文は書き換えない）
-- 旧 `ai-handoff/tasks/*.md` `current-task.md` は廃止。参照用の履歴は `ai-handoff/archive/` のみ
+- 旧 `ai-handoff/` ディレクトリは削除済み。過去の packet 履歴を辿る場合は git log を使う
 
 ## Labels と状態遷移
 
