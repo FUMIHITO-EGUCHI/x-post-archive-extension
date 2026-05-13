@@ -6,8 +6,8 @@ export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   manifestVersion: 3,
   manifest: {
-    name: "X Post Archive Extension",
-    description: "Save X posts and review them later in a simple archive viewer.",
+    name: "Offline X Archive",
+    description: "Save X posts to a fully offline, on-device archive. Browse and search what you saved later, with no account and no servers.",
     permissions: ["storage", "unlimitedStorage", "cookies", "alarms"], // cookies: ct0 CSRF token retrieval for TweetDetail GraphQL
     host_permissions: [
       "https://x.com/*",
