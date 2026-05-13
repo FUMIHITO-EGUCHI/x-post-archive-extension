@@ -2,6 +2,7 @@ import { defineConfig } from "wxt";
 
 export default defineConfig({
   srcDir: "src",
+  publicDir: "src/public",
   modules: ["@wxt-dev/module-react"],
   manifestVersion: 3,
   manifest: {
@@ -14,8 +15,20 @@ export default defineConfig({
       "https://pbs.twimg.com/*",
       "https://video.twimg.com/*"
     ],
+    icons: {
+      16: "icon/16.png",
+      32: "icon/32.png",
+      48: "icon/48.png",
+      128: "icon/128.png"
+    },
     action: {
-      default_title: "Open archive viewer"
+      default_title: "Open archive viewer",
+      default_icon: {
+        16: "icon/16.png",
+        32: "icon/32.png",
+        48: "icon/48.png",
+        128: "icon/128.png"
+      }
     }
   }
 });
