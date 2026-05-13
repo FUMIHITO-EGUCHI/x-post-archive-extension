@@ -1,5 +1,8 @@
 # X Post Archive Extension
 
+[![ci](https://github.com/FUMIHITO-EGUCHI/x-post-archive-extension/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/FUMIHITO-EGUCHI/x-post-archive-extension/actions/workflows/ci.yml)
+[![security](https://github.com/FUMIHITO-EGUCHI/x-post-archive-extension/actions/workflows/security.yml/badge.svg?branch=master)](https://github.com/FUMIHITO-EGUCHI/x-post-archive-extension/actions/workflows/security.yml)
+
 Version `0.20.0`
 
 X の投稿を 1 件ずつ保存して、あとから一覧で見返すための Chrome 拡張です。
