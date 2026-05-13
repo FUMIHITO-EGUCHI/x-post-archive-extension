@@ -75,6 +75,14 @@ Chrome では `.output/chrome-mv3/` を unpacked extension として読み込み
 - [data-model](./docs/data-model.md)
 - [implementation-steps](./docs/implementation-steps.md)
 
+## Contributing
+
+外部からの contribution を受ける場合の開発ルール（branch / commit / hook）は [CONTRIBUTING.md](./CONTRIBUTING.md) を参照。
+
+## Security
+
+脆弱性の報告は GitHub Security Advisories で private に受け付けます。詳細は [SECURITY.md](./SECURITY.md) を参照。
+
 ## License
 
 This project is released under the [MIT License](./LICENSE).

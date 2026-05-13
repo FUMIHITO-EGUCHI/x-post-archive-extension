@@ -24,3 +24,6 @@ tasks/
 # Codex worktree（ローカル開発環境）
 .codex-worktrees/
 
+# Local UX review artifacts（実 X 投稿スクリーンショット・実ハンドル混入のため track しない）
+docs/findings/2026-05-02-viewer-ux-review/
+
