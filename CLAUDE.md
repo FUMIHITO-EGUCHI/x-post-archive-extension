@@ -41,7 +41,6 @@ X（旧Twitter）投稿を1件ずつ保存・検索する Chrome 拡張（Manife
 | `src/db/` | Dexie スキーマ、repository |
 | `src/types/` | ドメイン型、メッセージ型 |
 | `docs/handoff/` | AI handoff（Issue ベース）の運用ガイド |
-| `ai-handoff/archive/` | 旧 handoff 運用の履歴アーカイブ（read-only） |
 
 ## 行動原則
 - 3ステップ以上のタスクは、実装前に目的・手順・未確定事項を整理する
