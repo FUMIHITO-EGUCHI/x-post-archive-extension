@@ -1,5 +1,7 @@
 # X Post Archive Extension
 
+English: [README.en.md](./README.en.md)
+
 [![ci](https://github.com/FUMIHITO-EGUCHI/x-post-archive-extension/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/FUMIHITO-EGUCHI/x-post-archive-extension/actions/workflows/ci.yml)
 [![security](https://github.com/FUMIHITO-EGUCHI/x-post-archive-extension/actions/workflows/security.yml/badge.svg?branch=master)](https://github.com/FUMIHITO-EGUCHI/x-post-archive-extension/actions/workflows/security.yml)
 
@@ -75,11 +77,11 @@ Chrome では `.output/chrome-mv3/` を unpacked extension として読み込み
 
 ## Contributing
 
-外部からの contribution を受ける場合の開発ルール（branch / commit / hook）は [CONTRIBUTING.md](./CONTRIBUTING.md) を参照。
+branch 命名・commit message ルール・hook・Issue-first ワークフローについては [CONTRIBUTING.md](./CONTRIBUTING.md) を参照してください。
 
 ## Security
 
-脆弱性の報告は GitHub Security Advisories で private に受け付けます。詳細は [SECURITY.md](./SECURITY.md) を参照。
+脆弱性は GitHub Security Advisories を通じて private に報告してください。詳細は [SECURITY.md](./SECURITY.md) を参照。
 
 ## License
 
