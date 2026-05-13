@@ -56,12 +56,13 @@ A `pre-commit` hook runs `npm run precommit:check`, which executes:
 - `npm run lint` — ESLint, including the content-safe import boundary rule
 - `npm run guard:content-scripts` — rebuilds and verifies that built content scripts do not contain Dexie or other non-content-safe symbols
 
-Additionally, run these locally before opening a PR:
+Additionally, run this locally before opening a PR — it is not covered by the hook:
 
 ```bash
 npm run typecheck   # tsc --noEmit
-npm run build       # wxt build
 ```
+
+(`npm run build` is already part of `guard:content-scripts` above, so it is implicitly run by the precommit hook.)
 
 CI (GitHub Actions, `.github/workflows/ci.yml`) re-runs lint + typecheck + build + the bundle guard on every PR.
 
