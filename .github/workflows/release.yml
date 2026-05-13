@@ -5,13 +5,16 @@ on:
     tags:
       - 'v*.*.*'
 
-permissions:
-  contents: write
+# Workflow-level permissions are intentionally empty so each job declares its
+# own minimum scope. This makes any future-added job default to no privileges.
+permissions: {}
 
 jobs:
   release:
     name: build + publish GitHub Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required to create a GitHub Release
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
@@ -44,10 +47,17 @@ jobs:
           echo "notes=$notes" >> "$GITHUB_OUTPUT"
           echo "zip=$zip" >> "$GITHUB_OUTPUT"
       - name: Create GitHub Release
+        # Pass step outputs through env: rather than expanding ${{ ... }} inside
+        # the run: block, so values cannot be interpreted as shell syntax even
+        # if a future change leaks an attacker-controlled string into them.
+        # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#understanding-the-risk-of-script-injections
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.artifacts.outputs.tag }}
+          RELEASE_NOTES: ${{ steps.artifacts.outputs.notes }}
+          RELEASE_ZIP: ${{ steps.artifacts.outputs.zip }}
         run: |
-          gh release create "${{ steps.artifacts.outputs.tag }}" \
-            --title "${{ steps.artifacts.outputs.tag }}" \
-            --notes-file "${{ steps.artifacts.outputs.notes }}" \
-            "${{ steps.artifacts.outputs.zip }}"
+          gh release create "$RELEASE_TAG" \
+            --title "$RELEASE_TAG" \
+            --notes-file "$RELEASE_NOTES" \
+            "$RELEASE_ZIP"
