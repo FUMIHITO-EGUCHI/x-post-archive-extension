@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-05-08
 
-This document describes how the **X Post Archive Extension** ("the Extension") handles user data. This policy applies to the Chrome extension distributed from this repository and the Chrome Web Store.
+This document describes how the **Offline X Archive** Chrome extension ("the Extension") handles user data. This policy applies to the Chrome extension distributed from this repository and the Chrome Web Store.
 
 ## Summary
 
