@@ -1,0 +1,53 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build + publish GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: typecheck (tsc --noEmit)
+        run: npm run typecheck
+      - name: build (wxt build)
+        run: npm run build
+      - name: zip (wxt zip)
+        run: npm run zip
+      - name: Locate release artifact and notes
+        id: artifacts
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          notes="docs/release-notes/${tag}.md"
+          if [ ! -f "$notes" ]; then
+            echo "::error::Release notes not found at $notes" >&2
+            exit 1
+          fi
+          zip=$(ls .output/*.zip 2>/dev/null | head -1)
+          if [ -z "$zip" ]; then
+            echo "::error::No zip produced under .output/" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "notes=$notes" >> "$GITHUB_OUTPUT"
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.artifacts.outputs.tag }}" \
+            --title "${{ steps.artifacts.outputs.tag }}" \
+            --notes-file "${{ steps.artifacts.outputs.notes }}" \
+            "${{ steps.artifacts.outputs.zip }}"
