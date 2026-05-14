@@ -52,4 +52,4 @@
 
 ## Follow-up Memo
 
-MVP の外にある将来候補は [future-features.md](/c:/Users/kurah/Documents/Git/x-post-archive-extension/docs/future-features.md) で管理する。
+MVP の外にある将来候補は [future-features.md](./future-features.md) で管理する。
