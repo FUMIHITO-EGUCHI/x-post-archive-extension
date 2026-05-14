@@ -46,11 +46,12 @@ node scripts/build-demo-archive.mjs
 Windows 環境。既存 Chrome を一旦落として `.shared-cdp-profile/` でリモートデバッグポート 9222 を有効化して起動：
 
 ```powershell
+$RepoRoot = "C:\path\to\x-post-archive-extension"  # ← 自分のリポジトリパスに書き換える
 taskkill /F /IM chrome.exe
 & "C:\Program Files\Google\Chrome\Application\chrome.exe" `
   --remote-debugging-port=9222 `
-  --user-data-dir="C:\Users\kurah\Documents\Git\x-post-archive-extension\.shared-cdp-profile" `
-  --load-extension="C:\Users\kurah\Documents\Git\x-post-archive-extension\.output\chrome-mv3"
+  --user-data-dir="$RepoRoot\.shared-cdp-profile" `
+  --load-extension="$RepoRoot\.output\chrome-mv3"
 ```
 
 > `.shared-cdp-profile/` は gitignore 配下。X セッション cookie が残っているのでサインイン状態のまま再開できる（SC 2 用）。

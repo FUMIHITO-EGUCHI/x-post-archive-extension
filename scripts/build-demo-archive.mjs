@@ -31,7 +31,7 @@ const HANDLES = [
   { display: "こたろう", username: "kotaro_demo" },
   { display: "ねこねこ屋", username: "neko_demo" },
   { display: "つみき", username: "tsumiki_demo" },
-  { display: "ほしの雑記", username: "hosino_demo" },
+  { display: "ほしの雑記", username: "hoshino_demo" },
   { display: "たまと", username: "tama_demo" },
   { display: "りんた", username: "rinta_demo" }
 ];
@@ -188,7 +188,7 @@ for (const body of LONG_POSTS) {
 
 // shuffle stand-alone posts so authors interleave on the timeline
 const standalone = posts.filter((p) => p.thread_root_id === null && p.in_reply_to_post_id === null);
-const threadPosts = posts.filter((p) => p.thread_root_id !== null || (p.in_reply_to_post_id !== null && p.x_post_id !== null));
+const threadPosts = posts.filter((p) => p.thread_root_id !== null || p.in_reply_to_post_id !== null);
 // (threadPosts captured above kept in their original order; standalone shuffled)
 for (let i = standalone.length - 1; i > 0; i -= 1) {
   const j = Math.floor(Math.random() * (i + 1));
