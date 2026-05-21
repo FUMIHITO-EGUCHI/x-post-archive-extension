@@ -1,7 +1,7 @@
 """Compose Chrome Web Store screenshots — v2, "Quiet Confidence" philosophy.
 
 Reference: docs/handoff/design-philosophy.md
-Outputs: samples/screenshots/sc-{1..4}-final.png (1280x800 PNG)
+Outputs: samples/screenshots/sc-{1..5}-final.png (1280x800 PNG)
 
 v2 changes over v1 (compose-sc.py):
 - 60:40 split (screenshot dominant on left)
@@ -14,7 +14,7 @@ v2 changes over v1 (compose-sc.py):
 
 This script is invoked manually; not wired into CI. Run with:
     python scripts/compose-sc-v2.py            # SC1 only (prototype mode)
-    python scripts/compose-sc-v2.py --all      # all 4 slides
+    python scripts/compose-sc-v2.py --all      # all 5 slides
 """
 
 from __future__ import annotations
@@ -631,8 +631,10 @@ def compose(
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--all", action="store_true", help="render all 4 slides (default: SC1 only)")
+    p.add_argument("--all", action="store_true", help="render all 5 slides (default: SC1 only)")
     args = p.parse_args()
+
+    SC_DIR.mkdir(parents=True, exist_ok=True)
 
     jp_font = find_font(JP_FONT_CANDIDATES)
     en_font = find_font(EN_FONT_CANDIDATES)
