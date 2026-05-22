@@ -55,6 +55,8 @@ export default defineBackground({
     chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
       let normalizedSender:
         | {
+            url?: string;
+            id?: string;
             tab?: {
               id?: number;
             };
@@ -62,22 +64,25 @@ export default defineBackground({
         | undefined;
 
       if (typeof sender === "object" && sender !== null) {
+        normalizedSender = {};
+        const rawUrl = Reflect.get(sender, "url");
+
+        if (typeof rawUrl === "string") {
+          normalizedSender.url = rawUrl;
+        }
+
+        const rawId = Reflect.get(sender, "id");
+
+        if (typeof rawId === "string") {
+          normalizedSender.id = rawId;
+        }
+
         const rawTab = Reflect.get(sender, "tab");
 
         if (typeof rawTab === "object" && rawTab !== null) {
           const rawTabId = Reflect.get(rawTab, "id");
-          normalizedSender =
-            typeof rawTabId === "number"
-              ? {
-                  tab: {
-                    id: rawTabId
-                  }
-                }
-              : {
-                  tab: {}
-                };
-        } else {
-          normalizedSender = {};
+          normalizedSender.tab =
+            typeof rawTabId === "number" ? { id: rawTabId } : {};
         }
       }
 

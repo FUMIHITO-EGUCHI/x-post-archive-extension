@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated:** 2026-05-08
+**Last updated:** 2026-05-22
 
 This document describes how the **Offline X Archive** Chrome extension ("the Extension") handles user data. This policy applies to the Chrome extension distributed from this repository and the Chrome Web Store.
 
@@ -20,6 +20,7 @@ The following information may be stored:
 - The post identifier (`x_post_id`), author username, post body text, post URL, and timestamp at the moment of saving.
 - Media URLs and locally cached media blobs referenced by the saved post (when applicable).
 - Thread context required to reproduce the saved post in the viewer.
+- A request template captured from the user's own active X session, used to call the same GraphQL `TweetDetail` endpoint that x.com itself uses. The template stored in persistent IndexedDB contains only non-sensitive fields (URL, request method, query/body variables, and non-authentication request headers such as `accept-language` and `x-twitter-client-language`). Authentication-bearing headers (`authorization`, `x-csrf-token`, `x-client-transaction-id`, `x-client-uuid`) are kept only in the browser's session-scoped storage (`chrome.storage.session`) and are cleared when the browser closes.
 - Internal application state required to operate the Extension (e.g. queue state, settings, alarms metadata).
 
 The Extension uses the following Chrome APIs to provide its functionality:
@@ -54,7 +55,7 @@ The Extension does not share data with third parties. The Extension does not emb
 
 - Saved data can be deleted at any time from the in-extension viewer.
 - Uninstalling the Extension removes all data the Extension created in the browser's storage area.
-- The user's X account credentials are managed entirely by the user's browser; the Extension never reads passwords or tokens other than the `ct0` CSRF cookie described above, and never persists them.
+- The user's X account credentials are managed entirely by the user's browser; the Extension never reads passwords. The Extension reads the `ct0` CSRF cookie via the `cookies` permission and observes authentication-bearing request headers from the user's active X session in order to call the same GraphQL endpoint that x.com itself calls. Authentication headers are kept only in the browser's session-scoped storage (`chrome.storage.session`) and are cleared when the browser session ends; they are never written to disk-backed IndexedDB and never transmitted off-device by the Extension.
 
 ## Children's privacy
 

@@ -15,6 +15,9 @@ export default defineConfig({
       "https://pbs.twimg.com/*",
       "https://video.twimg.com/*"
     ],
+    content_security_policy: {
+      extension_pages: "script-src 'self'; object-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';"
+    },
     icons: {
       16: "icon/16.png",
       32: "icon/32.png",

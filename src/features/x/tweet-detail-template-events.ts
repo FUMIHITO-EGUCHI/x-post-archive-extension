@@ -16,6 +16,12 @@ export function isValidTweetDetailUrl(rawUrl: string): boolean {
   }
 }
 
+export type TweetDetailTemplateSessionAuthDetail = {
+  authorization?: string;
+  "x-client-transaction-id"?: string;
+  "x-client-uuid"?: string;
+};
+
 export type TweetDetailTemplateCapturedEventDetail = {
   url: string;
   method: "GET" | "POST";
@@ -24,4 +30,6 @@ export type TweetDetailTemplateCapturedEventDetail = {
   features: Record<string, unknown> | null;
   fieldToggles: Record<string, unknown> | null;
   captured_at: number;
+  session_auth: TweetDetailTemplateSessionAuthDetail;
+  handshake_token: string;
 };

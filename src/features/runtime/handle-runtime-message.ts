@@ -70,24 +70,65 @@ import type {
   ThreadExpandAuthStaleCheckResponse
 } from "../../types/runtime";
 import { createLogger, createRequestId } from "../logging/logger";
+import {
+  getCurrentExtensionUrlPrefix,
+  isFromExtensionViewer,
+  type RuntimeMessageSender
+} from "./sender-validation";
+import { validateRuntimeMessage } from "./validate-runtime-message";
+import { stripSensitiveTemplateHeaders } from "../x/sensitive-headers";
+import { setTweetDetailTemplateSessionAuth } from "../x/template-session-auth-store";
 
 const logger = createLogger("runtime");
 
+const DESTRUCTIVE_MESSAGE_TYPES = new Set<RuntimeMessage["type"]>([
+  "archive/reset",
+  "logs/clear",
+  "posts/delete",
+  "tag.rename",
+  "tag.merge",
+  "tag.redirects.delete",
+  "tag.bulk-assign.apply-batch",
+  "refetch.clear",
+  "post_tag.remove"
+]);
+
 export async function handleRuntimeMessage(
   message: unknown,
-  sender:
-    | {
-        tab?: {
-          id?: number;
-        };
-      }
-    | undefined = undefined
+  sender: RuntimeMessageSender | undefined = undefined
 ): Promise<RuntimeResponse | undefined> {
   await resumePendingMediaPersistence();
 
   if (!isRuntimeMessage(message)) {
     logger.warn("runtime.message.invalid");
     return undefined;
+  }
+
+  if (
+    DESTRUCTIVE_MESSAGE_TYPES.has(message.type) &&
+    !isFromExtensionViewer(sender, getCurrentExtensionUrlPrefix)
+  ) {
+    logger.warn("runtime.message.rejected_non_viewer_sender", {
+      context: {
+        type: message.type,
+        senderUrl: sender?.url ?? null
+      }
+    });
+    return createRuntimeErrorResponse(
+      new Error("This action can only be performed from the extension viewer.")
+    );
+  }
+
+  const validation = validateRuntimeMessage(message);
+
+  if (!validation.ok) {
+    logger.warn("runtime.message.rejected_invalid_payload", {
+      context: {
+        type: message.type,
+        reason: validation.reason
+      }
+    });
+    return createRuntimeErrorResponse(new Error(validation.reason));
   }
 
   if (message.type !== "refetch.cancel" && message.type !== "refetch.clear") {
@@ -581,7 +622,12 @@ export async function handleRuntimeMessage(
     }
 
     case "tweet-detail-template/set": {
-      const template = await setTweetDetailTemplate(message.template);
+      const sanitizedTemplate = {
+        ...message.template,
+        headers: stripSensitiveTemplateHeaders(message.template.headers)
+      };
+      const template = await setTweetDetailTemplate(sanitizedTemplate);
+      await setTweetDetailTemplateSessionAuth(message.sessionAuth);
       const resetCount = await resetThreadExpandAuthStaleRecords();
 
       logger.info("tweet_detail_template.set.completed", {
@@ -591,10 +637,9 @@ export async function handleRuntimeMessage(
           method: template.method,
           capturedAt: template.captured_at,
           resetAuthStaleCount: resetCount,
-          hasAuthorization: Object.prototype.hasOwnProperty.call(
-            template.headers,
-            "authorization"
-          )
+          hasSessionAuthorization:
+            typeof message.sessionAuth.authorization === "string" &&
+            message.sessionAuth.authorization !== ""
         }
       });
 
