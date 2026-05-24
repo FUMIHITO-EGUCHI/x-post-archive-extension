@@ -1,0 +1,14 @@
+{
+  "extension_name": {
+    "message": "オフライン X アーカイブ",
+    "description": "Name of the extension shown in the Chrome Web Store and the toolbar."
+  },
+  "extension_description": {
+    "message": "X の投稿を完全オフラインで端末内にアーカイブ。アカウントもサーバーも不要で、保存した投稿を後から検索・閲覧できます。",
+    "description": "Short description of the extension shown in the Chrome Web Store listing and the extension management page."
+  },
+  "action_title": {
+    "message": "アーカイブビューワーを開く",
+    "description": "Tooltip shown when hovering the extension action button in the toolbar."
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "extension_name": {
+    "message": "Offline X Archive",
+    "description": "Name of the extension shown in the Chrome Web Store and the toolbar."
+  },
+  "extension_description": {
+    "message": "Save X posts to a fully offline, on-device archive. Browse and search what you saved later, with no account and no servers.",
+    "description": "Short description of the extension shown in the Chrome Web Store listing and the extension management page."
+  },
+  "action_title": {
+    "message": "Open archive viewer",
+    "description": "Tooltip shown when hovering the extension action button in the toolbar."
+  }
+}
