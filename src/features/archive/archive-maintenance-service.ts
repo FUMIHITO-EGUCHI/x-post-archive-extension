@@ -34,7 +34,8 @@ import {
   exceedsArchiveImportEntryCount,
   exceedsArchiveImportEntrySize,
   exceedsArchiveImportManifestSize,
-  exceedsArchiveImportTotalSize
+  exceedsArchiveImportTotalSize,
+  formatBytesHumanReadable
 } from "./archive-import-limits";
 
 const ARCHIVE_BACKUP_FORMAT = "x-post-archive-backup";
@@ -214,6 +215,11 @@ export async function importArchiveBackupZip(
       );
     }
 
+    // ZIP の uncompressedSize は central directory に書かれた "申告値" を読んでおり、
+    // 悪意ある ZIP は実展開サイズと申告値を意図的にずらせる。本拡張は個人バックアップの
+    // 誤爆と意図しない巨大 ZIP を弾くことが目的で、信頼境界を越えた攻撃者ファイルを
+    // 想定しない (脅威モデル外)。完全防御が必要になった場合は entry.getData() 中の
+    // ストリーム実バイト数を別途上限チェックする必要がある。
     let runningUncompressedTotal = 0;
 
     for (const entry of entries) {
@@ -221,7 +227,7 @@ export async function importArchiveBackupZip(
 
       if (exceedsArchiveImportEntrySize(uncompressedSize)) {
         throw new Error(
-          `Backup ZIP contains an entry larger than ${ARCHIVE_IMPORT_LIMITS.maxEntryUncompressedBytes} bytes.`
+          `Backup ZIP contains an entry larger than ${formatBytesHumanReadable(ARCHIVE_IMPORT_LIMITS.maxEntryUncompressedBytes)}.`
         );
       }
 
@@ -229,7 +235,7 @@ export async function importArchiveBackupZip(
 
       if (exceedsArchiveImportTotalSize(runningUncompressedTotal)) {
         throw new Error(
-          `Backup ZIP exceeds the maximum total uncompressed size of ${ARCHIVE_IMPORT_LIMITS.maxTotalUncompressedBytes} bytes.`
+          `Backup ZIP exceeds the maximum total uncompressed size of ${formatBytesHumanReadable(ARCHIVE_IMPORT_LIMITS.maxTotalUncompressedBytes)}.`
         );
       }
     }
@@ -243,7 +249,7 @@ export async function importArchiveBackupZip(
 
     if (exceedsArchiveImportManifestSize(readEntryUncompressedSize(manifestEntry))) {
       throw new Error(
-        `Backup manifest exceeds the maximum size of ${ARCHIVE_IMPORT_LIMITS.maxManifestUncompressedBytes} bytes.`
+        `Backup manifest exceeds the maximum size of ${formatBytesHumanReadable(ARCHIVE_IMPORT_LIMITS.maxManifestUncompressedBytes)}.`
       );
     }
 

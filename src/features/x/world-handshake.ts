@@ -97,6 +97,9 @@ export function getMainWorldHandshakeToken(): string | null {
 }
 
 function timingSafeStringEqual(left: string, right: string): boolean {
+  // 早期リターンは長さ情報を timing で漏らすが、本関数で比較する両辺は常に
+  // crypto.randomUUID() の出力 (固定 36 文字) であり、長さは秘密ではない。
+  // 攻撃者は length が固定であることを前提にしてよく、実害はない。
   if (left.length !== right.length) {
     return false;
   }

@@ -22,3 +22,22 @@ export function exceedsArchiveImportTotalSize(totalByteSize: number): boolean {
 export function exceedsArchiveImportManifestSize(byteSize: number): boolean {
   return byteSize > ARCHIVE_IMPORT_LIMITS.maxManifestUncompressedBytes;
 }
+
+const UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
+
+export function formatBytesHumanReadable(byteSize: number): string {
+  if (!Number.isFinite(byteSize) || byteSize < 0) {
+    return `${byteSize} B`;
+  }
+
+  let value = byteSize;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < UNITS.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const rounded = unitIndex === 0 ? value.toString() : value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2);
+  return `${rounded} ${UNITS[unitIndex]}`;
+}

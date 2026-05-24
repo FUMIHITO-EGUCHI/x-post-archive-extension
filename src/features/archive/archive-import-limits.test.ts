@@ -4,7 +4,8 @@ import {
   exceedsArchiveImportEntryCount,
   exceedsArchiveImportEntrySize,
   exceedsArchiveImportManifestSize,
-  exceedsArchiveImportTotalSize
+  exceedsArchiveImportTotalSize,
+  formatBytesHumanReadable
 } from "./archive-import-limits";
 
 describe("archive import limits", () => {
@@ -28,5 +29,22 @@ describe("archive import limits", () => {
     expect(
       exceedsArchiveImportManifestSize(ARCHIVE_IMPORT_LIMITS.maxManifestUncompressedBytes + 1)
     ).toBe(true);
+  });
+});
+
+describe("formatBytesHumanReadable", () => {
+  it("formats bytes in the appropriate unit", () => {
+    expect(formatBytesHumanReadable(0)).toBe("0 B");
+    expect(formatBytesHumanReadable(512)).toBe("512 B");
+    expect(formatBytesHumanReadable(1024)).toBe("1.00 KB");
+    expect(formatBytesHumanReadable(1024 * 1024)).toBe("1.00 MB");
+    expect(formatBytesHumanReadable(2 * 1024 * 1024 * 1024)).toBe("2.00 GB");
+    expect(formatBytesHumanReadable(50 * 1024 * 1024 * 1024)).toBe("50.0 GB");
+    expect(formatBytesHumanReadable(256 * 1024 * 1024)).toBe("256 MB");
+  });
+
+  it("falls back gracefully for invalid input", () => {
+    expect(formatBytesHumanReadable(Number.NaN)).toBe("NaN B");
+    expect(formatBytesHumanReadable(-1)).toBe("-1 B");
   });
 });

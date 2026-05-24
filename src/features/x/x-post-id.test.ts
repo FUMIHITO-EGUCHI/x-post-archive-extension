@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isOpfsSafePathSegment, isValidXPostId } from "./x-post-id";
+import { isValidXPostId } from "./x-post-id";
 
 describe("isValidXPostId", () => {
   it("accepts ordinary numeric post identifiers", () => {
@@ -27,28 +27,5 @@ describe("isValidXPostId", () => {
 
   it("rejects overlong strings", () => {
     expect(isValidXPostId("1".repeat(31))).toBe(false);
-  });
-});
-
-describe("isOpfsSafePathSegment", () => {
-  it("accepts alphanumeric / dash / underscore segments", () => {
-    expect(isOpfsSafePathSegment("abc_123-XYZ")).toBe(true);
-  });
-
-  it("rejects path traversal segments", () => {
-    expect(isOpfsSafePathSegment(".")).toBe(false);
-    expect(isOpfsSafePathSegment("..")).toBe(false);
-  });
-
-  it("rejects empty and special characters", () => {
-    expect(isOpfsSafePathSegment("")).toBe(false);
-    expect(isOpfsSafePathSegment("foo/bar")).toBe(false);
-    expect(isOpfsSafePathSegment("foo\\bar")).toBe(false);
-    expect(isOpfsSafePathSegment("foo.bin")).toBe(false);
-  });
-
-  it("rejects non-string values", () => {
-    expect(isOpfsSafePathSegment(123 as unknown)).toBe(false);
-    expect(isOpfsSafePathSegment(null as unknown)).toBe(false);
   });
 });

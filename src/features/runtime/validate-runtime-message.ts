@@ -225,6 +225,10 @@ function validateTweetDetailTemplate(
     return reject("template.url must use https.");
   }
 
+  // X は 2023 年に x.com へリブランドしたが、twitter.com も依然有効な canonical の
+  // 1 つで X の web client / API 配信に使われる。manifest の host_permissions も両ドメインを
+  // 含むため、ここでも互換性のため twitter.com を許可している。新規ホスト追加は
+  // manifest と必ず同期させる。
   if (parsed.hostname !== "x.com" && parsed.hostname !== "twitter.com") {
     return reject("template.url host is not allowed.");
   }
