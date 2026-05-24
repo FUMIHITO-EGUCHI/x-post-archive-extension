@@ -1,7 +1,10 @@
+import { stripSensitiveTemplateHeaders } from "./sensitive-headers";
 import {
   TWEET_DETAIL_TEMPLATE_CAPTURED_EVENT,
-  type TweetDetailTemplateCapturedEventDetail
+  type TweetDetailTemplateCapturedEventDetail,
+  type TweetDetailTemplateSessionAuthDetail
 } from "./tweet-detail-template-events";
+import { getMainWorldHandshakeToken } from "./world-handshake";
 
 const TWEET_DETAIL_PATH_PATTERN = /\/i\/api\/graphql\/[^/]+\/TweetDetail(?:\?|$)/;
 const INSTALL_MARKER = "__xPostArchiveTweetDetailTemplateCaptureInstalled__";
@@ -155,14 +158,25 @@ function captureTemplate(input: {
     return;
   }
 
+  const handshakeToken = getMainWorldHandshakeToken();
+
+  if (handshakeToken === null) {
+    return;
+  }
+
+  const sessionAuth = extractSessionAuth(input.headers);
+  const sanitizedHeaders = stripSensitiveTemplateHeaders(input.headers);
+
   const detail: TweetDetailTemplateCapturedEventDetail = {
     url: parsedUrl.toString(),
     method,
-    headers: input.headers,
+    headers: sanitizedHeaders,
     variables: payload.variables,
     features: payload.features,
     fieldToggles: payload.fieldToggles,
-    captured_at: Date.now()
+    captured_at: Date.now(),
+    session_auth: sessionAuth,
+    handshake_token: handshakeToken
   };
 
   document.dispatchEvent(
@@ -171,6 +185,36 @@ function captureTemplate(input: {
       { detail }
     )
   );
+}
+
+function extractSessionAuth(
+  headers: Record<string, string>
+): TweetDetailTemplateSessionAuthDetail {
+  const result: TweetDetailTemplateSessionAuthDetail = {};
+
+  for (const [rawName, value] of Object.entries(headers)) {
+    if (typeof value !== "string" || value === "") {
+      continue;
+    }
+
+    const name = rawName.toLowerCase();
+
+    if (name === "authorization") {
+      result.authorization = value;
+      continue;
+    }
+
+    if (name === "x-client-transaction-id") {
+      result["x-client-transaction-id"] = value;
+      continue;
+    }
+
+    if (name === "x-client-uuid") {
+      result["x-client-uuid"] = value;
+    }
+  }
+
+  return result;
 }
 
 function parseTweetDetailUrl(rawUrl: string): URL | null {

@@ -11,6 +11,7 @@ import type {
   RefetchStatusRecord
 } from "./refetch";
 import type { TweetDetailTemplateRecord } from "./thread";
+import type { TweetDetailTemplateSessionAuthDetail } from "../features/x/tweet-detail-template-events";
 import type {
   ArchiveSummaryRecord,
   ArchiveTagRedirectSummaryRecord,
@@ -167,6 +168,7 @@ export type DebugLogMessage = {
 export type SetTweetDetailTemplateMessage = {
   type: "tweet-detail-template/set";
   template: Omit<TweetDetailTemplateRecord, "id">;
+  sessionAuth: TweetDetailTemplateSessionAuthDetail;
 };
 
 export type ThreadExpandAuthStaleCheckMessage = {

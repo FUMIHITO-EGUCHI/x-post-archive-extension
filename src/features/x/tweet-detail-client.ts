@@ -1,6 +1,11 @@
 import type { SavePostInput } from "../../types/archive";
 import type { TweetDetailClientError, TweetDetailTemplateRecord } from "../../types/thread";
 import { collectTweetRecords, extractThreadFromTweetDetail } from "./extract-thread-from-tweet-detail";
+import { stripSensitiveTemplateHeaders } from "./sensitive-headers";
+import {
+  getTweetDetailTemplateSessionAuth,
+  type TweetDetailTemplateSessionAuth
+} from "./template-session-auth-store";
 import { isValidTweetDetailUrl } from "./tweet-detail-template-events";
 
 export type TweetDetailResponse =
@@ -24,6 +29,7 @@ type CookieDependency = {
 
 type FetchDependency = typeof fetch;
 type TemplateDependency = () => Promise<TweetDetailTemplateRecord | undefined>;
+type SessionAuthDependency = () => Promise<TweetDetailTemplateSessionAuth>;
 
 export async function fetchTweetDetail(
   focalTweetId: string,
@@ -31,11 +37,21 @@ export async function fetchTweetDetail(
     cookies?: CookieDependency;
     fetchImpl?: FetchDependency;
     getTemplate?: TemplateDependency;
+    getSessionAuth?: SessionAuthDependency;
   } = {}
 ): Promise<TweetDetailResponse> {
   const template = await dependencies.getTemplate?.();
 
   if (template === undefined || !isValidTweetDetailUrl(template.url)) {
+    return {
+      ok: false,
+      error: "template-missing"
+    };
+  }
+
+  const sessionAuth = await (dependencies.getSessionAuth ?? getTweetDetailTemplateSessionAuth)();
+
+  if (typeof sessionAuth.authorization !== "string" || sessionAuth.authorization === "") {
     return {
       ok: false,
       error: "template-missing"
@@ -56,7 +72,7 @@ export async function fetchTweetDetail(
     };
   }
 
-  const request = buildTweetDetailRequest(template, focalTweetId, csrfToken);
+  const request = buildTweetDetailRequest(template, focalTweetId, csrfToken, sessionAuth);
   const fetchImpl = dependencies.fetchImpl ?? fetch;
 
   try {
@@ -89,7 +105,8 @@ export async function fetchTweetDetail(
 export function buildTweetDetailRequest(
   template: TweetDetailTemplateRecord,
   focalTweetId: string,
-  csrfToken: string
+  csrfToken: string,
+  sessionAuth: TweetDetailTemplateSessionAuth
 ): {
   url: string;
   init: RequestInit;
@@ -100,6 +117,22 @@ export function buildTweetDetailRequest(
   };
   const headers = sanitizeTemplateHeaders(template.headers);
   headers["x-csrf-token"] = csrfToken;
+
+  if (typeof sessionAuth.authorization === "string" && sessionAuth.authorization !== "") {
+    headers["authorization"] = sessionAuth.authorization;
+  }
+
+  const transactionId = sessionAuth["x-client-transaction-id"];
+
+  if (typeof transactionId === "string" && transactionId !== "") {
+    headers["x-client-transaction-id"] = transactionId;
+  }
+
+  const clientUuid = sessionAuth["x-client-uuid"];
+
+  if (typeof clientUuid === "string" && clientUuid !== "") {
+    headers["x-client-uuid"] = clientUuid;
+  }
 
   if (template.method === "GET") {
     const url = new URL(template.url);
@@ -133,21 +166,18 @@ export function buildTweetDetailRequest(
 }
 
 const ALLOWED_TEMPLATE_HEADERS = new Set([
-  "authorization",
-  "x-csrf-token",
   "x-twitter-active-user",
   "x-twitter-auth-type",
   "x-twitter-client-language",
-  "x-client-transaction-id",
-  "x-client-uuid",
   "accept-language",
   "content-type"
 ]);
 
 function sanitizeTemplateHeaders(headers: Record<string, string>): Record<string, string> {
+  const safeHeaders = stripSensitiveTemplateHeaders(headers);
   const sanitized: Record<string, string> = {};
 
-  for (const [rawName, value] of Object.entries(headers)) {
+  for (const [rawName, value] of Object.entries(safeHeaders)) {
     const name = rawName.toLowerCase();
 
     if (ALLOWED_TEMPLATE_HEADERS.has(name)) {

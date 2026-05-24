@@ -1,4 +1,5 @@
 import type { MediaType } from "../../types/archive";
+import { isOpfsSafeSegment } from "./opfs-path-validation";
 
 const MEDIA_ROOT_SEGMENTS = ["media"] as const;
 
@@ -7,11 +8,21 @@ export function buildMediaOpfsPath(
   mediaId: string,
   mediaType: MediaType
 ): string {
+  requireSafeOpfsSegment(xPostId, "xPostId");
+  requireSafeOpfsSegment(mediaId, "mediaId");
   return `/${[...MEDIA_ROOT_SEGMENTS, getMediaDirectory(mediaType), xPostId, `${mediaId}.bin`].join("/")}`;
 }
 
 export function buildVideoPreviewOpfsPath(xPostId: string, mediaId: string): string {
+  requireSafeOpfsSegment(xPostId, "xPostId");
+  requireSafeOpfsSegment(mediaId, "mediaId");
   return `/${[...MEDIA_ROOT_SEGMENTS, "video-previews", xPostId, `${mediaId}.jpg`].join("/")}`;
+}
+
+function requireSafeOpfsSegment(segment: string, field: string): void {
+  if (!isOpfsSafeSegment(segment)) {
+    throw new Error(`Unsafe OPFS path segment for ${field}.`);
+  }
 }
 
 export type OpfsWriteResult = {
@@ -147,10 +158,36 @@ function splitOpfsPath(opfsPath: string): string[] {
     throw new Error("OPFS path must start with '/'.");
   }
 
-  const segments = normalized.split("/").filter((segment) => segment.length > 0);
+  const rawSegments = normalized.split("/");
+
+  for (const segment of rawSegments) {
+    if (segment === ".." || segment === ".") {
+      throw new Error("OPFS path contains an unsafe segment.");
+    }
+  }
+
+  const segments = rawSegments.filter((segment) => segment.length > 0);
 
   if (segments.length <= MEDIA_ROOT_SEGMENTS.length) {
     throw new Error("OPFS path is missing file segments.");
+  }
+
+  if (segments[0] !== MEDIA_ROOT_SEGMENTS[0]) {
+    throw new Error("OPFS path must start under the media root.");
+  }
+
+  for (const segment of segments) {
+    const lastSeparator = segment.lastIndexOf(".");
+    const base = lastSeparator > 0 ? segment.slice(0, lastSeparator) : segment;
+    const extension = lastSeparator > 0 ? segment.slice(lastSeparator + 1) : "";
+
+    if (!/^[A-Za-z0-9_-]+$/.test(base)) {
+      throw new Error("OPFS path contains an unsafe segment.");
+    }
+
+    if (extension !== "" && !/^[A-Za-z0-9]+$/.test(extension)) {
+      throw new Error("OPFS path contains an unsafe segment.");
+    }
   }
 
   return segments;

@@ -27,7 +27,16 @@ import {
   readBlobFromOpfs,
   writeBlobToOpfs
 } from "../media-storage/opfs-media-storage";
+import { clearTweetDetailTemplateSessionAuth } from "../x/template-session-auth-store";
 import { canonicalizeTwitterImageUrl } from "../x/twitter-image-url";
+import {
+  ARCHIVE_IMPORT_LIMITS,
+  exceedsArchiveImportEntryCount,
+  exceedsArchiveImportEntrySize,
+  exceedsArchiveImportManifestSize,
+  exceedsArchiveImportTotalSize,
+  formatBytesHumanReadable
+} from "./archive-import-limits";
 
 const ARCHIVE_BACKUP_FORMAT = "x-post-archive-backup";
 const ARCHIVE_BACKUP_VERSION = 2;
@@ -199,11 +208,49 @@ export async function importArchiveBackupZip(
     });
 
     const entries = await zipReader.getEntries();
+
+    if (exceedsArchiveImportEntryCount(entries.length)) {
+      throw new Error(
+        `Backup ZIP has too many entries (limit: ${ARCHIVE_IMPORT_LIMITS.maxEntryCount}).`
+      );
+    }
+
+    // ZIP の uncompressedSize は central directory に書かれた "申告値" を読んでおり、
+    // 悪意ある ZIP は実展開サイズと申告値を意図的にずらせる。本拡張は個人バックアップの
+    // 誤爆と意図しない巨大 ZIP を弾くことが目的で、信頼境界を越えた攻撃者ファイルを
+    // 想定しない (脅威モデル外)。完全防御が必要になった場合は entry.getData() 中の
+    // ストリーム実バイト数を別途上限チェックする必要がある。
+    let runningUncompressedTotal = 0;
+
+    for (const entry of entries) {
+      const uncompressedSize = readEntryUncompressedSize(entry);
+
+      if (exceedsArchiveImportEntrySize(uncompressedSize)) {
+        throw new Error(
+          `Backup ZIP contains an entry larger than ${formatBytesHumanReadable(ARCHIVE_IMPORT_LIMITS.maxEntryUncompressedBytes)}.`
+        );
+      }
+
+      runningUncompressedTotal += uncompressedSize;
+
+      if (exceedsArchiveImportTotalSize(runningUncompressedTotal)) {
+        throw new Error(
+          `Backup ZIP exceeds the maximum total uncompressed size of ${formatBytesHumanReadable(ARCHIVE_IMPORT_LIMITS.maxTotalUncompressedBytes)}.`
+        );
+      }
+    }
+
     const fileEntries = createFileEntryMap(entries);
     const manifestEntry = fileEntries.get(BACKUP_MANIFEST_FILE_NAME);
 
     if (manifestEntry === undefined) {
       throw new Error("Backup ZIP does not contain manifest.json.");
+    }
+
+    if (exceedsArchiveImportManifestSize(readEntryUncompressedSize(manifestEntry))) {
+      throw new Error(
+        `Backup manifest exceeds the maximum size of ${formatBytesHumanReadable(ARCHIVE_IMPORT_LIMITS.maxManifestUncompressedBytes)}.`
+      );
     }
 
     const manifestText = await manifestEntry
@@ -598,6 +645,7 @@ export async function clearArchiveData(): Promise<void> {
 
 export async function resetExtensionState(): Promise<void> {
   await clearMediaRootFromOpfs();
+  await clearTweetDetailTemplateSessionAuth();
   await archiveDb.logs.clear();
 
   await archiveDb.transaction(
@@ -856,6 +904,16 @@ function normalizeTargetPostIds(xPostIds: string[]): Set<string> | null {
     .filter((xPostId) => xPostId !== "");
 
   return normalized.length === 0 ? null : new Set(normalized);
+}
+
+function readEntryUncompressedSize(entry: Entry): number {
+  const candidate = Reflect.get(entry, "uncompressedSize");
+
+  if (typeof candidate !== "number" || !Number.isFinite(candidate) || candidate < 0) {
+    return 0;
+  }
+
+  return candidate;
 }
 
 function createFileEntryMap(entries: Entry[]): Map<string, FileEntry> {
@@ -1142,11 +1200,22 @@ function requireUnion<T extends string>(
   return value as T;
 }
 
+const BACKUP_PATH_PATTERN =
+  /^\/media\/(images|videos|video-previews)\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.(?:bin|jpg)$/;
+
 function requireBackupPath(value: unknown, field: string): string {
   const path = requireString(value, field);
 
   if (!path.startsWith(MEDIA_ROOT_PREFIX)) {
     throw new Error(`${field} must be under ${MEDIA_ROOT_PREFIX}.`);
+  }
+
+  if (path.includes("/../") || path.endsWith("/..") || path.includes("/./") || path.endsWith("/.")) {
+    throw new Error(`${field} contains an unsafe path segment.`);
+  }
+
+  if (!BACKUP_PATH_PATTERN.test(path)) {
+    throw new Error(`${field} is not a valid backup media path.`);
   }
 
   return path;
