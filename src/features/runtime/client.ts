@@ -34,6 +34,7 @@ import type {
   SetTweetDetailTemplateResponse
 } from "../../types/runtime";
 import type { TweetDetailTemplateRecord } from "../../types/thread";
+import type { TweetDetailTemplateSessionAuthDetail } from "../x/tweet-detail-template-events";
 import type { RefetchQueuePriority } from "../../types/refetch";
 import type { ListPostsPageInput, PostFilterInput } from "../../types/viewer";
 import { ARCHIVE_DB_NAME } from "../../db/constants";
@@ -82,11 +83,13 @@ export async function requestSaveThread(
 }
 
 export async function requestSetTweetDetailTemplate(
-  template: Omit<TweetDetailTemplateRecord, "id">
+  template: Omit<TweetDetailTemplateRecord, "id">,
+  sessionAuth: TweetDetailTemplateSessionAuthDetail
 ): Promise<SetTweetDetailTemplateResponse> {
   const response = await sendMessage({
     type: "tweet-detail-template/set",
-    template
+    template,
+    sessionAuth
   }, DEFAULT_RUNTIME_TIMEOUT_MS);
 
   if (response.type !== "tweet-detail-template/set-result") {

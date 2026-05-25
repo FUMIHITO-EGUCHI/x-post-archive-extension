@@ -55,8 +55,13 @@ import {
 import {
   TWEET_DETAIL_TEMPLATE_CAPTURED_EVENT,
   isValidTweetDetailUrl,
-  type TweetDetailTemplateCapturedEventDetail
+  type TweetDetailTemplateCapturedEventDetail,
+  type TweetDetailTemplateSessionAuthDetail
 } from "./tweet-detail-template-events";
+import {
+  sendIsolatedHandshakeOnce,
+  verifyMainWorldEventToken
+} from "./world-handshake";
 
 const SAVE_BUTTON_SELECTOR = "[data-xpa-save-button]";
 const AUTO_ARCHIVE_ERROR_DISPLAY_MS = 3000;
@@ -80,6 +85,7 @@ let latestThreadPosts: ReturnType<typeof extractThreadPosts> = [];
 
 export function bootstrapXContentScript(ctx: ContentScriptContext): void {
   isContentScriptActive = true;
+  sendIsolatedHandshakeOnce();
   installAutoArchiveActionListener();
   installRefetchMessageListener();
   installTweetDetailTemplateListener();
@@ -136,7 +142,22 @@ function handleTweetDetailTemplateCaptured(event: Event): void {
     return;
   }
 
-  void requestSetTweetDetailTemplate(detail).catch((error) => {
+  if (!verifyMainWorldEventToken(detail.handshake_token)) {
+    return;
+  }
+
+  const sessionAuth = sanitizeSessionAuthDetail(detail.session_auth);
+  const template = {
+    url: detail.url,
+    method: detail.method,
+    headers: detail.headers,
+    variables: detail.variables,
+    features: detail.features,
+    fieldToggles: detail.fieldToggles,
+    captured_at: detail.captured_at
+  };
+
+  void requestSetTweetDetailTemplate(template, sessionAuth).catch((error) => {
     if (isExtensionContextInvalidatedError(error)) {
       return;
     }
@@ -163,8 +184,60 @@ function isTweetDetailTemplateCapturedEventDetail(
     (candidate.features === null || isUnknownRecord(candidate.features)) &&
     (candidate.fieldToggles === null || isUnknownRecord(candidate.fieldToggles)) &&
     typeof candidate.captured_at === "number" &&
-    Number.isFinite(candidate.captured_at)
+    Number.isFinite(candidate.captured_at) &&
+    typeof candidate.handshake_token === "string" &&
+    isSessionAuthDetail(candidate.session_auth)
   );
+}
+
+function isSessionAuthDetail(
+  value: unknown
+): value is TweetDetailTemplateSessionAuthDetail {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const allowedKeys = new Set([
+    "authorization",
+    "x-client-transaction-id",
+    "x-client-uuid"
+  ]);
+
+  for (const [key, fieldValue] of Object.entries(candidate)) {
+    if (!allowedKeys.has(key)) {
+      return false;
+    }
+
+    if (typeof fieldValue !== "string") {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function sanitizeSessionAuthDetail(
+  value: TweetDetailTemplateSessionAuthDetail
+): TweetDetailTemplateSessionAuthDetail {
+  const result: TweetDetailTemplateSessionAuthDetail = {};
+
+  if (typeof value.authorization === "string" && value.authorization !== "") {
+    result.authorization = value.authorization;
+  }
+
+  if (
+    typeof value["x-client-transaction-id"] === "string" &&
+    value["x-client-transaction-id"] !== ""
+  ) {
+    result["x-client-transaction-id"] = value["x-client-transaction-id"];
+  }
+
+  if (typeof value["x-client-uuid"] === "string" && value["x-client-uuid"] !== "") {
+    result["x-client-uuid"] = value["x-client-uuid"];
+  }
+
+  return result;
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {

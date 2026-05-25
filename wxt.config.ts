@@ -6,8 +6,9 @@ export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   manifestVersion: 3,
   manifest: {
-    name: "Offline X Archive",
-    description: "Save X posts to a fully offline, on-device archive. Browse and search what you saved later, with no account and no servers.",
+    name: "__MSG_extension_name__",
+    description: "__MSG_extension_description__",
+    default_locale: "en",
     permissions: ["storage", "unlimitedStorage", "cookies", "alarms"], // cookies: ct0 CSRF token retrieval for TweetDetail GraphQL
     host_permissions: [
       "https://x.com/*",
@@ -15,6 +16,9 @@ export default defineConfig({
       "https://pbs.twimg.com/*",
       "https://video.twimg.com/*"
     ],
+    content_security_policy: {
+      extension_pages: "script-src 'self'; object-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';"
+    },
     icons: {
       16: "icon/16.png",
       32: "icon/32.png",
@@ -22,7 +26,7 @@ export default defineConfig({
       128: "icon/128.png"
     },
     action: {
-      default_title: "Open archive viewer",
+      default_title: "__MSG_action_title__",
       default_icon: {
         16: "icon/16.png",
         32: "icon/32.png",

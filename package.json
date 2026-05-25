@@ -1,6 +1,6 @@
 {
   "name": "x-post-archive-extension",
-  "version": "0.20.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,8 @@
     "guard:content-scripts": "npm run build && npm run check:content-script-bundle",
     "precommit:check": "npm run lint && npm run guard:content-scripts",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
@@ -28,7 +30,9 @@
     "chrome-devtools-mcp": "^0.21.0",
     "eslint": "^10.2.0",
     "globals": "^17.4.0",
+    "happy-dom": "^15.11.7",
     "typescript": "5.9.2",
+    "vitest": "^3.2.4",
     "wxt": "0.20.11"
   }
 }

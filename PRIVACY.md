@@ -22,6 +22,7 @@ The following information may be stored:
 - The post identifier (`x_post_id`), author username, post body text, post URL, and timestamp at the moment of saving.
 - Media URLs and locally cached media blobs referenced by the saved post (when applicable).
 - Thread context required to reproduce the saved post in the viewer.
+- A request template captured from the user's own active X session, used to call the same GraphQL `TweetDetail` endpoint that x.com itself uses. The template stored in persistent IndexedDB contains only non-sensitive fields (URL, request method, query/body variables, and non-authentication request headers such as `accept-language` and `x-twitter-client-language`). Authentication-bearing headers (`authorization`, `x-csrf-token`, `x-client-transaction-id`, `x-client-uuid`) are kept only in the browser's session-scoped storage (`chrome.storage.session`) and are cleared when the browser closes.
 - Internal application state required to operate the Extension (e.g. queue state, settings, alarms metadata).
 
 The Extension uses the following Chrome APIs to provide its functionality:
@@ -56,7 +57,7 @@ The Extension does not share data with third parties. The Extension does not emb
 
 - Saved data can be deleted at any time from the in-extension viewer.
 - Uninstalling the Extension removes all data the Extension created in the browser's storage area.
-- The user's X account credentials are managed entirely by the user's browser; the Extension never reads passwords or tokens other than the `ct0` CSRF cookie described above, and never persists them.
+- The user's X account credentials are managed entirely by the user's browser; the Extension never reads passwords. The Extension reads the `ct0` CSRF cookie via the `cookies` permission and observes authentication-bearing request headers from the user's active X session in order to call the same GraphQL endpoint that x.com itself calls. Authentication headers are kept only in the browser's session-scoped storage (`chrome.storage.session`) and are cleared when the browser session ends; they are never written to disk-backed IndexedDB and never transmitted off-device by the Extension.
 
 ## Children's privacy
 
@@ -98,6 +99,7 @@ For questions about this policy or the Extension's data handling, open an issue 
 - 投稿 ID（`x_post_id`）、投稿者ユーザー名、投稿本文、投稿 URL、保存時点のタイムスタンプ
 - 保存対象投稿が参照するメディア URL およびローカルキャッシュしたメディアバイナリ
 - ビューワーで保存投稿を再現するために必要なスレッド文脈情報
+- ユーザー自身のアクティブな X セッションから取得したリクエストテンプレート。x.com 自身が呼び出すのと同じ GraphQL `TweetDetail` エンドポイントを呼び出すために使用する。永続 IndexedDB に保存するのは非機微フィールド（URL、リクエストメソッド、クエリ／ボディ変数、`accept-language` や `x-twitter-client-language` などの非認証リクエストヘッダー）のみ。認証情報を含むヘッダー（`authorization`, `x-csrf-token`, `x-client-transaction-id`, `x-client-uuid`）はブラウザのセッションスコープストレージ（`chrome.storage.session`）にのみ保持され、ブラウザを閉じると消去される。
 - 本拡張機能の動作に必要な内部状態（キュー、設定、アラームメタデータなど）
 
 本拡張機能が使用する Chrome API と用途:
@@ -132,7 +134,7 @@ For questions about this policy or the Extension's data handling, open an issue 
 
 - 保存データは拡張機能内のビューワーからいつでも削除できる
 - 本拡張機能をアンインストールすると、本拡張機能がブラウザストレージに作成したすべてのデータが削除される
-- ユーザーの X アカウント認証情報はユーザーのブラウザによって完全に管理される。本拡張機能は上記の `ct0` CSRF クッキー以外のパスワードやトークンを一切読み取らず、永続化もしない
+- ユーザーの X アカウント認証情報はユーザーのブラウザによって完全に管理される。本拡張機能はパスワードを一切読み取らない。`cookies` 権限を用いて `ct0` CSRF クッキーを参照し、ユーザーのアクティブな X セッションが発する認証情報を含むリクエストヘッダーを観測することで、x.com 自身が呼び出すのと同じ GraphQL エンドポイントを呼び出す。認証ヘッダーはブラウザのセッションスコープストレージ（`chrome.storage.session`）にのみ保持され、ブラウザセッション終了時に消去される。ディスク永続化される IndexedDB には書き込まれず、本拡張機能から端末外へ送信されることもない。
 
 ### 子どもに関するプライバシー
 

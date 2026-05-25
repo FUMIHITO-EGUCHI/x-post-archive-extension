@@ -96,6 +96,7 @@ import {
 } from "../media-storage/opfs-media-storage";
 import { createLogger } from "../logging/logger";
 import { canonicalizeTwitterImageUrl } from "../x/twitter-image-url";
+import { isAllowedMediaMimeType } from "./media-mime-validator";
 
 const PENDING_MEDIA_RESUME_BATCH_SIZE = 24;
 const MEDIA_PERSISTENCE_IDLE_WAIT_MS = 100;
@@ -1126,6 +1127,12 @@ async function persistMedia(record: MediaRecord, traceId?: string): Promise<void
 
     const blob = await response.blob();
     const mimeType = blob.type || response.headers.get("content-type");
+
+    if (!isAllowedMediaMimeType(record.media_type, mimeType)) {
+      throw new Error(
+        `Media fetch returned an unsupported content type (${mimeType ?? "unknown"}) for ${record.media_type}.`
+      );
+    }
 
     const writeResult = await writeBlobToOpfs(record.opfs_path, blob);
     await updateMediaAfterWrite(record.media_id, {
