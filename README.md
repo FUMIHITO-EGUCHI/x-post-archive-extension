@@ -1,92 +1,109 @@
 # X Post Archive Extension
 
-English: [README.en.md](./README.en.md)
+[🇺🇸 English](./README.md) | [🇯🇵 日本語](./README.ja.md)
 
 [![ci](https://github.com/FUMIHITO-EGUCHI/x-post-archive-extension/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/FUMIHITO-EGUCHI/x-post-archive-extension/actions/workflows/ci.yml)
 [![security](https://github.com/FUMIHITO-EGUCHI/x-post-archive-extension/actions/workflows/security.yml/badge.svg?branch=master)](https://github.com/FUMIHITO-EGUCHI/x-post-archive-extension/actions/workflows/security.yml)
 
-Version `0.20.0`
+> Local, offline archive for your X (Twitter) posts. Privacy-first. No third-party servers.
 
-X の投稿を 1 件ずつ保存して、あとから一覧で見返すための Chrome 拡張です。
-保存・検索・閲覧に集中し、X クローンではなく個人用アーカイブ兼検索ツールとして機能します。
+![Screenshot](docs/screenshot.png) <!-- [SCREENSHOT_PLACEHOLDER] — replace with actual screenshot -->
 
-## Stack
+## Why this exists
 
-- WXT 0.20.x + Chrome Extension Manifest V3
-- TypeScript 5.9.x (strict)
-- React 19.1.x（viewer UI のみ）
-- IndexedDB / Dexie 4.2.x
-- @zip.js/zip.js（バックアップ・復元）
+X's built-in export is slow, limited, and routes through their servers. Your likes and bookmarks are hard to search after the fact. This extension saves posts locally in your browser so they stay yours — searchable, offline, and private.
 
 ## Features
 
-### 保存
-- X 各投稿に保存ボタンを表示し、本文・著者・投稿日時・添付メディアを保存
-- 連投（OP の self-reply chain）をスレッド単位で保存。likes import や通常保存中も自動で続編まで揃える
-- 引用元投稿の ID とパーマリンクを保存
+- **One-click save** — a save button on each X post captures text, author, timestamp, and attached media
+- **Thread-aware** — OP self-reply chains are saved as a thread; likes import and regular saves automatically fetch the full thread
+- **Quoted posts** — the quoted post's ID and permalink are preserved
+- **Viewer with search** — sort by saved/posted date, reply/repost/like counts, or random; filter by tag, user, date range, or keyword
+- **Thread expansion** — threads collapse to a root post and expand inline
+- **Media lightbox** — full-screen image/video display with frame counter
+- **Zip backup & restore** — export the whole archive; restore merges without overwriting existing records
+- **Settings panel** — display behavior and accessibility tweaks
 
-### 閲覧（viewer）
-- 保存日 / 投稿日 / リプライ・リポスト・いいね数 / ランダム順でソート
-- タグ・ユーザー・期間・キーワードでフィルター
-- スレッドはルート投稿に集約し、インライン展開で全コマを縦に表示
-- ライトボックスで画像・動画を全画面表示（i/N、Xコマ目/全Nコマ表示）
-- 設定パネルで表示挙動とアクセシビリティを調整
+## Installation
 
-### バックアップ
-- アーカイブ全体を zip でエクスポート
-- 復元はマージ型（既存レコードを破壊しない）
+### Chrome / Edge (manual sideload)
 
-## Commands
+1. Clone or download this repo
+2. `npm install && npm run build`
+3. Open `chrome://extensions`, enable Developer Mode
+4. Click "Load unpacked" and select `.output/chrome-mv3/`
+
+<!-- ### Chrome Web Store
+[PLACEHOLDER — CWS link when published] -->
+
+### Firefox
+
+[TBD — Firefox support is planned]
+
+## Usage
+
+1. Navigate to X (x.com)
+2. Click the save button on any post you want to archive
+3. Click the extension icon to open the viewer
+4. Search, filter, and browse your saved posts
+
+## Privacy & Data Handling
+
+All data stays on your machine. No analytics, no telemetry, no remote servers.
+
+**Permissions:**
+
+| Permission | Reason |
+|---|---|
+| `storage` | Store saved posts and settings in browser local storage |
+| `unlimitedStorage` | Allow archive to grow beyond default quota |
+| `cookies` | Read `ct0` CSRF token for TweetDetail GraphQL API calls |
+| `alarms` | Schedule background tasks (thread completion, cleanup) |
+| `host_permissions: x.com, twitter.com` | Access X pages to inject save buttons and fetch post data |
+| `host_permissions: pbs.twimg.com, video.twimg.com` | Download attached images and videos for local storage |
+
+See [PRIVACY.md](./PRIVACY.md) for the full privacy policy.
+
+## Tech Stack
+
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=fff)
+![React](https://img.shields.io/badge/React-61DAFB?logo=react&logoColor=000)
+![Chrome Extension](https://img.shields.io/badge/Manifest%20V3-4285F4?logo=googlechrome&logoColor=fff)
+
+- **WXT 0.20.x** — Chrome Extension framework (Manifest V3)
+- **TypeScript 5.9.x** (strict)
+- **React 19.1.x** — viewer UI only
+- **IndexedDB / Dexie 4.2.x** — local database
+- **@zip.js/zip.js** — backup / restore
+
+## Development
 
 ```bash
 npm install
-npm run lint
-npm run typecheck
-npm run build
-npm run check:content-script-bundle
+npm run dev          # WXT dev server + hot reload
+npm run build        # production build
+npm run typecheck    # TypeScript strict check
+npm run lint         # ESLint
+npm run guard:content-scripts  # verify content script isolation
 ```
 
-開発時:
+In Chrome, load `.output/chrome-mv3/` as an unpacked extension.
 
-```bash
-npm run dev
-```
+## Roadmap
 
-Chrome では `.output/chrome-mv3/` を unpacked extension として読み込みます。
-
-## Content-safe Guardrails
-
-- `src/features/x/*` and `src/features/runtime/client.ts` are treated as content-safe modules
-- content-safe modules must not import `src/db/archive-database.ts`, `src/db/repositories/*`, or `dexie`
-- shared DB constants, types, and pure helpers must live in Dexie-free modules such as `src/db/constants.ts`
-- `npm run lint` enforces the import boundary
-- `npm run guard:content-scripts` rebuilds and verifies that built content scripts do not contain `Dexie`, `DexieError`, or `U+FFFF`
-
-## One-off Migration
-
-旧 DB `x-post-archive` から現行 DB `x-post-archive-posts-v1` へ移す必要がある場合は、
-[legacy DB migration guide](./docs/legacy-db-migration.md) と
-[migration script](./scripts/migrate-legacy-posts.js) を使ってください。
-
-## Docs
-
-- [requirements](./docs/requirements.md)
-- [mvp-plan](./docs/mvp-plan.md)
-- [data-model](./docs/data-model.md)
-- [implementation-steps](./docs/implementation-steps.md)
+- [ ] Chrome Web Store submission
+- [ ] Firefox Add-ons support
+- [ ] Bulk export to JSON / CSV / Markdown
+- [ ] Likes import improvement
 
 ## Contributing
 
-branch 命名・commit message ルール・hook・Issue-first ワークフローについては [CONTRIBUTING.md](./CONTRIBUTING.md) を参照してください。
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for branch naming, commit-message rules, hooks, and the Issue-first workflow.
 
 ## Security
 
-脆弱性は GitHub Security Advisories を通じて private に報告してください。詳細は [SECURITY.md](./SECURITY.md) を参照。
+Report vulnerabilities privately via GitHub Security Advisories. See [SECURITY.md](./SECURITY.md).
 
 ## License
 
-This project is released under the [MIT License](./LICENSE).
-
-## Privacy
-
-The extension stores data only locally on the user's device and does not transmit any data to the developer or any third party. See [PRIVACY.md](./PRIVACY.md) for details.
+[MIT](./LICENSE)
