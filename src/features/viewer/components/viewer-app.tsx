@@ -705,9 +705,7 @@ export function ViewerApp() {
                 <button
                   type="button"
                   className="viewer-action-button"
-                  onClick={() => {
-                    browser.runtime.reload();
-                  }}
+                  onClick={() => browser.runtime.reload()}
                 >
                   {language === "ja" ? "拡張機能を再起動" : "Restart extension"}
                 </button>
