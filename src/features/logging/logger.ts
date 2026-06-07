@@ -55,7 +55,7 @@ function writeLog(level: LogLevel, scope: string, event: string, options?: LogOp
 
   mirrorToConsole(record);
 
-  if (level === "debug" && !shouldPersistDebugRecord(record)) {
+  if (level === "debug" && !checkAndMarkDebugPersist(record)) {
     return;
   }
 
@@ -80,11 +80,13 @@ function writeLog(level: LogLevel, scope: string, event: string, options?: LogOp
     });
 }
 
-function shouldPersistDebugRecord(record: LogRecord): boolean {
+// Returns true when the record should be persisted, recording it as the latest persist for its key.
+function checkAndMarkDebugPersist(record: LogRecord): boolean {
   // Include context.type (the runtime message discriminator) so distinct message kinds sharing an
-  // event name (e.g. runtime.message.received) do not suppress each other.
+  // event name (e.g. runtime.message.received) do not suppress each other. A "|" separator keeps
+  // segment boundaries unambiguous even if a segment ever contains spaces.
   const contextType = record.context["type"];
-  const key = `${record.scope} ${record.event} ${typeof contextType === "string" ? contextType : ""}`;
+  const key = `${record.scope}|${record.event}|${typeof contextType === "string" ? contextType : ""}`;
   const lastPersistedAt = lastDebugPersistAtByKey.get(key);
 
   if (
