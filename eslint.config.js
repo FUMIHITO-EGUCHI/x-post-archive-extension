@@ -32,7 +32,7 @@ const contentSafeImportRestrictions = {
 
 export default [
   {
-    ignores: [".output/**", ".wxt/**", "node_modules/**"]
+    ignores: [".output/**", ".wxt/**", "node_modules/**", ".diagnostics/**", ".shared-cdp-profile/**"]
   },
   {
     files: ["**/*.{ts,tsx,mts,cts}"],
