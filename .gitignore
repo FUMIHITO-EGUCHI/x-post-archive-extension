@@ -27,3 +27,6 @@ tasks/
 # Local UX review artifacts（実 X 投稿スクリーンショット・実ハンドル混入のため track しない）
 docs/findings/2026-05-02-viewer-ux-review/
 
+
+# IDB snapshot 等のローカル診断データ
+.diagnostics/

@@ -3,9 +3,16 @@ import type { LogContext, LogLevel, LogRecord } from "../../types/logger";
 
 const MAX_LOG_RECORDS = 2000;
 const PRUNE_INTERVAL = 25;
+// Why: high-frequency debug events (e.g. refetch.status polling every 2s) used to write an IDB
+// record each time. Combined with prune deletes, the write+delete churn bloats the backing
+// LevelDB with tombstones (#112). Suppress repeated debug persists per event within this window;
+// the console mirror stays untouched so live debugging loses nothing.
+const DEBUG_PERSIST_SUPPRESSION_WINDOW_MS = 30_000;
+const DEBUG_PERSIST_KEY_LIMIT = 200;
 
 let writesSinceLastPrune = 0;
 let prunePromise: Promise<void> | null = null;
+const lastDebugPersistAtByKey = new Map<string, number>();
 
 export function createLogger(scope: string) {
   return {
@@ -48,6 +55,10 @@ function writeLog(level: LogLevel, scope: string, event: string, options?: LogOp
 
   mirrorToConsole(record);
 
+  if (level === "debug" && !shouldPersistDebugRecord(record)) {
+    return;
+  }
+
   void addLogRecord(record)
     .then(() => {
       writesSinceLastPrune += 1;
@@ -67,6 +78,36 @@ function writeLog(level: LogLevel, scope: string, event: string, options?: LogOp
         error
       });
     });
+}
+
+function shouldPersistDebugRecord(record: LogRecord): boolean {
+  // Include context.type (the runtime message discriminator) so distinct message kinds sharing an
+  // event name (e.g. runtime.message.received) do not suppress each other.
+  const contextType = record.context["type"];
+  const key = `${record.scope} ${record.event} ${typeof contextType === "string" ? contextType : ""}`;
+  const lastPersistedAt = lastDebugPersistAtByKey.get(key);
+
+  if (
+    lastPersistedAt !== undefined &&
+    record.created_at - lastPersistedAt < DEBUG_PERSIST_SUPPRESSION_WINDOW_MS
+  ) {
+    return false;
+  }
+
+  if (lastDebugPersistAtByKey.size >= DEBUG_PERSIST_KEY_LIMIT) {
+    for (const [staleKey, persistedAt] of lastDebugPersistAtByKey) {
+      if (record.created_at - persistedAt >= DEBUG_PERSIST_SUPPRESSION_WINDOW_MS) {
+        lastDebugPersistAtByKey.delete(staleKey);
+      }
+    }
+
+    if (lastDebugPersistAtByKey.size >= DEBUG_PERSIST_KEY_LIMIT) {
+      lastDebugPersistAtByKey.clear();
+    }
+  }
+
+  lastDebugPersistAtByKey.set(key, record.created_at);
+  return true;
 }
 
 function schedulePrune(): Promise<void> {
