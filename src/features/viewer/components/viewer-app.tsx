@@ -81,6 +81,7 @@ export function ViewerApp() {
     hasMorePosts,
     status,
     isLoadingMore,
+    isRuntimeUnresponsive,
     loadNotice,
     loadArchivePage,
     setLoadNotice,
@@ -694,6 +695,21 @@ export function ViewerApp() {
             )}
             {loadNotice !== null && (
               <p className="viewer-message viewer-message-error">{loadNotice}</p>
+            )}
+            {loadNotice !== null && isRuntimeUnresponsive && (
+              <p className="viewer-message">
+                {language === "ja"
+                  ? "拡張機能が応答していない可能性があります。再起動すると復旧する場合があります（このタブは閉じます）。"
+                  : "The extension may be unresponsive. Restarting it can recover (this tab will close)."}
+                <br />
+                <button
+                  type="button"
+                  className="viewer-action-button"
+                  onClick={() => browser.runtime.reload()}
+                >
+                  {language === "ja" ? "拡張機能を再起動" : "Restart extension"}
+                </button>
+              </p>
             )}
             {status === "ready" && posts.length === 0 && (
               <p className="viewer-message">

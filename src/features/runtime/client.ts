@@ -460,6 +460,15 @@ export async function requestResetArchive(): Promise<void> {
   }
 }
 
+// Why: callers need to tell "background never answered" (likely a wedged service worker, #112)
+// apart from ordinary request failures, so the viewer can offer an extension restart.
+export class RuntimeTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Runtime request timed out after ${timeoutMs}ms.`);
+    this.name = "RuntimeTimeoutError";
+  }
+}
+
 async function sendMessage(
   message: RuntimeMessage,
   timeoutMs: number
@@ -467,7 +476,7 @@ async function sendMessage(
   let timeoutId: number | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = window.setTimeout(() => {
-      reject(new Error(`Runtime request timed out after ${timeoutMs}ms.`));
+      reject(new RuntimeTimeoutError(timeoutMs));
     }, timeoutMs);
   });
 

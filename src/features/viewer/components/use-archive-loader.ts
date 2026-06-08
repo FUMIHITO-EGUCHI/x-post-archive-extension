@@ -8,7 +8,7 @@ import type {
   SortDirection
 } from "../../../types/viewer";
 import { createLogger } from "../../logging/logger";
-import { requestPostsPage } from "../../runtime/client";
+import { requestPostsPage, RuntimeTimeoutError } from "../../runtime/client";
 
 type ViewerStatus = "idle" | "loading" | "ready";
 
@@ -37,6 +37,7 @@ export function useArchiveLoader() {
   const [status, setStatus] = useState<ViewerStatus>("idle");
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadNotice, setLoadNotice] = useState<string | null>(null);
+  const [isRuntimeUnresponsive, setIsRuntimeUnresponsive] = useState(false);
   const [nextCursor, setNextCursor] = useState<PostPageCursor | null>(null);
   const loadArchiveRequestIdRef = useRef(0);
 
@@ -79,6 +80,7 @@ export function useArchiveLoader() {
       setArchiveTotalCount(response.totalCount);
       setHasMorePosts(response.hasMore);
       setNextCursor(response.nextCursor);
+      setIsRuntimeUnresponsive(false);
       setStatus("ready");
     } catch (error) {
       if (requestId !== loadArchiveRequestIdRef.current) {
@@ -102,6 +104,7 @@ export function useArchiveLoader() {
         setNextCursor(null);
       }
 
+      setIsRuntimeUnresponsive(error instanceof RuntimeTimeoutError);
       setStatus("ready");
       setLoadNotice(
         input.append
@@ -148,6 +151,7 @@ export function useArchiveLoader() {
     hasMorePosts,
     status,
     isLoadingMore,
+    isRuntimeUnresponsive,
     loadNotice,
     loadArchivePage,
     setLoadNotice,
