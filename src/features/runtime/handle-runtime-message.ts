@@ -93,11 +93,28 @@ const DESTRUCTIVE_MESSAGE_TYPES = new Set<RuntimeMessage["type"]>([
   "post_tag.remove"
 ]);
 
+// Why: resumePendingMediaPersistence runs before every message and can trigger up to 24 media
+// fetches; its cost was invisible while being a prime suspect for slow saves (#126). Timing is
+// sampled at debug level (persist-suppressed per message type) and escalated to warn when slow.
+const PREAMBLE_SLOW_WARN_MS = 500;
+
 export async function handleRuntimeMessage(
   message: unknown,
   sender: RuntimeMessageSender | undefined = undefined
 ): Promise<RuntimeResponse | undefined> {
+  const preambleStartedAt = Date.now();
   await resumePendingMediaPersistence();
+  const preambleElapsedMs = Date.now() - preambleStartedAt;
+  const preambleContext = {
+    elapsedMs: preambleElapsedMs,
+    type: isRuntimeMessage(message) ? message.type : null
+  };
+
+  if (preambleElapsedMs >= PREAMBLE_SLOW_WARN_MS) {
+    logger.warn("runtime.preamble.slow", { context: preambleContext });
+  } else {
+    logger.debug("runtime.preamble.timing", { context: preambleContext });
+  }
 
   if (!isRuntimeMessage(message)) {
     logger.warn("runtime.message.invalid");

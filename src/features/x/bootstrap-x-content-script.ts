@@ -1,5 +1,6 @@
 import type { ContentScriptContext } from "#imports";
 import {
+  requestDebugLog,
   requestHasPost,
   requestNotifyRefetchComplete,
   requestSavePost,
@@ -41,7 +42,9 @@ import {
   removeLikesImportControls
 } from "./likes-import-controls";
 import {
+  AUTO_ARCHIVE_MISS_EVENT,
   LIKE_BOOKMARK_ACTION_EVENT,
+  type AutoArchiveMissEventDetail,
   type LikeBookmarkActionEventDetail
 } from "./intercept-like-bookmark-actions";
 import { detectThreadPage } from "./detect-thread-page";
@@ -260,6 +263,10 @@ function installAutoArchiveActionListener(): void {
     LIKE_BOOKMARK_ACTION_EVENT,
     handleLikeBookmarkAction as EventListener
   );
+  document.addEventListener(
+    AUTO_ARCHIVE_MISS_EVENT,
+    handleAutoArchiveMissEvent as EventListener
+  );
   autoArchiveActionListenerInstalled = true;
 }
 
@@ -272,7 +279,58 @@ function removeAutoArchiveActionListener(): void {
     LIKE_BOOKMARK_ACTION_EVENT,
     handleLikeBookmarkAction as EventListener
   );
+  document.removeEventListener(
+    AUTO_ARCHIVE_MISS_EVENT,
+    handleAutoArchiveMissEvent as EventListener
+  );
   autoArchiveActionListenerInstalled = false;
+}
+
+// Why: interceptor misses used to die in the page console (#126). Persisting them via debug/log
+// makes the "like did not save" failure rate and its causes measurable from the logs store.
+// The event comes from the MAIN world, so the payload is validated before forwarding.
+function handleAutoArchiveMissEvent(event: Event): void {
+  const detail = (event as CustomEvent<AutoArchiveMissEventDetail>).detail;
+
+  if (!isAutoArchiveMissDetail(detail)) {
+    return;
+  }
+
+  reportAutoArchiveDiagnostics(`auto_archive.miss.${detail.reason}`, {
+    action: detail.action,
+    endpoint: detail.endpoint,
+    detail: detail.detail
+  });
+}
+
+function isAutoArchiveMissDetail(value: unknown): value is AutoArchiveMissEventDetail {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<AutoArchiveMissEventDetail>;
+  return (
+    typeof candidate.reason === "string" &&
+    /^[a-z_]{1,40}$/.test(candidate.reason) &&
+    (candidate.action === "like" || candidate.action === "bookmark" || candidate.action === null) &&
+    (typeof candidate.endpoint === "string" || candidate.endpoint === null) &&
+    (typeof candidate.detail === "string" || candidate.detail === null)
+  );
+}
+
+function reportAutoArchiveDiagnostics(
+  event: string,
+  context: Record<string, unknown>,
+  traceId?: string
+): void {
+  void requestDebugLog({
+    level: "info",
+    event,
+    context,
+    ...(traceId === undefined ? {} : { traceId })
+  }).catch(() => {
+    // Telemetry is best-effort; a wedged or reloading background must not break the page flow.
+  });
 }
 
 function installRefetchMessageListener(): void {
@@ -410,7 +468,9 @@ async function saveVisibleThread(): Promise<void> {
   }
 
   latestThreadPosts = posts;
-  const response = await requestSaveThread(posts);
+  const response = await requestSaveThread(posts, {
+    traceId: `thread:manual:${posts[0]?.x_post_id ?? "unknown"}`
+  });
 
   if (response.failed > 0) {
     throw new Error("Thread save failed.");
@@ -446,6 +506,7 @@ function handleLikeBookmarkAction(event: Event): void {
 }
 
 async function autoArchivePost(detail: LikeBookmarkActionEventDetail): Promise<void> {
+  const receivedAtMs = performance.now();
   let autoArchiveEnabled = false;
 
   try {
@@ -454,6 +515,11 @@ async function autoArchivePost(detail: LikeBookmarkActionEventDetail): Promise<v
       detail.action === "like" ? settings.autoArchiveOnLike : settings.autoArchiveOnBookmark;
   } catch (error) {
     console.error("[auto-archive] settings-load-failed", { action: detail.action, xPostId: detail.xPostId, error });
+    reportAutoArchiveDiagnostics("auto_archive.miss.settings_load_failed", {
+      action: detail.action,
+      xPostId: detail.xPostId,
+      error
+    });
     return;
   }
 
@@ -462,12 +528,13 @@ async function autoArchivePost(detail: LikeBookmarkActionEventDetail): Promise<v
     return;
   }
 
-  await attemptAutoArchive(detail, 0);
+  await attemptAutoArchive(detail, 0, receivedAtMs);
 }
 
 async function attemptAutoArchive(
   detail: LikeBookmarkActionEventDetail,
-  attempt: number
+  attempt: number,
+  receivedAtMs: number
 ): Promise<void> {
   if (!isContentScriptActive) {
     clearPendingAutoArchiveRetry(detail);
@@ -479,12 +546,17 @@ async function attemptAutoArchive(
 
   if (article === null) {
     if (attempt + 1 < AUTO_ARCHIVE_ARTICLE_MAX_ATTEMPTS) {
-      scheduleAutoArchiveRetry(detail, attempt + 1);
+      scheduleAutoArchiveRetry(detail, attempt + 1, receivedAtMs);
       return;
     }
 
     clearPendingAutoArchiveRetry(detail);
     console.warn("[auto-archive] auto-archive-article-not-found", {
+      action: detail.action,
+      xPostId: detail.xPostId,
+      attempts: attempt + 1
+    });
+    reportAutoArchiveDiagnostics("auto_archive.miss.article_not_found", {
       action: detail.action,
       xPostId: detail.xPostId,
       attempts: attempt + 1
@@ -502,7 +574,12 @@ async function attemptAutoArchive(
   try {
     await saveArticleSnapshot(article, {
       includeLikedTag: detail.action === "like",
-      includeBookmarkedTag: detail.action === "bookmark"
+      includeBookmarkedTag: detail.action === "bookmark",
+      traceId: `auto:${detail.action}:${detail.xPostId}`,
+      preStages: {
+        article_search_ms: Math.round(performance.now() - receivedAtMs),
+        article_attempts: attempt + 1
+      }
     });
 
     if (button !== null) {
@@ -510,6 +587,15 @@ async function attemptAutoArchive(
     }
   } catch (error) {
     console.error("[auto-archive] save-failed", { action: detail.action, xPostId: detail.xPostId, error });
+    reportAutoArchiveDiagnostics(
+      "auto_archive.save_failed",
+      {
+        action: detail.action,
+        xPostId: detail.xPostId,
+        error
+      },
+      `auto:${detail.action}:${detail.xPostId}`
+    );
 
     if (button !== null) {
       flashButtonState(
@@ -524,7 +610,8 @@ async function attemptAutoArchive(
 
 function scheduleAutoArchiveRetry(
   detail: LikeBookmarkActionEventDetail,
-  attempt: number
+  attempt: number,
+  receivedAtMs: number
 ): void {
   const retryKey = getAutoArchiveRetryKey(detail);
 
@@ -534,7 +621,7 @@ function scheduleAutoArchiveRetry(
 
   const timeoutId = window.setTimeout(() => {
     pendingAutoArchiveRetryTimers.delete(retryKey);
-    void attemptAutoArchive(detail, attempt);
+    void attemptAutoArchive(detail, attempt, receivedAtMs);
   }, AUTO_ARCHIVE_ARTICLE_RETRY_INTERVAL_MS);
 
   pendingAutoArchiveRetryTimers.set(retryKey, timeoutId);
@@ -545,9 +632,13 @@ async function saveArticleSnapshot(
   options: {
     includeLikedTag?: boolean;
     includeBookmarkedTag?: boolean;
+    traceId?: string;
+    preStages?: Record<string, number>;
   } = {}
 ): Promise<void> {
+  const startedAtMs = performance.now();
   const extracted = await extractReadyPostFromVisibleArticle(article);
+  const extractionMs = Math.round(performance.now() - startedAtMs);
 
   if (extracted === null) {
     throw new Error("Post extraction failed.");
@@ -555,6 +646,9 @@ async function saveArticleSnapshot(
 
   const language = await loadArchiveLanguage();
   const { post, quotedPost } = extracted;
+  // Why: the traceId ties this page-side record to the background's post.save.* and
+  // media.persist.* log entries so per-save latency can be broken down offline (#126).
+  const traceId = options.traceId ?? `manual:${post.x_post_id}`;
   const autoTagOptions = {
     ...(options.includeLikedTag === undefined ? {} : { includeLikedTag: options.includeLikedTag }),
     ...(options.includeBookmarkedTag === undefined
@@ -565,10 +659,13 @@ async function saveArticleSnapshot(
   post.auto_tags = buildLocalizedDefaultAutoTags(language, post, autoTagOptions);
 
   let quotedPostId: string | null = null;
+  let quoteSaveMs: number | null = null;
 
   if (quotedPost !== null) {
+    const quoteStartedAtMs = performance.now();
+
     try {
-      const quotedResponse = await requestSavePost(quotedPost);
+      const quotedResponse = await requestSavePost(quotedPost, { traceId });
 
       if (quotedResponse.status === "saved" || quotedResponse.status === "duplicate") {
         quotedPostId = quotedPost.x_post_id;
@@ -576,14 +673,31 @@ async function saveArticleSnapshot(
     } catch (error) {
       console.warn("Quoted post save failed. Saving the main post without linkage.", error);
     }
+
+    quoteSaveMs = Math.round(performance.now() - quoteStartedAtMs);
   }
 
   post.quoted_post_id = quotedPostId;
-  const response = await requestSavePost(post);
+  const saveStartedAtMs = performance.now();
+  const response = await requestSavePost(post, { traceId });
 
   if (response.status !== "saved" && response.status !== "duplicate") {
     throw new Error("Unexpected save status.");
   }
+
+  reportAutoArchiveDiagnostics(
+    "save.stage_timings",
+    {
+      ...(options.preStages ?? {}),
+      xPostId: post.x_post_id,
+      status: response.status,
+      extraction_ms: extractionMs,
+      quote_save_ms: quoteSaveMs,
+      save_rtt_ms: Math.round(performance.now() - saveStartedAtMs),
+      total_ms: Math.round(performance.now() - startedAtMs)
+    },
+    traceId
+  );
 }
 
 async function extractReadyPostFromVisibleArticle(
