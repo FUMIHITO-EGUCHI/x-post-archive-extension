@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ArchiveBackupSummary } from "../../../types/archive-backup";
 import type { RefetchStatusRecord } from "../../../types/refetch";
-import {
-  type ArchiveTransferProgress,
-  type RestoreMode,
-  importArchiveBackupZip,
-  streamArchiveBackupZip
+// Why: the maintenance service pulls in @zip.js and the Dexie instance. Importing it only when
+// a backup/restore actually runs keeps both out of the viewer's initial bundle (#119).
+import type {
+  ArchiveTransferProgress,
+  RestoreMode
 } from "../../archive/archive-maintenance-service";
 import { requestResetArchive } from "../../runtime/client";
 import { createLogger } from "../../logging/logger";
@@ -96,6 +96,9 @@ export function SettingsArchiveMaintenancePanel({
     setBackupProgress(null);
 
     try {
+      const { streamArchiveBackupZip } = await import(
+        "../../archive/archive-maintenance-service"
+      );
       const fileHandle = await getBackupSaveFileHandle(language);
       const writable = await fileHandle.createWritable();
       const backup = await streamArchiveBackupZip(writable, (progress) => {
@@ -152,6 +155,9 @@ export function SettingsArchiveMaintenancePanel({
     setRestoreProgress(null);
 
     try {
+      const { importArchiveBackupZip } = await import(
+        "../../archive/archive-maintenance-service"
+      );
       const restoreFile = await readRestoreFileWithRetry(restoreHandle, language);
       const summary = await importArchiveBackupZip(restoreFile, {
         mode: restoreMode,

@@ -455,22 +455,46 @@ function MediaCard({
   );
 }
 
+// Why: Intl constructors cost tens of µs each and these formatters run five-plus times per card
+// on every list render pass — cache one instance per language instead (#119).
+const numberFormatByLanguage = new Map<ArchiveLanguage, Intl.NumberFormat>();
+const dateTimeFormatByLanguage = new Map<ArchiveLanguage, Intl.DateTimeFormat>();
+
+function getNumberFormat(language: ArchiveLanguage): Intl.NumberFormat {
+  let format = numberFormatByLanguage.get(language);
+
+  if (format === undefined) {
+    format = new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US");
+    numberFormatByLanguage.set(language, format);
+  }
+
+  return format;
+}
+
+function getDateTimeFormat(language: ArchiveLanguage): Intl.DateTimeFormat {
+  let format = dateTimeFormatByLanguage.get(language);
+
+  if (format === undefined) {
+    format = new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "en-US", {
+      dateStyle: "medium",
+      timeStyle: "short"
+    });
+    dateTimeFormatByLanguage.set(language, format);
+  }
+
+  return format;
+}
+
 function formatCount(value: number, language: ArchiveLanguage = "en"): string {
-  return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
+  return getNumberFormat(language).format(value);
 }
 
 function formatPostedAt(postedAt: number, language: ArchiveLanguage): string {
-  return new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "en-US", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(postedAt);
+  return getDateTimeFormat(language).format(postedAt);
 }
 
 function formatSavedAt(savedAt: number, language: ArchiveLanguage): string {
-  return new Intl.DateTimeFormat(language === "ja" ? "ja-JP" : "en-US", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(savedAt);
+  return getDateTimeFormat(language).format(savedAt);
 }
 
 function useDeferredVisibility<T extends Element>(): [(node: T | null) => void, boolean] {

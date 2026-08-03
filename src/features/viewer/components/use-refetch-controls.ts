@@ -47,7 +47,12 @@ export function useRefetchControls({
         const nextStatus = response.status;
 
         previousRefetchStatusRef.current = nextStatus;
-        setRefetchStatus(nextStatus);
+
+        // Why: every poll (idle: 5s) returns a fresh object, and an unconditional setState
+        // re-rendered the whole card list even when nothing changed (#119).
+        if (!areRefetchStatusesEqual(previousStatus, nextStatus)) {
+          setRefetchStatus(nextStatus);
+        }
 
         if (
           previousStatus.phase === "running" &&
@@ -176,4 +181,19 @@ export function useRefetchControls({
     handleCancelRefetch,
     handleClearRefetchQueue
   };
+}
+
+function areRefetchStatusesEqual(a: RefetchStatusRecord, b: RefetchStatusRecord): boolean {
+  return (
+    a.phase === b.phase &&
+    a.currentPostId === b.currentPostId &&
+    a.currentAttempt === b.currentAttempt &&
+    a.pendingCount === b.pendingCount &&
+    a.completedCount === b.completedCount &&
+    a.failedCount === b.failedCount &&
+    a.totalCount === b.totalCount &&
+    a.stopRequested === b.stopRequested &&
+    a.averageDurationMs === b.averageDurationMs &&
+    a.estimatedRemainingMs === b.estimatedRemainingMs
+  );
 }

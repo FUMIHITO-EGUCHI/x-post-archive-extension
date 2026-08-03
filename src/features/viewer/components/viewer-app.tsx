@@ -1,6 +1,6 @@
 ﻿import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ArchiveTagRecord } from "../../../types/archive";
+import type { ArchiveTagRecord, MediaRecord } from "../../../types/archive";
 import type {
   DateFilterTarget,
   PostSortField,
@@ -33,6 +33,7 @@ import { useRefetchControls } from "./use-refetch-controls";
 import { useViewerPreferences } from "./use-viewer-preferences";
 import { useTagOperations } from "./use-tag-operations";
 import { useArchiveLoader } from "./use-archive-loader";
+import { useEventCallback } from "./use-event-callback";
 import {
   createRandomSeed,
   DEFAULT_DATE_FILTER_TARGET,
@@ -505,7 +506,12 @@ export function ViewerApp() {
       const response = await requestDeletePost(xPostId);
 
       if (response.deleted) {
-        await reloadCurrentArchive();
+        // Why: reloading the whole list for one deletion re-hydrated every loaded card, and the
+        // background caps page limits at 250, truncating longer lists (#119). Remove the card
+        // locally and refresh only the metadata; a deleted thread root's remaining replies show
+        // up on the next full reload.
+        removePostFromCurrentPage(xPostId);
+        await refreshArchiveMetadata();
       }
     } catch (error) {
       logger.error("post.delete.failed", {
@@ -547,6 +553,41 @@ export function ViewerApp() {
     setIsSearchMode(false);
     await clearAllFilters();
   }
+
+  // Why: ThreadCard is memoized; these list-item handlers must keep a stable identity or every
+  // card re-renders whenever ViewerApp does (#119).
+  const handleCardDelete = useEventCallback((xPostId: string) => {
+    void handleDelete(xPostId);
+  });
+  const handleCardRefetch = useEventCallback((xPostId: string) => {
+    void handleRefetchPost(xPostId);
+  });
+  const handleCardToggleTagFilter = useEventCallback((normalizedName: string) => {
+    void handleToggleTagFilter(normalizedName);
+  });
+  const handleCardOpenMedia = useEventCallback(
+    (items: MediaRecord[], currentIndex: number) => {
+      mediaLightbox.setActiveMedia({
+        items,
+        currentIndex
+      });
+    }
+  );
+  const handleCardOpenVideo = useEventCallback((media: MediaRecord) => {
+    mediaLightbox.setActiveVideo({
+      media,
+      objectUrl: null,
+      status: "loading"
+    });
+  });
+  const handleCardToggleTagPicker = useEventCallback((xPostId: string) => {
+    setTagPickerPostId((current) => (current === xPostId ? null : xPostId));
+  });
+  const handleCardCloseTagPicker = useEventCallback(() => {
+    setTagPickerPostId(null);
+  });
+  const handleCardAddTag = useEventCallback(handleAddTagToPost);
+  const handleCardRemoveTag = useEventCallback(handleRemoveTagFromPost);
 
   const handleLoadMore = useCallback(async () => {
     if (
@@ -740,36 +781,15 @@ export function ViewerApp() {
                     refetchCurrentPostId={refetchStatus.currentPostId}
                     availableTags={availableTags}
                     getTagDisplayName={getTagDisplayName}
-                    onDelete={(xPostId) => {
-                      void handleDelete(xPostId);
-                    }}
-                    onRefetch={(xPostId) => {
-                      void handleRefetchPost(xPostId);
-                    }}
-                    onToggleTagFilter={(normalizedName) => {
-                      void handleToggleTagFilter(normalizedName);
-                    }}
-                    onOpenMedia={(items, currentIndex) => {
-                      mediaLightbox.setActiveMedia({
-                        items,
-                        currentIndex
-                      });
-                    }}
-                    onOpenVideo={(media) => {
-                      mediaLightbox.setActiveVideo({
-                        media,
-                        objectUrl: null,
-                        status: "loading"
-                      });
-                    }}
-                    onToggleTagPicker={(xPostId) => {
-                      setTagPickerPostId((current) => (current === xPostId ? null : xPostId));
-                    }}
-                    onCloseTagPicker={() => {
-                      setTagPickerPostId(null);
-                    }}
-                    onAddTag={handleAddTagToPost}
-                    onRemoveTag={handleRemoveTagFromPost}
+                    onDelete={handleCardDelete}
+                    onRefetch={handleCardRefetch}
+                    onToggleTagFilter={handleCardToggleTagFilter}
+                    onOpenMedia={handleCardOpenMedia}
+                    onOpenVideo={handleCardOpenVideo}
+                    onToggleTagPicker={handleCardToggleTagPicker}
+                    onCloseTagPicker={handleCardCloseTagPicker}
+                    onAddTag={handleCardAddTag}
+                    onRemoveTag={handleCardRemoveTag}
                   />
                 ))}
               </div>
