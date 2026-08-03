@@ -471,15 +471,22 @@ export class RuntimeTimeoutError extends Error {
 }
 
 // Why: a request timeout alone cannot tell a wedged SW (#112) from a busy one (#117) — batch
-// saves legitimately run for minutes. The background answers pings before any other work, so
-// only a ping that also times out indicates a dead event loop. Any response — including a
-// runtime/error — proves the SW is alive.
+// saves legitimately run for minutes. The background answers pings before any other work
+// (including validation), so a handler that runs at all always resolves this call. Every
+// failure mode — timeout, "receiving end does not exist", "message port closed" — means the
+// handler did not answer, so anything but success reads as unresponsive.
 export async function requestRuntimePing(): Promise<boolean> {
   try {
     await sendMessage({ type: "runtime/ping" }, PING_RUNTIME_TIMEOUT_MS);
     return true;
   } catch (error) {
-    return !(error instanceof RuntimeTimeoutError);
+    if (!(error instanceof RuntimeTimeoutError)) {
+      // Connection-level rejections are unexpected here; keep a trace so a restart offer
+      // triggered by this path can be diagnosed.
+      console.warn("Runtime ping failed without a timeout.", { error });
+    }
+
+    return false;
   }
 }
 
