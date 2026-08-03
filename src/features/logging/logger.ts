@@ -169,7 +169,11 @@ function rollbackDebugPersistMark(record: LogRecord): void {
   const entry = debugPersistEntriesByKey.get(key);
 
   if (entry !== undefined && entry.persistedAt === record.created_at) {
-    debugPersistEntriesByKey.delete(key);
+    // Expire the window instead of deleting the entry: suppressedCount accumulated while this
+    // persist was pending is preserved — and the failed record itself joins it — so the key's
+    // next successful persist still reports every elided event.
+    entry.persistedAt = 0;
+    entry.suppressedCount += 1;
   }
 }
 
