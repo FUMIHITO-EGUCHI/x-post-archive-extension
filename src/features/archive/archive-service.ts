@@ -26,6 +26,7 @@ import {
   listPostIdsByUsername,
   listPostUsernames,
   listRootOrSinglePostIds,
+  mapThreadRootIdsByPostId,
   getPostsByIds,
   hasPost,
   buildPostPageCursor,
@@ -212,7 +213,9 @@ export async function saveArchivePost(
     repost_count: input.repost_count,
     like_count: input.like_count,
     in_reply_to_post_id: normalizedInReplyToPostId,
-    thread_root_id: normalizedThreadRootId,
+    // Why: v19 invariant — singles store their own id so every post stays inside the
+    // thread_root_id index the viewer list is built from (#120).
+    thread_root_id: normalizedThreadRootId ?? input.x_post_id,
     quoted_post_id: normalizedQuotedPostId,
     saved_at: savedAt
   };
@@ -1544,8 +1547,11 @@ export async function refetchArchivePost(
     normalizeOptionalPostId(input.quoted_post_id) ?? existingPost.quoted_post_id ?? null;
   const normalizedInReplyToPostId =
     normalizeOptionalPostId(input.in_reply_to_post_id) ?? existingPost.in_reply_to_post_id ?? null;
+  // Why: v19 invariant — thread_root_id must stay non-null (falls back to the post's own id).
   const normalizedThreadRootId =
-    normalizeOptionalPostId(input.thread_root_id) ?? existingPost.thread_root_id ?? null;
+    normalizeOptionalPostId(input.thread_root_id) ??
+    normalizeOptionalPostId(existingPost.thread_root_id) ??
+    xPostId;
   const removedMediaPaths = preparedMediaUpdate.removedRecords.flatMap((record) =>
     [record.opfs_path, record.preview_image_opfs_path].filter(
       (path): path is string => typeof path === "string" && path.trim() !== ""
@@ -1652,12 +1658,14 @@ async function resolveViewerListPostIds(matchingPostIds: Set<string> | null): Pr
     return rootOrSinglePostIds;
   }
 
-  const matchingPosts = await getPostsByIds([...matchingPostIds]);
+  // Why: resolve each member's thread root via the compound index instead of bulk-reading every
+  // matching record — an author filter hitting thousands of posts no longer deserializes them
+  // all per page request (#120).
+  const threadRootIdByPostId = await mapThreadRootIdsByPostId();
   const result = new Set<string>();
 
-  for (const post of matchingPosts) {
-    const threadRootId = normalizeOptionalPostId(post.thread_root_id);
-    const viewerPostId = threadRootId ?? post.x_post_id;
+  for (const postId of matchingPostIds) {
+    const viewerPostId = threadRootIdByPostId.get(postId) ?? postId;
 
     if (rootOrSinglePostIds.has(viewerPostId)) {
       result.add(viewerPostId);

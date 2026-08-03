@@ -270,6 +270,41 @@ export class ArchiveDatabase extends Dexie {
         "++id, &thread_root_id, candidate_post_id, status, next_attempt_at, created_at, updated_at",
       tweet_detail_template: "&id, captured_at"
     });
+
+    // v19: Normalized thread_root_id (#120) — single posts store their own id instead of null.
+    // Why: IndexedDB excludes null keys from indexes, so the viewer list's root/single membership
+    // had to full-scan every record. With the invariant, membership comes from
+    // orderBy("thread_root_id").uniqueKeys() and member→root mapping from the new
+    // [x_post_id+thread_root_id] compound index — both index-only. Every post write path must
+    // keep thread_root_id non-null (see listRootOrSinglePostIds for the self-heal fallback).
+    this.version(19)
+      .stores({
+        posts:
+          "&x_post_id, saved_at, posted_at, reply_count, repost_count, like_count, display_name, quoted_post_id, in_reply_to_post_id, thread_root_id, x_username, [x_username+saved_at], [saved_at+x_post_id], [posted_at+x_post_id], [reply_count+x_post_id], [repost_count+x_post_id], [like_count+x_post_id], [x_post_id+thread_root_id]",
+        media: "&media_id, x_post_id, [x_post_id+position], storage_status, saved_at, media_type",
+        tags: "&tag_id, &normalized_name, system_key, display_name, created_at",
+        tag_redirects:
+          "&tag_redirect_id, &source_normalized_name, source_display_name, target_tag_id, created_at",
+        post_tags:
+          "&post_tag_id, x_post_id, tag_id, normalized_name, [x_post_id+normalized_name], source, system_key, assigned_at",
+        logs: "&log_id, created_at, level, [level+created_at], scope, event, request_id",
+        refetch_queue: "&x_post_id, status, priority, enqueued_at, completed_at",
+        thread_expand_queue:
+          "++id, &thread_root_id, candidate_post_id, status, next_attempt_at, created_at, updated_at",
+        tweet_detail_template: "&id, captured_at"
+      })
+      .upgrade(async (transaction) => {
+        await transaction
+          .table<PostRecord, string>("posts")
+          .toCollection()
+          .modify((post) => {
+            const threadRootId =
+              typeof post.thread_root_id === "string" && post.thread_root_id.trim() !== ""
+                ? post.thread_root_id.trim()
+                : null;
+            post.thread_root_id = threadRootId ?? post.x_post_id;
+          });
+      });
   }
 }
 
