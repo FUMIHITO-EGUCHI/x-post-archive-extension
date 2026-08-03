@@ -697,10 +697,10 @@ export function ViewerApp() {
               <p className="viewer-message viewer-message-error">{loadNotice}</p>
             )}
             {loadNotice !== null && isRuntimeUnresponsive && (
-              <p className="viewer-message">
+              <p className="viewer-message" role="alert">
                 {language === "ja"
-                  ? "拡張機能が応答していない可能性があります。再起動すると復旧する場合があります（このタブは閉じます）。"
-                  : "The extension may be unresponsive. Restarting it can recover (this tab will close)."}
+                  ? "拡張機能が応答していません。再起動すると復旧する場合があります（このタブは閉じ、進行中の保存は中断されます）。"
+                  : "The extension is not responding. Restarting it can recover (this tab will close and any in-progress saves will be aborted)."}
                 <br />
                 <button
                   type="button"

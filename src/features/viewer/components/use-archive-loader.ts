@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { ArchivePostRecord, ArchiveTagRecord } from "../../../types/archive";
 import type {
   DateFilterTarget,
@@ -8,7 +8,7 @@ import type {
   SortDirection
 } from "../../../types/viewer";
 import { createLogger } from "../../logging/logger";
-import { requestPostsPage, RuntimeTimeoutError } from "../../runtime/client";
+import { requestPostsPage, requestRuntimePing, RuntimeTimeoutError } from "../../runtime/client";
 
 type ViewerStatus = "idle" | "loading" | "ready";
 
@@ -97,6 +97,15 @@ export function useArchiveLoader() {
         }
       });
 
+      // Why: a timeout alone can also mean "busy SW" (#117) — e.g. a batch save legitimately
+      // running for minutes. Only offer a restart when a follow-up ping also gets no answer.
+      const runtimeUnresponsive =
+        error instanceof RuntimeTimeoutError && !(await requestRuntimePing());
+
+      if (requestId !== loadArchiveRequestIdRef.current) {
+        return;
+      }
+
       if (!input.append) {
         setPosts([]);
         setArchiveTotalCount(0);
@@ -104,7 +113,7 @@ export function useArchiveLoader() {
         setNextCursor(null);
       }
 
-      setIsRuntimeUnresponsive(error instanceof RuntimeTimeoutError);
+      setIsRuntimeUnresponsive(runtimeUnresponsive);
       setStatus("ready");
       setLoadNotice(
         input.append
@@ -121,8 +130,17 @@ export function useArchiveLoader() {
   function setInitialLoadError() {
     setPosts([]);
     setStatus("ready");
+    setIsRuntimeUnresponsive(false);
     setLoadNotice("Posts could not be loaded. Showing an empty list.");
   }
+
+  // Why: the restart offer renders whenever isRuntimeUnresponsive && loadNotice !== null.
+  // External callers (refetch controls etc.) set notices unrelated to any timeout, so they
+  // must clear the flag or a stale "true" attaches the restart button to their notice (#117).
+  const setExternalLoadNotice = useCallback((notice: string | null) => {
+    setIsRuntimeUnresponsive(false);
+    setLoadNotice(notice);
+  }, []);
 
   function updatePostTags(
     xPostId: string,
@@ -154,7 +172,7 @@ export function useArchiveLoader() {
     isRuntimeUnresponsive,
     loadNotice,
     loadArchivePage,
-    setLoadNotice,
+    setLoadNotice: setExternalLoadNotice,
     setInitialLoadError,
     updatePostTags,
     removePostFromCurrentPage

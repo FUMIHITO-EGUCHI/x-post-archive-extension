@@ -43,6 +43,7 @@ const DEFAULT_RUNTIME_TIMEOUT_MS = 30000;
 const SAVE_RUNTIME_TIMEOUT_MS = 180000;
 const SAVE_BATCH_RUNTIME_TIMEOUT_MS = 300000;
 const RESET_RUNTIME_TIMEOUT_MS = 60000;
+const PING_RUNTIME_TIMEOUT_MS = 3000;
 
 export async function requestSavePost(
   post: SavePostInput,
@@ -466,6 +467,19 @@ export class RuntimeTimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`Runtime request timed out after ${timeoutMs}ms.`);
     this.name = "RuntimeTimeoutError";
+  }
+}
+
+// Why: a request timeout alone cannot tell a wedged SW (#112) from a busy one (#117) — batch
+// saves legitimately run for minutes. The background answers pings before any other work, so
+// only a ping that also times out indicates a dead event loop. Any response — including a
+// runtime/error — proves the SW is alive.
+export async function requestRuntimePing(): Promise<boolean> {
+  try {
+    await sendMessage({ type: "runtime/ping" }, PING_RUNTIME_TIMEOUT_MS);
+    return true;
+  } catch (error) {
+    return !(error instanceof RuntimeTimeoutError);
   }
 }
 

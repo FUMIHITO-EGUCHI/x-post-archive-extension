@@ -174,6 +174,13 @@ export type SetTweetDetailTemplateMessage = {
 export type ThreadExpandAuthStaleCheckMessage = {
   type: "thread-expand/auth-stale-check";
 };
+
+// Why: liveness probe (#117). Carries no payload so the background can answer before any
+// other work; a response proves the SW event loop is alive even when long requests time out.
+export type RuntimePingMessage = {
+  type: "runtime/ping";
+};
+
 export type RuntimeMessage =
   | SavePostMessage
   | SavePostsBatchMessage
@@ -202,7 +209,8 @@ export type RuntimeMessage =
   | ClearLogsMessage
   | DebugLogMessage
   | SetTweetDetailTemplateMessage
-  | ThreadExpandAuthStaleCheckMessage;
+  | ThreadExpandAuthStaleCheckMessage
+  | RuntimePingMessage;
 
 export type SavePostResponse = {
   type: "posts/save-result";
@@ -383,6 +391,11 @@ export type ThreadExpandAuthStaleCheckResponse = {
   hasAuthStaleItems: boolean;
   count: number;
 };
+
+export type RuntimePingResponse = {
+  type: "runtime/ping-result";
+};
+
 export type RuntimeResponse =
   | SavePostResponse
   | SavePostsBatchResponse
@@ -411,4 +424,5 @@ export type RuntimeResponse =
   | ClearLogsResponse
   | SetTweetDetailTemplateResponse
   | ThreadExpandAuthStaleCheckResponse
+  | RuntimePingResponse
   | RuntimeErrorResponse;
