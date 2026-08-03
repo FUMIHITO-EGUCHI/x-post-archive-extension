@@ -1651,6 +1651,13 @@ async function listRandomPostsPage(
   return getPostsByIds(selectSeededRandomIds(candidateIds, offset, limit, randomSeed));
 }
 
+// Why: the full [x_post_id+thread_root_id] index scan costs O(total posts) regardless of the
+// filter's match count, while bulkGet costs O(matches) full-record reads. Below this many
+// matches the targeted reads win; above it the index-only scan avoids deserializing thousands
+// of records per page request. The crossover is a rough estimate, not a benchmark — both sides
+// are index-backed and fast at this scale.
+const THREAD_ROOT_BULK_GET_MAX_MATCHES = 200;
+
 async function resolveViewerListPostIds(matchingPostIds: Set<string> | null): Promise<Set<string>> {
   const rootOrSinglePostIds = new Set(await listRootOrSinglePostIds());
 
@@ -1658,10 +1665,18 @@ async function resolveViewerListPostIds(matchingPostIds: Set<string> | null): Pr
     return rootOrSinglePostIds;
   }
 
-  // Why: resolve each member's thread root via the compound index instead of bulk-reading every
-  // matching record — an author filter hitting thousands of posts no longer deserializes them
-  // all per page request (#120).
-  const threadRootIdByPostId = await mapThreadRootIdsByPostId();
+  const threadRootIdByPostId =
+    matchingPostIds.size <= THREAD_ROOT_BULK_GET_MAX_MATCHES
+      ? new Map(
+          (await getPostsByIds([...matchingPostIds])).map((post) => [
+            post.x_post_id,
+            normalizeOptionalPostId(post.thread_root_id) ?? post.x_post_id
+          ])
+        )
+      : // Why: resolve members' thread roots via the compound index instead of bulk-reading
+        // every matching record — a broad filter hitting thousands of posts no longer
+        // deserializes them all per page request (#120).
+        await mapThreadRootIdsByPostId();
   const result = new Set<string>();
 
   for (const postId of matchingPostIds) {
