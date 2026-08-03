@@ -12,7 +12,13 @@ const DEBUG_PERSIST_KEY_LIMIT = 200;
 
 let writesSinceLastPrune = 0;
 let prunePromise: Promise<void> | null = null;
-const lastDebugPersistAtByKey = new Map<string, number>();
+
+type DebugPersistEntry = {
+  persistedAt: number;
+  suppressedCount: number;
+};
+
+const debugPersistEntriesByKey = new Map<string, DebugPersistEntry>();
 
 export function createLogger(scope: string) {
   return {
@@ -71,6 +77,10 @@ function writeLog(level: LogLevel, scope: string, event: string, options?: LogOp
       return undefined;
     })
     .catch((error: unknown) => {
+      if (level === "debug") {
+        rollbackDebugPersistMark(record);
+      }
+
       console.error("App logger failed to persist a record.", {
         level,
         scope,
@@ -80,36 +90,87 @@ function writeLog(level: LogLevel, scope: string, event: string, options?: LogOp
     });
 }
 
-// Returns true when the record should be persisted, recording it as the latest persist for its key.
+// Returns true when the record should be persisted, recording it as the latest persist for its
+// key. Suppressed records are counted, and the next persisted record for the key carries the
+// count as context.debug_suppressed_count so the persisted log shows "N events elided" instead
+// of a silent gap — the persisted log is the only forensic trail once a SW dies (#112).
 function checkAndMarkDebugPersist(record: LogRecord): boolean {
-  // Include context.type (the runtime message discriminator) so distinct message kinds sharing an
-  // event name (e.g. runtime.message.received) do not suppress each other. A "|" separator keeps
-  // segment boundaries unambiguous even if a segment ever contains spaces.
-  const contextType = record.context["type"];
-  const key = `${record.scope}|${record.event}|${typeof contextType === "string" ? contextType : ""}`;
-  const lastPersistedAt = lastDebugPersistAtByKey.get(key);
+  const key = buildDebugPersistKey(record);
+  const entry = debugPersistEntriesByKey.get(key);
 
-  if (
-    lastPersistedAt !== undefined &&
-    record.created_at - lastPersistedAt < DEBUG_PERSIST_SUPPRESSION_WINDOW_MS
-  ) {
-    return false;
-  }
+  if (entry !== undefined) {
+    const elapsed = record.created_at - entry.persistedAt;
 
-  if (lastDebugPersistAtByKey.size >= DEBUG_PERSIST_KEY_LIMIT) {
-    for (const [staleKey, persistedAt] of lastDebugPersistAtByKey) {
-      if (record.created_at - persistedAt >= DEBUG_PERSIST_SUPPRESSION_WINDOW_MS) {
-        lastDebugPersistAtByKey.delete(staleKey);
-      }
+    // A negative elapsed means the wall clock jumped backwards (e.g. NTP correction). Treat
+    // the window as expired instead of suppressing until the clock catches up again.
+    if (elapsed >= 0 && elapsed < DEBUG_PERSIST_SUPPRESSION_WINDOW_MS) {
+      entry.suppressedCount += 1;
+      return false;
     }
 
-    if (lastDebugPersistAtByKey.size >= DEBUG_PERSIST_KEY_LIMIT) {
-      lastDebugPersistAtByKey.clear();
+    if (entry.suppressedCount > 0) {
+      record.context["debug_suppressed_count"] = entry.suppressedCount;
     }
+  } else if (debugPersistEntriesByKey.size >= DEBUG_PERSIST_KEY_LIMIT) {
+    evictDebugPersistEntries(record.created_at);
   }
 
-  lastDebugPersistAtByKey.set(key, record.created_at);
+  debugPersistEntriesByKey.set(key, {
+    persistedAt: record.created_at,
+    suppressedCount: 0
+  });
   return true;
+}
+
+// Include context.type (the runtime message discriminator) so distinct message kinds sharing an
+// event name (e.g. runtime.message.received) do not suppress each other. JSON-encoding the
+// segments keeps boundaries unambiguous for any scope/event content; a non-string context.type
+// maps to null so it cannot masquerade as "no type".
+function buildDebugPersistKey(record: LogRecord): string {
+  const contextType = record.context["type"];
+  return JSON.stringify([
+    record.scope,
+    record.event,
+    typeof contextType === "string" ? contextType : null
+  ]);
+}
+
+function evictDebugPersistEntries(now: number): void {
+  // Dropping entries whose window already expired (or sits in the future after a clock jump)
+  // is behavior-neutral: those keys would persist their next record anyway.
+  for (const [key, entry] of debugPersistEntriesByKey) {
+    const elapsed = now - entry.persistedAt;
+
+    if (elapsed < 0 || elapsed >= DEBUG_PERSIST_SUPPRESSION_WINDOW_MS) {
+      debugPersistEntriesByKey.delete(key);
+    }
+  }
+
+  if (debugPersistEntriesByKey.size < DEBUG_PERSIST_KEY_LIMIT) {
+    return;
+  }
+
+  // Every key is hot. Evict only the oldest half — clearing the whole map would re-persist
+  // every hot key at once, the exact IDB write burst the suppression exists to avoid (#112).
+  const oldestFirst = [...debugPersistEntriesByKey.entries()].sort(
+    (a, b) => a[1].persistedAt - b[1].persistedAt
+  );
+
+  for (const [key] of oldestFirst.slice(0, Math.ceil(oldestFirst.length / 2))) {
+    debugPersistEntriesByKey.delete(key);
+  }
+}
+
+// Why: the persist failed (#112's frozen-IDB case is exactly this path), so keeping the mark
+// would suppress the key for a whole window with nothing actually persisted. Only unmark when
+// no newer record has persisted for the key in the meantime.
+function rollbackDebugPersistMark(record: LogRecord): void {
+  const key = buildDebugPersistKey(record);
+  const entry = debugPersistEntriesByKey.get(key);
+
+  if (entry !== undefined && entry.persistedAt === record.created_at) {
+    debugPersistEntriesByKey.delete(key);
+  }
 }
 
 function schedulePrune(): Promise<void> {
