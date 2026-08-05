@@ -25,7 +25,7 @@ import {
   listPostIdsByKeyword,
   listPostIdsByUsername,
   listPostUsernames,
-  listRootOrSinglePostIds,
+  listViewerRootPostIds,
   mapThreadRootIdsByPostId,
   getPostsByIds,
   hasPost,
@@ -345,7 +345,8 @@ export async function listArchivePostsPage(
   const normalizedOffset = normalizePageOffset(input.offset);
   const normalizedLimit = normalizePageLimit(input.limit);
   const matchingPostIds = await resolveFilteredPostIds(input);
-  const visiblePostIds = await resolveViewerListPostIds(matchingPostIds);
+  const { rootIds, threadPostCountByRootId } = await listViewerRootPostIds();
+  const visiblePostIds = await resolveViewerListPostIds(matchingPostIds, rootIds);
   const totalCount = visiblePostIds.size;
 
   if (totalCount === 0) {
@@ -378,7 +379,7 @@ export async function listArchivePostsPage(
         );
 
   return {
-    posts: await hydrateArchivePosts(pageResult.posts),
+    posts: await hydrateArchivePosts(pageResult.posts, threadPostCountByRootId),
     totalCount,
     hasMore: normalizedOffset + pageResult.posts.length < totalCount,
     nextOffset: normalizedOffset + pageResult.posts.length,
@@ -1302,8 +1303,11 @@ export async function resumePendingMediaPersistence(): Promise<void> {
   return pendingResumePromise;
 }
 
-async function hydrateArchivePosts(posts: PostRecord[]): Promise<ArchivePostRecord[]> {
-  const basePosts = await hydrateArchivePostsBase(posts);
+async function hydrateArchivePosts(
+  posts: PostRecord[],
+  threadPostCountByRootId?: Map<string, number>
+): Promise<ArchivePostRecord[]> {
+  const basePosts = await hydrateArchivePostsBase(posts, threadPostCountByRootId);
   const quotedPostIds = [...new Set(basePosts.flatMap((post) =>
     typeof post.quoted_post_id === "string" && post.quoted_post_id.trim() !== ""
       ? [post.quoted_post_id]
@@ -1320,7 +1324,7 @@ async function hydrateArchivePosts(posts: PostRecord[]): Promise<ArchivePostReco
     return basePosts;
   }
 
-  const hydratedQuotedPosts = await hydrateArchivePostsBase(quotedPosts);
+  const hydratedQuotedPosts = await hydrateArchivePostsBase(quotedPosts, threadPostCountByRootId);
   const quotedPostMap = new Map(
     hydratedQuotedPosts.map((post) => [post.x_post_id, post] as const)
   );
@@ -1340,11 +1344,14 @@ async function hydrateArchivePosts(posts: PostRecord[]): Promise<ArchivePostReco
   });
 }
 
-async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePostRecord[]> {
+async function hydrateArchivePostsBase(
+  posts: PostRecord[],
+  threadPostCountByRootId?: Map<string, number>
+): Promise<ArchivePostRecord[]> {
   const postIds = posts.map((post) => post.x_post_id);
   const media = await listMediaByPostIds(postIds);
   const postTags = await listPostTagsByPostIds(postIds);
-  const threadCounts = await resolveThreadPostCounts(posts);
+  const threadCounts = await resolveThreadPostCounts(posts, threadPostCountByRootId);
   const mediaMap = new Map<string, MediaRecord[]>();
   const tagMap = new Map<string, ArchiveTagRecord[]>();
 
@@ -1384,7 +1391,10 @@ async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePost
   });
 }
 
-async function resolveThreadPostCounts(posts: PostRecord[]): Promise<Map<string, number>> {
+async function resolveThreadPostCounts(
+  posts: PostRecord[],
+  threadPostCountByRootId?: Map<string, number>
+): Promise<Map<string, number>> {
   const rootIds = posts.flatMap((post) => {
     const threadRootId = normalizeOptionalPostId(post.thread_root_id);
     return threadRootId === post.x_post_id ? [post.x_post_id] : [];
@@ -1393,6 +1403,15 @@ async function resolveThreadPostCounts(posts: PostRecord[]): Promise<Map<string,
 
   if (uniqueRootIds.length === 0) {
     return new Map();
+  }
+
+  // Why: under the v19 invariant every listed post is a root, so the fallback per-root count
+  // query would run for the whole page. The list path already derived every thread size from
+  // the thread_root_id key array — reuse it and skip the queries entirely (#120).
+  if (threadPostCountByRootId !== undefined) {
+    return new Map(
+      uniqueRootIds.map((rootId) => [rootId, threadPostCountByRootId.get(rootId) ?? 1])
+    );
   }
 
   return countThreadPostsByRoots(uniqueRootIds);
@@ -1658,8 +1677,11 @@ async function listRandomPostsPage(
 // are index-backed and fast at this scale.
 const THREAD_ROOT_BULK_GET_MAX_MATCHES = 200;
 
-async function resolveViewerListPostIds(matchingPostIds: Set<string> | null): Promise<Set<string>> {
-  const rootOrSinglePostIds = new Set(await listRootOrSinglePostIds());
+async function resolveViewerListPostIds(
+  matchingPostIds: Set<string> | null,
+  rootOrSinglePostIdList: string[]
+): Promise<Set<string>> {
+  const rootOrSinglePostIds = new Set(rootOrSinglePostIdList);
 
   if (matchingPostIds === null) {
     return rootOrSinglePostIds;

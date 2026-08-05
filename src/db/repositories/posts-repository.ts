@@ -80,7 +80,14 @@ export async function listPostIds(): Promise<string[]> {
   return archiveDb.posts.toCollection().primaryKeys();
 }
 
-export async function listRootOrSinglePostIds(): Promise<string[]> {
+export type ViewerRootPostIds = {
+  rootIds: string[];
+  // Thread size per root, derived from the same key array — page hydration reuses this instead
+  // of issuing a per-root count query for every listed post.
+  threadPostCountByRootId: Map<string, number>;
+};
+
+export async function listViewerRootPostIds(): Promise<ViewerRootPostIds> {
   // Why: with thread_root_id normalized (v19: singles store their own id), the distinct index
   // values are exactly the viewer-list roots. Both reads below are single getAllKeys round
   // trips; cursor-based alternatives (uniqueKeys, anyOf) cost one IPC hop per entry, which on a
@@ -103,22 +110,22 @@ export async function listRootOrSinglePostIds(): Promise<string[]> {
   }
 
   const existing = new Set(existingPostIds.map(String));
-  const seen = new Set<string>();
-  const roots: string[] = [];
+  const threadPostCountByRootId = new Map<string, number>();
 
   for (const key of threadRootIds) {
     const rootId = String(key);
+    threadPostCountByRootId.set(rootId, (threadPostCountByRootId.get(rootId) ?? 0) + 1);
+  }
 
-    if (!seen.has(rootId)) {
-      seen.add(rootId);
+  const rootIds: string[] = [];
 
-      if (existing.has(rootId)) {
-        roots.push(rootId);
-      }
+  for (const rootId of threadPostCountByRootId.keys()) {
+    if (existing.has(rootId)) {
+      rootIds.push(rootId);
     }
   }
 
-  return roots;
+  return { rootIds, threadPostCountByRootId };
 }
 
 async function backfillMissingThreadRootIds(): Promise<void> {
