@@ -84,14 +84,32 @@ export async function listRootOrSinglePostIds(): Promise<string[]> {
   await ensureThreadRootIdCoverage();
 
   // Why: with thread_root_id normalized (v19: singles store their own id), the distinct index
-  // values are exactly the viewer-list roots. uniqueKeys walks with a nextunique cursor —
-  // O(distinct roots), no record deserialization — replacing the previous full-table filter.
-  const rootIds = (await archiveDb.posts.orderBy("thread_root_id").uniqueKeys()).map(String);
+  // values are exactly the viewer-list roots. Both reads below are single getAllKeys round
+  // trips; cursor-based alternatives (uniqueKeys, anyOf) cost one IPC hop per entry, which on a
+  // single-post-heavy archive (roots ≈ N) measured slower than the old full-table filter scan.
+  // Dedup happens in JS, and the primary-key set drops dead roots — a thread whose root record
+  // was deleted would otherwise inflate totalCount with entries the pager can never yield.
+  const [threadRootIds, existingPostIds] = await Promise.all([
+    archiveDb.posts.orderBy("thread_root_id").keys(),
+    archiveDb.posts.toCollection().primaryKeys()
+  ]);
+  const existing = new Set(existingPostIds.map(String));
+  const seen = new Set<string>();
+  const roots: string[] = [];
 
-  // Why: a thread whose root record was deleted leaves its members' thread_root_id in the index.
-  // Such phantom ids would inflate totalCount and make the pager report hasMore forever, so keep
-  // only roots that exist as records (orphaned threads stay invisible, matching the old filter).
-  return (await archiveDb.posts.where(":id").anyOf(rootIds).primaryKeys()).map(String);
+  for (const key of threadRootIds) {
+    const rootId = String(key);
+
+    if (!seen.has(rootId)) {
+      seen.add(rootId);
+
+      if (existing.has(rootId)) {
+        roots.push(rootId);
+      }
+    }
+  }
+
+  return roots;
 }
 
 // Why: post writes that bypass Dexie migrations (e.g. restoring a pre-v19 backup in the viewer
