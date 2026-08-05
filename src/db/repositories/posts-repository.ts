@@ -81,18 +81,27 @@ export async function listPostIds(): Promise<string[]> {
 }
 
 export async function listRootOrSinglePostIds(): Promise<string[]> {
-  await ensureThreadRootIdCoverage();
-
   // Why: with thread_root_id normalized (v19: singles store their own id), the distinct index
   // values are exactly the viewer-list roots. Both reads below are single getAllKeys round
   // trips; cursor-based alternatives (uniqueKeys, anyOf) cost one IPC hop per entry, which on a
   // single-post-heavy archive (roots ≈ N) measured slower than the old full-table filter scan.
   // Dedup happens in JS, and the primary-key set drops dead roots — a thread whose root record
   // was deleted would otherwise inflate totalCount with entries the pager can never yield.
-  const [threadRootIds, existingPostIds] = await Promise.all([
+  let [threadRootIds, existingPostIds] = await Promise.all([
     archiveDb.posts.orderBy("thread_root_id").keys(),
     archiveDb.posts.toCollection().primaryKeys()
   ]);
+
+  // Why: a post missing from the index (null thread_root_id — e.g. restored from a pre-v19
+  // backup, which bypasses Dexie migrations) would silently vanish from the viewer list. The
+  // arrays above already reveal the gap for free (index entries < primary keys), so the repair
+  // scan runs only when a write path actually broke the invariant. Measured note: a dedicated
+  // per-request index.count() guard cost ~100ms at 19k posts — length comparison costs nothing.
+  if (threadRootIds.length < existingPostIds.length) {
+    await backfillMissingThreadRootIds();
+    threadRootIds = await archiveDb.posts.orderBy("thread_root_id").keys();
+  }
+
   const existing = new Set(existingPostIds.map(String));
   const seen = new Set<string>();
   const roots: string[] = [];
@@ -112,20 +121,7 @@ export async function listRootOrSinglePostIds(): Promise<string[]> {
   return roots;
 }
 
-// Why: post writes that bypass Dexie migrations (e.g. restoring a pre-v19 backup in the viewer
-// context) could reintroduce null thread_root_id, and those records silently drop out of the
-// index the viewer list is built from. Both counts are index-only; the repair scan runs only
-// when they disagree.
-async function ensureThreadRootIdCoverage(): Promise<void> {
-  const [totalCount, indexedCount] = await Promise.all([
-    archiveDb.posts.count(),
-    archiveDb.posts.orderBy("thread_root_id").count()
-  ]);
-
-  if (indexedCount >= totalCount) {
-    return;
-  }
-
+async function backfillMissingThreadRootIds(): Promise<void> {
   await archiveDb.posts
     .filter((post) => normalizePostId(post.thread_root_id) === null)
     .modify((post) => {
