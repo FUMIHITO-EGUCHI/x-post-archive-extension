@@ -59,6 +59,15 @@ click→Saved（各カテゴリ 5 件、20/20 成功）:
 - 対応案: 拡張側での根治は不可。緩和するなら「like UI イベント（DOM）でも予約し、interceptor 確認で確定する」二段方式だが、X 側で like が確定しない場合に保存だけ残る不整合を生む。現状の挙動（ネットワーク確定ベース）は正確性優先として妥当 → ユーザー向けには「like 直後の即離脱で保存されないことがある」という説明が正解
 - bookmark 同条件テスト（20 秒待ち・N=5）: **5/5 全発火**、CreateBookmark リクエスト全観測、miss 0 件、全件解除済み。like と同結論
 
+### 追補（2026-08-06）: lightbox 経路の訂正 → #128
+
+上記「interceptor はリクエストが飛べば 100% 検知」は **timeline / detail ページに限る**。ユーザー指摘を受けた狙い撃ち再試験（timeline から画像クリックで開いた実フローの lightbox、N=5、20 秒待ち）で:
+
+- **0/5 発火**。うち **3/5 は FavoriteTweet リクエストがネットワーク上に実在**するのに stage_timings も miss ログも皆無 = MAIN world パッチを通らない経路
+- 裏取り: x.com は自前 SW（`x.com/sw.js`）がページ制御中。拡張パッチは有効（fetch/XHR とも patched 確認）→ lightbox の action は X の SW/worker コンテキスト発行で構造的に不可視
+- 前回 lightbox テスト（3/5 発火）は `/photo/1` へ**直接遷移**しており DOM/コード経路が実フローと異なっていた
+- 対応: **#128 起票**（webRequest 観測 fallback を推奨修正として記載）。12 秒窓での timeline no_signal 35% も一部はこの SW キュー遅延で説明がつく可能性がある
+
 ## 成果物・環境
 
 - 計測 script 一式: `scripts/perf-campaign-{setup-restore,restore,snapshot,queries,migrate,render,save,likes,likes-net}.mjs`
