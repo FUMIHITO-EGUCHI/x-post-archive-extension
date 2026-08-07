@@ -68,6 +68,17 @@ click→Saved（各カテゴリ 5 件、20/20 成功）:
 - 前回 lightbox テスト（3/5 発火）は `/photo/1` へ**直接遷移**しており DOM/コード経路が実フローと異なっていた
 - 対応: **#128 起票**（webRequest 観測 fallback を推奨修正として記載）。12 秒窓での timeline no_signal 35% も一部はこの SW キュー遅延で説明がつく可能性がある
 
+### 再訂正（2026-08-07）: lightbox の真の原因は thread scan の例外死 → PR #129 で修正済み
+
+上記「X の SW/worker コンテキスト発行で構造的に不可視」は**誤り**。#128 実装後の checkpoint トレース（全 exit 経路にログを挿して実機再現）で確定した障害チェーン:
+
+- interceptor は lightbox の FavoriteTweet を**正常に捕捉していた**（`source=interceptor` で auto-archive 経路へ到達、settings 通過まで確認）
+- 真因: lightbox URL `/status/<id>/photo/1` は thread ページ判定に該当し、auto-archive 経路の `scanTweetArticles()` → `extractThreadPosts()` が overlay article（`time[datetime]` なし）に extraction を実行 → `extractPostedAt()` が throw → `collectOpPosts()` は throw 未対応で scan 崩壊 → `autoArchivePost` が unhandled rejection で**無音死**（永続ログゼロ。前回の「stage_timings も miss も皆無」はこれ）
+- さらに死亡前に dedupe key を mark 済みのため、webRequest fallback も `dedupe_dropped` で落ちる二重障害だった
+- 修正（PR #129 / 8b3bfab）: `collectOpPosts()` の per-article try/catch（根本）+ `scanTweetArticles()` 失敗の非致命化（`auto_archive.scan_failed`、防御）
+- 検証: 修正前 0/5 → 修正後 **5/5 発火**、`save.stage_timings status=saved`（total 32–43ms）+ `post.save.persisted` で DB 書込確認
+- webRequest fallback は「interceptor が本当に発火しない未知ケース」への保険として存置
+
 ## 成果物・環境
 
 - 計測 script 一式: `scripts/perf-campaign-{setup-restore,restore,snapshot,queries,migrate,render,save,likes,likes-net}.mjs`
