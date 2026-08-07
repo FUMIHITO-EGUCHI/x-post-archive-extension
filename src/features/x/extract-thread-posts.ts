@@ -40,7 +40,15 @@ function collectOpPosts(root: ParentNode, opUsername: string): SavePostInput[] {
   const normalizedOpUsername = opUsername.toLowerCase();
 
   for (const article of findTweetArticles(root)) {
-    const extracted = extractPostFromArticle(article);
+    let extracted: ReturnType<typeof extractPostFromArticle> = null;
+
+    try {
+      extracted = extractPostFromArticle(article);
+    } catch {
+      // Overlay articles (photo lightbox) can lack time[datetime]; a single broken
+      // article must not abort the whole thread scan (#128).
+      continue;
+    }
 
     if (extracted === null) {
       continue;

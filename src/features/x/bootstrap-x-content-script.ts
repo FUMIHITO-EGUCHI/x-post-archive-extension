@@ -612,6 +612,11 @@ async function autoArchivePost(
   triggerSource: "interceptor" | "webrequest" = "interceptor"
 ): Promise<void> {
   if (!markAutoArchiveTriggered(detail)) {
+    reportAutoArchiveDiagnostics("auto_archive.dedupe_dropped", {
+      action: detail.action,
+      xPostId: detail.xPostId,
+      source: triggerSource
+    });
     return;
   }
 
@@ -660,7 +665,18 @@ async function attemptAutoArchive(
     return;
   }
 
-  scanTweetArticles();
+  try {
+    scanTweetArticles();
+  } catch (error) {
+    // The scan only refreshes injected UI; a failure there must not abort the
+    // auto-archive lookup below (#128).
+    reportAutoArchiveDiagnostics("auto_archive.scan_failed", {
+      xPostId: detail.xPostId,
+      attempt,
+      error: String(error)
+    });
+  }
+
   const article = findArticleByPostId(detail.xPostId);
 
   if (article === null) {

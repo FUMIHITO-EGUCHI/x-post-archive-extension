@@ -106,11 +106,15 @@ async function notifyContentScript(pending: PendingAction): Promise<void> {
           .map((tab) => tab.id)
           .filter((tabId): tabId is number => tabId !== undefined);
 
+  const deliveries: string[] = [];
+
   for (const tabId of tabIds) {
     try {
       await browser.tabs.sendMessage(tabId, message);
-    } catch {
+      deliveries.push(`${tabId}:ok`);
+    } catch (error) {
       // Tab without an injected content script (e.g. still loading) — nothing to notify.
+      deliveries.push(`${tabId}:${error instanceof Error ? error.message.slice(0, 40) : "error"}`);
     }
   }
 
@@ -118,7 +122,7 @@ async function notifyContentScript(pending: PendingAction): Promise<void> {
     context: {
       action: pending.action,
       fromServiceWorker: pending.tabId < 0,
-      notifiedTabCount: tabIds.length
+      deliveries: deliveries.join(", ")
     }
   });
 }
