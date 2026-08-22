@@ -102,6 +102,13 @@ export async function handleRuntimeMessage(
   message: unknown,
   sender: RuntimeMessageSender | undefined = undefined
 ): Promise<RuntimeResponse | undefined> {
+  // Why: the ping is a liveness probe (#117) — answer before any other work (media-persistence
+  // resume, validation, logging) so it measures event-loop responsiveness only. A wedged SW
+  // (#112) never runs this handler at all, so the caller's short timeout fires instead.
+  if (isRuntimeMessage(message) && message.type === "runtime/ping") {
+    return { type: "runtime/ping-result" };
+  }
+
   const preambleStartedAt = Date.now();
   await resumePendingMediaPersistence();
   const preambleElapsedMs = Date.now() - preambleStartedAt;
@@ -717,7 +724,8 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     candidate.type === "logs/clear" ||
     candidate.type === "debug/log" ||
     candidate.type === "tweet-detail-template/set" ||
-    candidate.type === "thread-expand/auth-stale-check"
+    candidate.type === "thread-expand/auth-stale-check" ||
+    candidate.type === "runtime/ping"
   );
 }
 

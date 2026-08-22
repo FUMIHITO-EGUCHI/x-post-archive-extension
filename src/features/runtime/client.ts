@@ -43,6 +43,7 @@ const DEFAULT_RUNTIME_TIMEOUT_MS = 30000;
 const SAVE_RUNTIME_TIMEOUT_MS = 180000;
 const SAVE_BATCH_RUNTIME_TIMEOUT_MS = 300000;
 const RESET_RUNTIME_TIMEOUT_MS = 60000;
+const PING_RUNTIME_TIMEOUT_MS = 3000;
 
 export async function requestSavePost(
   post: SavePostInput,
@@ -466,6 +467,26 @@ export class RuntimeTimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`Runtime request timed out after ${timeoutMs}ms.`);
     this.name = "RuntimeTimeoutError";
+  }
+}
+
+// Why: a request timeout alone cannot tell a wedged SW (#112) from a busy one (#117) — batch
+// saves legitimately run for minutes. The background answers pings before any other work
+// (including validation), so a handler that runs at all always resolves this call. Every
+// failure mode — timeout, "receiving end does not exist", "message port closed" — means the
+// handler did not answer, so anything but success reads as unresponsive.
+export async function requestRuntimePing(): Promise<boolean> {
+  try {
+    await sendMessage({ type: "runtime/ping" }, PING_RUNTIME_TIMEOUT_MS);
+    return true;
+  } catch (error) {
+    if (!(error instanceof RuntimeTimeoutError)) {
+      // Connection-level rejections are unexpected here; keep a trace so a restart offer
+      // triggered by this path can be diagnosed.
+      console.warn("Runtime ping failed without a timeout.", { error });
+    }
+
+    return false;
   }
 }
 

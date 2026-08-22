@@ -175,6 +175,12 @@ export type ThreadExpandAuthStaleCheckMessage = {
   type: "thread-expand/auth-stale-check";
 };
 
+// Why: liveness probe (#117). Carries no payload so the background can answer before any
+// other work; a response proves the SW event loop is alive even when long requests time out.
+export type RuntimePingMessage = {
+  type: "runtime/ping";
+};
+
 // Background -> content-script notification (not part of the RuntimeMessage union, which is
 // content/viewer -> background). Sent when the webRequest observer sees a like/bookmark GraphQL
 // request — the fallback for requests X issues outside the page context, e.g. from its own
@@ -213,7 +219,8 @@ export type RuntimeMessage =
   | ClearLogsMessage
   | DebugLogMessage
   | SetTweetDetailTemplateMessage
-  | ThreadExpandAuthStaleCheckMessage;
+  | ThreadExpandAuthStaleCheckMessage
+  | RuntimePingMessage;
 
 export type SavePostResponse = {
   type: "posts/save-result";
@@ -394,6 +401,11 @@ export type ThreadExpandAuthStaleCheckResponse = {
   hasAuthStaleItems: boolean;
   count: number;
 };
+
+export type RuntimePingResponse = {
+  type: "runtime/ping-result";
+};
+
 export type RuntimeResponse =
   | SavePostResponse
   | SavePostsBatchResponse
@@ -422,4 +434,5 @@ export type RuntimeResponse =
   | ClearLogsResponse
   | SetTweetDetailTemplateResponse
   | ThreadExpandAuthStaleCheckResponse
+  | RuntimePingResponse
   | RuntimeErrorResponse;

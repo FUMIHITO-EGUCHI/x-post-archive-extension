@@ -87,6 +87,7 @@ export function validateRuntimeMessage(message: RuntimeMessage): {
     case "archive/reset":
     case "logs/clear":
     case "thread-expand/auth-stale-check":
+    case "runtime/ping":
       return { ok: true };
   }
 }
