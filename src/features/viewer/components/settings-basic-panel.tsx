@@ -150,12 +150,12 @@ export function SettingsBasicPanel({
               key: "autoArchiveOnBookmark" as const,
               checked: archiveSettings.autoArchiveOnBookmark,
               title: isJapanese ? "ブックマークした投稿を保存" : "Save bookmarked posts",
-              // Why: X dropped the bookmark button from the timeline action bar (#130), so this
-              // toggle can no longer fire where users expect it to. Saying where the button
-              // still is beats letting it read as broken.
+              // Why: X is rolling out a timeline action bar with no bookmark button (#130) —
+              // two profiles on the same account rendered different bars, so this cannot be
+              // stated as a flat fact. Without the note the toggle just reads as broken.
               note: isJapanese
-                ? "X のタイムラインからブックマークボタンが無くなったため、投稿の詳細ページか画像表示中のブックマークでのみ発火します。"
-                : "X removed the bookmark button from the timeline, so this only fires from a post's detail page or the image lightbox."
+                ? "X の環境によっては、タイムラインのアクションバーにブックマークボタンが表示されません。無い場合は投稿の詳細ページからブックマークすると保存されます。"
+                : "Some X clients render the timeline action bar without a bookmark button. When it is missing, bookmark from the post's detail page instead."
             }
           ].map(({ key, checked, title, note }) => (
             <label key={key} className="viewer-settings-toggle-item">
