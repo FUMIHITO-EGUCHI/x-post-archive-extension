@@ -1713,13 +1713,13 @@ async function resolveViewerListPostIds(
 }
 
 async function getQuotedPostIdSet(): Promise<Set<string>> {
-  const quotingPosts = await archiveDb.posts.where("quoted_post_id").above("").toArray();
+  // Why: only the quoted_post_id values are needed; .keys() reads the index without
+  // deserializing every quoting post's full record (#119).
+  const quotedPostIds = await archiveDb.posts.where("quoted_post_id").above("").keys();
 
   return new Set(
-    quotingPosts.flatMap((post) =>
-      typeof post.quoted_post_id === "string" && post.quoted_post_id.trim() !== ""
-        ? [post.quoted_post_id]
-        : []
+    quotedPostIds.flatMap((quotedPostId) =>
+      typeof quotedPostId === "string" && quotedPostId.trim() !== "" ? [quotedPostId] : []
     )
   );
 }
