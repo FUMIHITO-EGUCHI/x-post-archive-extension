@@ -9,7 +9,11 @@ export default defineConfig({
     name: "__MSG_extension_name__",
     description: "__MSG_extension_description__",
     default_locale: "en",
-    permissions: ["storage", "unlimitedStorage", "cookies", "alarms"], // cookies: ct0 CSRF token retrieval for TweetDetail GraphQL
+    // cookies: ct0 CSRF token retrieval for TweetDetail GraphQL
+    // webRequest (observe-only, no blocking): fallback detection of like/bookmark GraphQL
+    // requests that X issues from its own service worker, invisible to the MAIN-world
+    // fetch/XHR interceptor (#128)
+    permissions: ["storage", "unlimitedStorage", "cookies", "alarms", "webRequest"],
     host_permissions: [
       "https://x.com/*",
       "https://twitter.com/*",

@@ -9,12 +9,14 @@ import {
   resumeThreadExpandProcessing
 } from "../features/archive/thread-expand-worker";
 import { resumeRefetchProcessing } from "../features/refetch/refetch-coordinator";
+import { installLikeBookmarkActionObserver } from "../features/x/observe-like-bookmark-actions";
 import { createLogger } from "../features/logging/logger";
 const logger = createLogger("background");
 
 export default defineBackground({
   type: "module",
   main() {
+    installLikeBookmarkActionObserver();
     chrome.runtime.onInstalled.addListener(() => {
       logger.info("extension.installed", {
         message: "X Post Archive Extension initialized."
