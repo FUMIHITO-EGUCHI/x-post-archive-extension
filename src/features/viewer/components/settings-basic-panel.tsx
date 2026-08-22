@@ -163,6 +163,9 @@ export function SettingsBasicPanel({
                 type="checkbox"
                 checked={checked}
                 aria-label={title}
+                // aria-label replaces the label text for screen readers, so the note beside it
+                // would otherwise be announced to nobody.
+                aria-describedby={note === null ? undefined : `${key}-note`}
                 onChange={(event) => {
                   void onArchiveSettingsChange({
                     ...archiveSettings,
@@ -172,7 +175,7 @@ export function SettingsBasicPanel({
               />
               <span className="viewer-settings-toggle-copy">
                 <strong>{title}</strong>
-                {note !== null && <span>{note}</span>}
+                {note !== null && <span id={`${key}-note`}>{note}</span>}
               </span>
             </label>
           ))}
