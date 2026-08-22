@@ -181,6 +181,16 @@ export type RuntimePingMessage = {
   type: "runtime/ping";
 };
 
+// Background -> content-script notification (not part of the RuntimeMessage union, which is
+// content/viewer -> background). Sent when the webRequest observer sees a like/bookmark GraphQL
+// request — the fallback for requests X issues outside the page context, e.g. from its own
+// service worker in the photo-lightbox flow (#128).
+export type LikeBookmarkActionObservedMessage = {
+  type: "auto-archive/action-observed";
+  action: "like" | "bookmark";
+  xPostId: string;
+};
+
 export type RuntimeMessage =
   | SavePostMessage
   | SavePostsBatchMessage

@@ -1,5 +1,6 @@
 import type { ContentScriptContext } from "#imports";
 import {
+  requestDebugLog,
   requestHasPost,
   requestNotifyRefetchComplete,
   requestSavePost,
@@ -10,6 +11,7 @@ import type {
   RefetchCheckMessage,
   RefetchCheckResponse
 } from "../../types/refetch";
+import type { LikeBookmarkActionObservedMessage } from "../../types/runtime";
 import {
   buildLocalizedDefaultAutoTags,
   loadArchiveLanguage
@@ -41,7 +43,9 @@ import {
   removeLikesImportControls
 } from "./likes-import-controls";
 import {
+  AUTO_ARCHIVE_MISS_EVENT,
   LIKE_BOOKMARK_ACTION_EVENT,
+  type AutoArchiveMissEventDetail,
   type LikeBookmarkActionEventDetail
 } from "./intercept-like-bookmark-actions";
 import { detectThreadPage } from "./detect-thread-page";
@@ -67,6 +71,14 @@ const SAVE_BUTTON_SELECTOR = "[data-xpa-save-button]";
 const AUTO_ARCHIVE_ERROR_DISPLAY_MS = 3000;
 const AUTO_ARCHIVE_ARTICLE_RETRY_INTERVAL_MS = 500;
 const AUTO_ARCHIVE_ARTICLE_MAX_ATTEMPTS = 10;
+// Why: the same action can arrive twice — from the MAIN-world interceptor and from the
+// background webRequest observer (#128). The observer path waits this long so the interceptor
+// (which validates the response payload) stays primary, and the dedupe window drops whichever
+// copy comes second. A re-like inside the window is dropped too; the post is already archived
+// by then, so nothing is lost.
+const OBSERVED_ACTION_FALLBACK_DELAY_MS = 2000;
+const AUTO_ARCHIVE_DEDUPE_WINDOW_MS = 30_000;
+const AUTO_ARCHIVE_DEDUPE_KEY_LIMIT = 100;
 const VISIBLE_SAVE_MEDIA_RETRY_INTERVAL_MS = 250;
 const VISIBLE_SAVE_MEDIA_MAX_ATTEMPTS = 5;
 const QUOTED_POST_CONTAINER_SELECTOR = 'div[role="link"][tabindex="0"]';
@@ -81,12 +93,15 @@ let autoArchiveActionListenerInstalled = false;
 let refetchMessageListenerInstalled = false;
 let tweetDetailTemplateListenerInstalled = false;
 const pendingAutoArchiveRetryTimers = new Map<string, number>();
+const autoArchiveTriggeredAtByKey = new Map<string, number>();
+let observedActionListenerInstalled = false;
 let latestThreadPosts: ReturnType<typeof extractThreadPosts> = [];
 
 export function bootstrapXContentScript(ctx: ContentScriptContext): void {
   isContentScriptActive = true;
   sendIsolatedHandshakeOnce();
   installAutoArchiveActionListener();
+  installObservedActionListener();
   installRefetchMessageListener();
   installTweetDetailTemplateListener();
   ctx.onInvalidated(() => {
@@ -99,6 +114,7 @@ export function bootstrapXContentScript(ctx: ContentScriptContext): void {
     pendingDomReadyListener = null;
     clearPendingAutoArchiveRetries();
     removeAutoArchiveActionListener();
+    removeObservedActionListener();
     removeRefetchMessageListener();
     removeTweetDetailTemplateListener();
     removeBookmarksImportControls();
@@ -260,6 +276,10 @@ function installAutoArchiveActionListener(): void {
     LIKE_BOOKMARK_ACTION_EVENT,
     handleLikeBookmarkAction as EventListener
   );
+  document.addEventListener(
+    AUTO_ARCHIVE_MISS_EVENT,
+    handleAutoArchiveMissEvent as EventListener
+  );
   autoArchiveActionListenerInstalled = true;
 }
 
@@ -272,7 +292,58 @@ function removeAutoArchiveActionListener(): void {
     LIKE_BOOKMARK_ACTION_EVENT,
     handleLikeBookmarkAction as EventListener
   );
+  document.removeEventListener(
+    AUTO_ARCHIVE_MISS_EVENT,
+    handleAutoArchiveMissEvent as EventListener
+  );
   autoArchiveActionListenerInstalled = false;
+}
+
+// Why: interceptor misses used to die in the page console (#126). Persisting them via debug/log
+// makes the "like did not save" failure rate and its causes measurable from the logs store.
+// The event comes from the MAIN world, so the payload is validated before forwarding.
+function handleAutoArchiveMissEvent(event: Event): void {
+  const detail = (event as CustomEvent<AutoArchiveMissEventDetail>).detail;
+
+  if (!isAutoArchiveMissDetail(detail)) {
+    return;
+  }
+
+  reportAutoArchiveDiagnostics(`auto_archive.miss.${detail.reason}`, {
+    action: detail.action,
+    endpoint: detail.endpoint,
+    detail: detail.detail
+  });
+}
+
+function isAutoArchiveMissDetail(value: unknown): value is AutoArchiveMissEventDetail {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<AutoArchiveMissEventDetail>;
+  return (
+    typeof candidate.reason === "string" &&
+    /^[a-z_]{1,40}$/.test(candidate.reason) &&
+    (candidate.action === "like" || candidate.action === "bookmark" || candidate.action === null) &&
+    (typeof candidate.endpoint === "string" || candidate.endpoint === null) &&
+    (typeof candidate.detail === "string" || candidate.detail === null)
+  );
+}
+
+function reportAutoArchiveDiagnostics(
+  event: string,
+  context: Record<string, unknown>,
+  traceId?: string
+): void {
+  void requestDebugLog({
+    level: "info",
+    event,
+    context,
+    ...(traceId === undefined ? {} : { traceId })
+  }).catch(() => {
+    // Telemetry is best-effort; a wedged or reloading background must not break the page flow.
+  });
 }
 
 function installRefetchMessageListener(): void {
@@ -410,7 +481,9 @@ async function saveVisibleThread(): Promise<void> {
   }
 
   latestThreadPosts = posts;
-  const response = await requestSaveThread(posts);
+  const response = await requestSaveThread(posts, {
+    traceId: `thread:manual:${posts[0]?.x_post_id ?? "unknown"}`
+  });
 
   if (response.failed > 0) {
     throw new Error("Thread save failed.");
@@ -445,7 +518,118 @@ function handleLikeBookmarkAction(event: Event): void {
   void autoArchivePost(detail);
 }
 
-async function autoArchivePost(detail: LikeBookmarkActionEventDetail): Promise<void> {
+function installObservedActionListener(): void {
+  if (observedActionListenerInstalled) {
+    return;
+  }
+
+  browser.runtime.onMessage.addListener(handleObservedActionMessage);
+  observedActionListenerInstalled = true;
+}
+
+function removeObservedActionListener(): void {
+  if (!observedActionListenerInstalled) {
+    return;
+  }
+
+  browser.runtime.onMessage.removeListener(handleObservedActionMessage);
+  observedActionListenerInstalled = false;
+}
+
+// Fallback path (#128): the background's webRequest observer saw an action request that the
+// MAIN-world interceptor may have missed (X issues lightbox actions from its own service
+// worker). Delay before acting so the interceptor stays primary; the dedupe window in
+// autoArchivePost drops this copy when the interceptor already handled it.
+function handleObservedActionMessage(message: unknown, sender: unknown): undefined {
+  if (!isObservedActionMessage(message) || !isSenderBackground(sender)) {
+    return undefined;
+  }
+
+  const detail: LikeBookmarkActionEventDetail = {
+    action: message.action,
+    xPostId: message.xPostId
+  };
+
+  window.setTimeout(() => {
+    if (!isContentScriptActive) {
+      return;
+    }
+
+    void autoArchivePost(detail, "webrequest");
+  }, OBSERVED_ACTION_FALLBACK_DELAY_MS);
+
+  return undefined;
+}
+
+function isObservedActionMessage(value: unknown): value is LikeBookmarkActionObservedMessage {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<LikeBookmarkActionObservedMessage>;
+  return (
+    candidate.type === "auto-archive/action-observed" &&
+    (candidate.action === "like" || candidate.action === "bookmark") &&
+    typeof candidate.xPostId === "string" &&
+    /^\d{1,25}$/.test(candidate.xPostId)
+  );
+}
+
+function isSenderBackground(sender: unknown): boolean {
+  if (sender === null || typeof sender !== "object") {
+    return false;
+  }
+
+  const id = Reflect.get(sender, "id");
+  const tab = Reflect.get(sender, "tab");
+  return id === browser.runtime.id && tab === undefined;
+}
+
+// Returns false when the action was already triggered inside the dedupe window.
+function markAutoArchiveTriggered(detail: LikeBookmarkActionEventDetail): boolean {
+  const key = getAutoArchiveRetryKey(detail);
+  const now = Date.now();
+  const triggeredAt = autoArchiveTriggeredAtByKey.get(key);
+
+  if (triggeredAt !== undefined && now - triggeredAt < AUTO_ARCHIVE_DEDUPE_WINDOW_MS) {
+    return false;
+  }
+
+  if (autoArchiveTriggeredAtByKey.size >= AUTO_ARCHIVE_DEDUPE_KEY_LIMIT) {
+    for (const [staleKey, staleAt] of autoArchiveTriggeredAtByKey) {
+      if (now - staleAt >= AUTO_ARCHIVE_DEDUPE_WINDOW_MS) {
+        autoArchiveTriggeredAtByKey.delete(staleKey);
+      }
+    }
+  }
+
+  autoArchiveTriggeredAtByKey.set(key, now);
+  return true;
+}
+
+async function autoArchivePost(
+  detail: LikeBookmarkActionEventDetail,
+  triggerSource: "interceptor" | "webrequest" = "interceptor"
+): Promise<void> {
+  if (!markAutoArchiveTriggered(detail)) {
+    reportAutoArchiveDiagnostics("auto_archive.dedupe_dropped", {
+      action: detail.action,
+      xPostId: detail.xPostId,
+      source: triggerSource
+    });
+    return;
+  }
+
+  if (triggerSource === "webrequest") {
+    // The interceptor did not handle this action within the fallback delay — record the
+    // rescue so the fallback rate stays measurable (#128).
+    reportAutoArchiveDiagnostics("auto_archive.fallback_triggered", {
+      action: detail.action,
+      xPostId: detail.xPostId
+    });
+  }
+
+  const receivedAtMs = performance.now();
   let autoArchiveEnabled = false;
 
   try {
@@ -454,6 +638,11 @@ async function autoArchivePost(detail: LikeBookmarkActionEventDetail): Promise<v
       detail.action === "like" ? settings.autoArchiveOnLike : settings.autoArchiveOnBookmark;
   } catch (error) {
     console.error("[auto-archive] settings-load-failed", { action: detail.action, xPostId: detail.xPostId, error });
+    reportAutoArchiveDiagnostics("auto_archive.miss.settings_load_failed", {
+      action: detail.action,
+      xPostId: detail.xPostId,
+      error
+    });
     return;
   }
 
@@ -462,29 +651,47 @@ async function autoArchivePost(detail: LikeBookmarkActionEventDetail): Promise<v
     return;
   }
 
-  await attemptAutoArchive(detail, 0);
+  await attemptAutoArchive(detail, 0, receivedAtMs, triggerSource);
 }
 
 async function attemptAutoArchive(
   detail: LikeBookmarkActionEventDetail,
-  attempt: number
+  attempt: number,
+  receivedAtMs: number,
+  triggerSource: "interceptor" | "webrequest"
 ): Promise<void> {
   if (!isContentScriptActive) {
     clearPendingAutoArchiveRetry(detail);
     return;
   }
 
-  scanTweetArticles();
+  try {
+    scanTweetArticles();
+  } catch (error) {
+    // The scan only refreshes injected UI; a failure there must not abort the
+    // auto-archive lookup below (#128).
+    reportAutoArchiveDiagnostics("auto_archive.scan_failed", {
+      xPostId: detail.xPostId,
+      attempt,
+      error: String(error)
+    });
+  }
+
   const article = findArticleByPostId(detail.xPostId);
 
   if (article === null) {
     if (attempt + 1 < AUTO_ARCHIVE_ARTICLE_MAX_ATTEMPTS) {
-      scheduleAutoArchiveRetry(detail, attempt + 1);
+      scheduleAutoArchiveRetry(detail, attempt + 1, receivedAtMs, triggerSource);
       return;
     }
 
     clearPendingAutoArchiveRetry(detail);
     console.warn("[auto-archive] auto-archive-article-not-found", {
+      action: detail.action,
+      xPostId: detail.xPostId,
+      attempts: attempt + 1
+    });
+    reportAutoArchiveDiagnostics("auto_archive.miss.article_not_found", {
       action: detail.action,
       xPostId: detail.xPostId,
       attempts: attempt + 1
@@ -502,7 +709,13 @@ async function attemptAutoArchive(
   try {
     await saveArticleSnapshot(article, {
       includeLikedTag: detail.action === "like",
-      includeBookmarkedTag: detail.action === "bookmark"
+      includeBookmarkedTag: detail.action === "bookmark",
+      traceId: `auto:${detail.action}:${detail.xPostId}`,
+      preStages: {
+        article_search_ms: Math.round(performance.now() - receivedAtMs),
+        article_attempts: attempt + 1,
+        trigger_source: triggerSource
+      }
     });
 
     if (button !== null) {
@@ -510,6 +723,15 @@ async function attemptAutoArchive(
     }
   } catch (error) {
     console.error("[auto-archive] save-failed", { action: detail.action, xPostId: detail.xPostId, error });
+    reportAutoArchiveDiagnostics(
+      "auto_archive.save_failed",
+      {
+        action: detail.action,
+        xPostId: detail.xPostId,
+        error
+      },
+      `auto:${detail.action}:${detail.xPostId}`
+    );
 
     if (button !== null) {
       flashButtonState(
@@ -524,7 +746,9 @@ async function attemptAutoArchive(
 
 function scheduleAutoArchiveRetry(
   detail: LikeBookmarkActionEventDetail,
-  attempt: number
+  attempt: number,
+  receivedAtMs: number,
+  triggerSource: "interceptor" | "webrequest"
 ): void {
   const retryKey = getAutoArchiveRetryKey(detail);
 
@@ -534,7 +758,7 @@ function scheduleAutoArchiveRetry(
 
   const timeoutId = window.setTimeout(() => {
     pendingAutoArchiveRetryTimers.delete(retryKey);
-    void attemptAutoArchive(detail, attempt);
+    void attemptAutoArchive(detail, attempt, receivedAtMs, triggerSource);
   }, AUTO_ARCHIVE_ARTICLE_RETRY_INTERVAL_MS);
 
   pendingAutoArchiveRetryTimers.set(retryKey, timeoutId);
@@ -545,9 +769,13 @@ async function saveArticleSnapshot(
   options: {
     includeLikedTag?: boolean;
     includeBookmarkedTag?: boolean;
+    traceId?: string;
+    preStages?: Record<string, number | string>;
   } = {}
 ): Promise<void> {
+  const startedAtMs = performance.now();
   const extracted = await extractReadyPostFromVisibleArticle(article);
+  const extractionMs = Math.round(performance.now() - startedAtMs);
 
   if (extracted === null) {
     throw new Error("Post extraction failed.");
@@ -555,6 +783,9 @@ async function saveArticleSnapshot(
 
   const language = await loadArchiveLanguage();
   const { post, quotedPost } = extracted;
+  // Why: the traceId ties this page-side record to the background's post.save.* and
+  // media.persist.* log entries so per-save latency can be broken down offline (#126).
+  const traceId = options.traceId ?? `manual:${post.x_post_id}`;
   const autoTagOptions = {
     ...(options.includeLikedTag === undefined ? {} : { includeLikedTag: options.includeLikedTag }),
     ...(options.includeBookmarkedTag === undefined
@@ -565,10 +796,13 @@ async function saveArticleSnapshot(
   post.auto_tags = buildLocalizedDefaultAutoTags(language, post, autoTagOptions);
 
   let quotedPostId: string | null = null;
+  let quoteSaveMs: number | null = null;
 
   if (quotedPost !== null) {
+    const quoteStartedAtMs = performance.now();
+
     try {
-      const quotedResponse = await requestSavePost(quotedPost);
+      const quotedResponse = await requestSavePost(quotedPost, { traceId });
 
       if (quotedResponse.status === "saved" || quotedResponse.status === "duplicate") {
         quotedPostId = quotedPost.x_post_id;
@@ -576,14 +810,31 @@ async function saveArticleSnapshot(
     } catch (error) {
       console.warn("Quoted post save failed. Saving the main post without linkage.", error);
     }
+
+    quoteSaveMs = Math.round(performance.now() - quoteStartedAtMs);
   }
 
   post.quoted_post_id = quotedPostId;
-  const response = await requestSavePost(post);
+  const saveStartedAtMs = performance.now();
+  const response = await requestSavePost(post, { traceId });
 
   if (response.status !== "saved" && response.status !== "duplicate") {
     throw new Error("Unexpected save status.");
   }
+
+  reportAutoArchiveDiagnostics(
+    "save.stage_timings",
+    {
+      ...(options.preStages ?? {}),
+      xPostId: post.x_post_id,
+      status: response.status,
+      extraction_ms: extractionMs,
+      quote_save_ms: quoteSaveMs,
+      save_rtt_ms: Math.round(performance.now() - saveStartedAtMs),
+      total_ms: Math.round(performance.now() - startedAtMs)
+    },
+    traceId
+  );
 }
 
 async function extractReadyPostFromVisibleArticle(

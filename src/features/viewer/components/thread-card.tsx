@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { ArchivePostRecord } from "../../../types/archive";
 import type { ThreadedPostRecord } from "../../../types/viewer";
 import { requestThread } from "../../runtime/client";
 import { PostCard, type PostCardProps } from "./post-card";
 
-export function ThreadCard(props: PostCardProps) {
+// Why: memo keeps unrelated ViewerApp state changes (refetch polling, per-card delete/tag-picker
+// toggles) from re-running every loaded card; effective only because ViewerApp passes
+// identity-stable handlers (#119).
+export const ThreadCard = memo(function ThreadCard(props: PostCardProps) {
   const { post, language } = props;
   const threadPostCount = post.thread_post_count ?? 1;
   const isThread = threadPostCount > 1;
@@ -94,7 +97,7 @@ export function ThreadCard(props: PostCardProps) {
       )}
     </section>
   );
-}
+});
 
 function flattenThreadPosts(root: ThreadedPostRecord): ArchivePostRecord[] {
   return [root, ...root.children.flatMap(flattenThreadPosts)];

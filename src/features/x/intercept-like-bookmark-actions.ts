@@ -11,6 +11,29 @@ export type LikeBookmarkActionEventDetail = {
   xPostId: string;
 };
 
+// Why: every failure path in this interceptor used to fail silently (#126), making "the save
+// did not fire when I liked" impossible to diagnose. Misses are dispatched to the ISOLATED
+// world, which persists them to the extension log. Payloads carry no post ids, request bodies,
+// or query strings — only the GraphQL operation name and a short failure detail.
+export const AUTO_ARCHIVE_MISS_EVENT = "x-post-archive:auto-archive-miss";
+
+export type AutoArchiveMissReason =
+  | "endpoint_unmatched"
+  | "xhr_response_type"
+  | "tweet_id_missing"
+  | "response_not_ok"
+  | "response_not_json"
+  | "response_empty"
+  | "response_parse_error"
+  | "payload_shape";
+
+export type AutoArchiveMissEventDetail = {
+  reason: AutoArchiveMissReason;
+  action: LikeBookmarkActionEventDetail["action"] | null;
+  endpoint: string | null;
+  detail: string | null;
+};
+
 declare global {
   interface Window {
     [INSTALL_MARKER]?: boolean;
@@ -54,9 +77,14 @@ function installXhrInterceptor(): void {
     username?: string | null,
     password?: string | null
   ): void {
-    const action = resolveActionByUrl(typeof url === "string" ? url : url.toString());
+    const rawUrl = typeof url === "string" ? url : url.toString();
+    const action = resolveActionByUrl(rawUrl);
     xhrActions.set(this, action);
     xhrPostIds.set(this, null);
+
+    if (action === null) {
+      reportUnmatchedActionEndpoint(rawUrl, method);
+    }
 
     this.addEventListener("loadend", () => {
       const action = xhrActions.get(this) ?? null;
@@ -67,10 +95,22 @@ function installXhrInterceptor(): void {
       }
 
       if (this.responseType !== "" && this.responseType !== "text") {
+        dispatchMiss({
+          reason: "xhr_response_type",
+          action,
+          endpoint: null,
+          detail: String(this.responseType)
+        });
         return;
       }
 
       if (typeof this.responseText !== "string" || this.responseText.trim() === "") {
+        dispatchMiss({
+          reason: "response_empty",
+          action,
+          endpoint: null,
+          detail: null
+        });
         return;
       }
 
@@ -82,9 +122,21 @@ function installXhrInterceptor(): void {
             action,
             xPostId
           });
+        } else {
+          dispatchMiss({
+            reason: "payload_shape",
+            action,
+            endpoint: null,
+            detail: null
+          });
         }
       } catch {
-        // Ignore malformed JSON responses.
+        dispatchMiss({
+          reason: "response_parse_error",
+          action,
+          endpoint: null,
+          detail: null
+        });
       }
     });
 
@@ -99,6 +151,13 @@ function installXhrInterceptor(): void {
 
       if (xPostId !== null) {
         xhrPostIds.set(this, xPostId);
+      } else {
+        dispatchMiss({
+          reason: "tweet_id_missing",
+          action,
+          endpoint: null,
+          detail: describeBodyKind(body)
+        });
       }
     }
 
@@ -116,14 +175,42 @@ async function resolveFetchRequest(
     return null;
   }
 
+  const action = resolveActionByUrl(requestUrl);
+
+  if (action === null) {
+    const method =
+      init?.method ?? (input instanceof Request ? input.method : "GET");
+    reportUnmatchedActionEndpoint(requestUrl, method);
+    return null;
+  }
+
   const requestBody =
     typeof init?.body === "string"
       ? init.body
       : input instanceof Request
         ? await safeReadRequestBody(input)
         : null;
+  const xPostId = extractTweetIdFromBody(requestBody);
 
-  return resolveActionRequest(requestUrl, requestBody);
+  if (xPostId === null) {
+    dispatchMiss({
+      reason: "tweet_id_missing",
+      action,
+      endpoint: null,
+      detail:
+        requestBody !== null
+          ? "string_unparseable"
+          : input instanceof Request
+            ? "request_body_unreadable"
+            : describeBodyKind(init?.body ?? null)
+    });
+    return null;
+  }
+
+  return {
+    action,
+    xPostId
+  };
 }
 
 function resolveFetchRequestUrl(args: Parameters<typeof fetch>): string | null {
@@ -144,34 +231,29 @@ function resolveFetchRequestUrl(args: Parameters<typeof fetch>): string | null {
   return null;
 }
 
-function resolveActionRequest(
-  rawUrl: string,
-  requestBody: string | null
-): LikeBookmarkActionEventDetail | null {
-  const action = resolveActionByUrl(rawUrl);
-  const xPostId = extractTweetIdFromBody(requestBody);
-
-  if (action === null || xPostId === null) {
-    return null;
-  }
-
-  return {
-    action,
-    xPostId
-  };
-}
-
 async function inspectResponse(
   request: LikeBookmarkActionEventDetail,
   response: Response
 ): Promise<void> {
   if (!response.ok) {
+    dispatchMiss({
+      reason: "response_not_ok",
+      action: request.action,
+      endpoint: null,
+      detail: String(response.status)
+    });
     return;
   }
 
   const contentType = response.headers.get("content-type") ?? "";
 
   if (!contentType.includes("application/json")) {
+    dispatchMiss({
+      reason: "response_not_json",
+      action: request.action,
+      endpoint: null,
+      detail: contentType.slice(0, 100)
+    });
     return;
   }
 
@@ -179,12 +261,23 @@ async function inspectResponse(
     const payload = (await response.json()) as unknown;
 
     if (!isSuccessfulActionPayload(request.action, payload)) {
+      dispatchMiss({
+        reason: "payload_shape",
+        action: request.action,
+        endpoint: null,
+        detail: null
+      });
       return;
     }
 
     dispatchAction(request);
   } catch {
-    // Ignore malformed JSON responses.
+    dispatchMiss({
+      reason: "response_parse_error",
+      action: request.action,
+      endpoint: null,
+      detail: null
+    });
   }
 }
 
@@ -274,6 +367,74 @@ function dispatchAction(detail: LikeBookmarkActionEventDetail): void {
       detail
     })
   );
+}
+
+function dispatchMiss(detail: AutoArchiveMissEventDetail): void {
+  try {
+    document.dispatchEvent(
+      new CustomEvent<AutoArchiveMissEventDetail>(AUTO_ARCHIVE_MISS_EVENT, {
+        detail
+      })
+    );
+  } catch {
+    // Diagnostics must never break the page's own request flow.
+  }
+}
+
+const reportedUnmatchedEndpoints = new Set<string>();
+
+// Detects like/bookmark-shaped GraphQL mutations this interceptor does not recognize (e.g. a
+// renamed or versioned endpoint after an X deploy) — the silent failure mode of the exact-name
+// match in resolveActionByUrl. Undo/list operations (Unfavorite*, DeleteBookmark, Bookmarks
+// timeline fetches) are excluded; each unmatched name is reported once per page load.
+function reportUnmatchedActionEndpoint(rawUrl: string, method: string | undefined): void {
+  try {
+    if ((method ?? "GET").toUpperCase() !== "POST") {
+      return;
+    }
+
+    const url = new URL(rawUrl, window.location.origin);
+
+    if (!url.pathname.includes(GRAPHQL_PATH_SEGMENT)) {
+      return;
+    }
+
+    const operationName = url.pathname.split("/").pop() ?? "";
+
+    if (
+      operationName === "" ||
+      !/favorite|bookmark/i.test(operationName) ||
+      /^(?:un|delete|remove)/i.test(operationName) ||
+      reportedUnmatchedEndpoints.has(operationName)
+    ) {
+      return;
+    }
+
+    reportedUnmatchedEndpoints.add(operationName);
+    dispatchMiss({
+      reason: "endpoint_unmatched",
+      action: null,
+      endpoint: operationName.slice(0, 100),
+      detail: null
+    });
+  } catch {
+    // Diagnostics only.
+  }
+}
+
+function describeBodyKind(body: unknown): string {
+  if (body === null || body === undefined) {
+    return "none";
+  }
+
+  if (typeof body === "string") {
+    return "string_unparseable";
+  }
+
+  const constructorName = (body as { constructor?: { name?: string } }).constructor?.name;
+  return typeof constructorName === "string" && constructorName !== ""
+    ? constructorName
+    : typeof body;
 }
 
 function readObjectProperty(value: unknown, key: string): Record<string, unknown> | null {
