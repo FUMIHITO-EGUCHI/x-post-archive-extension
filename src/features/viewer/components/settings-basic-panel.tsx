@@ -143,19 +143,29 @@ export function SettingsBasicPanel({
             {
               key: "autoArchiveOnLike" as const,
               checked: archiveSettings.autoArchiveOnLike,
-              title: isJapanese ? "いいねした投稿を保存" : "Save liked posts"
+              title: isJapanese ? "いいねした投稿を保存" : "Save liked posts",
+              note: null
             },
             {
               key: "autoArchiveOnBookmark" as const,
               checked: archiveSettings.autoArchiveOnBookmark,
-              title: isJapanese ? "ブックマークした投稿を保存" : "Save bookmarked posts"
+              title: isJapanese ? "ブックマークした投稿を保存" : "Save bookmarked posts",
+              // Why: X is rolling out a timeline action bar with no bookmark button (#130) —
+              // two profiles on the same account rendered different bars, so this cannot be
+              // stated as a flat fact. Without the note the toggle just reads as broken.
+              note: isJapanese
+                ? "X の環境によっては、タイムラインのアクションバーにブックマークボタンが表示されません。無い場合は投稿の詳細ページからブックマークすると保存されます。"
+                : "Some X clients render the timeline action bar without a bookmark button. When it is missing, bookmark from the post's detail page instead."
             }
-          ].map(({ key, checked, title }) => (
+          ].map(({ key, checked, title, note }) => (
             <label key={key} className="viewer-settings-toggle-item">
               <input
                 type="checkbox"
                 checked={checked}
                 aria-label={title}
+                // aria-label replaces the label text for screen readers, so the note beside it
+                // would otherwise be announced to nobody.
+                aria-describedby={note === null ? undefined : `${key}-note`}
                 onChange={(event) => {
                   void onArchiveSettingsChange({
                     ...archiveSettings,
@@ -165,6 +175,7 @@ export function SettingsBasicPanel({
               />
               <span className="viewer-settings-toggle-copy">
                 <strong>{title}</strong>
+                {note !== null && <span id={`${key}-note`}>{note}</span>}
               </span>
             </label>
           ))}
@@ -203,8 +214,8 @@ export function SettingsBasicPanel({
           />
           <span className="viewer-settings-inline-note">
             {isJapanese
-              ? "likes / bookmarks の一括取り込みで、duplicate だけの保存バッチが連続した回数です。新規保存か失敗が入ると連続数はリセットされます。"
-              : "Shared by likes and bookmarks bulk import. This counts consecutive duplicate-only save batches and resets when a batch includes a new save or a failure."}
+              ? "X の履歴ページ（ブックマーク / いいね）での一括取り込みで、duplicate だけの保存バッチが連続した回数です。新規保存か失敗が入ると連続数はリセットされます。"
+              : "Shared by the bulk import on X's History page (Bookmarks and Likes). This counts consecutive duplicate-only save batches and resets when a batch includes a new save or a failure."}
           </span>
         </label>
       </section>
