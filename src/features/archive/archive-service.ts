@@ -25,7 +25,8 @@ import {
   listPostIdsByKeyword,
   listPostIdsByUsername,
   listPostUsernames,
-  listRootOrSinglePostIds,
+  listViewerRootPostIds,
+  mapThreadRootIdsByPostId,
   getPostsByIds,
   hasPost,
   buildPostPageCursor,
@@ -212,7 +213,9 @@ export async function saveArchivePost(
     repost_count: input.repost_count,
     like_count: input.like_count,
     in_reply_to_post_id: normalizedInReplyToPostId,
-    thread_root_id: normalizedThreadRootId,
+    // Why: v19 invariant — singles store their own id so every post stays inside the
+    // thread_root_id index the viewer list is built from (#120).
+    thread_root_id: normalizedThreadRootId ?? input.x_post_id,
     quoted_post_id: normalizedQuotedPostId,
     saved_at: savedAt
   };
@@ -342,7 +345,8 @@ export async function listArchivePostsPage(
   const normalizedOffset = normalizePageOffset(input.offset);
   const normalizedLimit = normalizePageLimit(input.limit);
   const matchingPostIds = await resolveFilteredPostIds(input);
-  const visiblePostIds = await resolveViewerListPostIds(matchingPostIds);
+  const { rootIds, threadPostCountByRootId } = await listViewerRootPostIds();
+  const visiblePostIds = await resolveViewerListPostIds(matchingPostIds, rootIds);
   const totalCount = visiblePostIds.size;
 
   if (totalCount === 0) {
@@ -375,7 +379,7 @@ export async function listArchivePostsPage(
         );
 
   return {
-    posts: await hydrateArchivePosts(pageResult.posts),
+    posts: await hydrateArchivePosts(pageResult.posts, threadPostCountByRootId),
     totalCount,
     hasMore: normalizedOffset + pageResult.posts.length < totalCount,
     nextOffset: normalizedOffset + pageResult.posts.length,
@@ -1299,8 +1303,11 @@ export async function resumePendingMediaPersistence(): Promise<void> {
   return pendingResumePromise;
 }
 
-async function hydrateArchivePosts(posts: PostRecord[]): Promise<ArchivePostRecord[]> {
-  const basePosts = await hydrateArchivePostsBase(posts);
+async function hydrateArchivePosts(
+  posts: PostRecord[],
+  threadPostCountByRootId?: Map<string, number>
+): Promise<ArchivePostRecord[]> {
+  const basePosts = await hydrateArchivePostsBase(posts, threadPostCountByRootId);
   const quotedPostIds = [...new Set(basePosts.flatMap((post) =>
     typeof post.quoted_post_id === "string" && post.quoted_post_id.trim() !== ""
       ? [post.quoted_post_id]
@@ -1317,7 +1324,7 @@ async function hydrateArchivePosts(posts: PostRecord[]): Promise<ArchivePostReco
     return basePosts;
   }
 
-  const hydratedQuotedPosts = await hydrateArchivePostsBase(quotedPosts);
+  const hydratedQuotedPosts = await hydrateArchivePostsBase(quotedPosts, threadPostCountByRootId);
   const quotedPostMap = new Map(
     hydratedQuotedPosts.map((post) => [post.x_post_id, post] as const)
   );
@@ -1337,11 +1344,14 @@ async function hydrateArchivePosts(posts: PostRecord[]): Promise<ArchivePostReco
   });
 }
 
-async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePostRecord[]> {
+async function hydrateArchivePostsBase(
+  posts: PostRecord[],
+  threadPostCountByRootId?: Map<string, number>
+): Promise<ArchivePostRecord[]> {
   const postIds = posts.map((post) => post.x_post_id);
   const media = await listMediaByPostIds(postIds);
   const postTags = await listPostTagsByPostIds(postIds);
-  const threadCounts = await resolveThreadPostCounts(posts);
+  const threadCounts = await resolveThreadPostCounts(posts, threadPostCountByRootId);
   const mediaMap = new Map<string, MediaRecord[]>();
   const tagMap = new Map<string, ArchiveTagRecord[]>();
 
@@ -1381,7 +1391,10 @@ async function hydrateArchivePostsBase(posts: PostRecord[]): Promise<ArchivePost
   });
 }
 
-async function resolveThreadPostCounts(posts: PostRecord[]): Promise<Map<string, number>> {
+async function resolveThreadPostCounts(
+  posts: PostRecord[],
+  threadPostCountByRootId?: Map<string, number>
+): Promise<Map<string, number>> {
   const rootIds = posts.flatMap((post) => {
     const threadRootId = normalizeOptionalPostId(post.thread_root_id);
     return threadRootId === post.x_post_id ? [post.x_post_id] : [];
@@ -1390,6 +1403,15 @@ async function resolveThreadPostCounts(posts: PostRecord[]): Promise<Map<string,
 
   if (uniqueRootIds.length === 0) {
     return new Map();
+  }
+
+  // Why: under the v19 invariant every listed post is a root, so the fallback per-root count
+  // query would run for the whole page. The list path already derived every thread size from
+  // the thread_root_id key array — reuse it and skip the queries entirely (#120).
+  if (threadPostCountByRootId !== undefined) {
+    return new Map(
+      uniqueRootIds.map((rootId) => [rootId, threadPostCountByRootId.get(rootId) ?? 1])
+    );
   }
 
   return countThreadPostsByRoots(uniqueRootIds);
@@ -1544,8 +1566,11 @@ export async function refetchArchivePost(
     normalizeOptionalPostId(input.quoted_post_id) ?? existingPost.quoted_post_id ?? null;
   const normalizedInReplyToPostId =
     normalizeOptionalPostId(input.in_reply_to_post_id) ?? existingPost.in_reply_to_post_id ?? null;
+  // Why: v19 invariant — thread_root_id must stay non-null (falls back to the post's own id).
   const normalizedThreadRootId =
-    normalizeOptionalPostId(input.thread_root_id) ?? existingPost.thread_root_id ?? null;
+    normalizeOptionalPostId(input.thread_root_id) ??
+    normalizeOptionalPostId(existingPost.thread_root_id) ??
+    xPostId;
   const removedMediaPaths = preparedMediaUpdate.removedRecords.flatMap((record) =>
     [record.opfs_path, record.preview_image_opfs_path].filter(
       (path): path is string => typeof path === "string" && path.trim() !== ""
@@ -1645,19 +1670,39 @@ async function listRandomPostsPage(
   return getPostsByIds(selectSeededRandomIds(candidateIds, offset, limit, randomSeed));
 }
 
-async function resolveViewerListPostIds(matchingPostIds: Set<string> | null): Promise<Set<string>> {
-  const rootOrSinglePostIds = new Set(await listRootOrSinglePostIds());
+// Why: the full [x_post_id+thread_root_id] index scan costs O(total posts) regardless of the
+// filter's match count, while bulkGet costs O(matches) full-record reads. Below this many
+// matches the targeted reads win; above it the index-only scan avoids deserializing thousands
+// of records per page request. The crossover is a rough estimate, not a benchmark — both sides
+// are index-backed and fast at this scale.
+const THREAD_ROOT_BULK_GET_MAX_MATCHES = 200;
+
+async function resolveViewerListPostIds(
+  matchingPostIds: Set<string> | null,
+  rootOrSinglePostIdList: string[]
+): Promise<Set<string>> {
+  const rootOrSinglePostIds = new Set(rootOrSinglePostIdList);
 
   if (matchingPostIds === null) {
     return rootOrSinglePostIds;
   }
 
-  const matchingPosts = await getPostsByIds([...matchingPostIds]);
+  const threadRootIdByPostId =
+    matchingPostIds.size <= THREAD_ROOT_BULK_GET_MAX_MATCHES
+      ? new Map(
+          (await getPostsByIds([...matchingPostIds])).map((post) => [
+            post.x_post_id,
+            normalizeOptionalPostId(post.thread_root_id) ?? post.x_post_id
+          ])
+        )
+      : // Why: resolve members' thread roots via the compound index instead of bulk-reading
+        // every matching record — a broad filter hitting thousands of posts no longer
+        // deserializes them all per page request (#120).
+        await mapThreadRootIdsByPostId();
   const result = new Set<string>();
 
-  for (const post of matchingPosts) {
-    const threadRootId = normalizeOptionalPostId(post.thread_root_id);
-    const viewerPostId = threadRootId ?? post.x_post_id;
+  for (const postId of matchingPostIds) {
+    const viewerPostId = threadRootIdByPostId.get(postId) ?? postId;
 
     if (rootOrSinglePostIds.has(viewerPostId)) {
       result.add(viewerPostId);

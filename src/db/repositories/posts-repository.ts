@@ -56,21 +56,21 @@ export async function countThreadPostsByRoots(rootIds: string[]): Promise<Map<st
     return new Map();
   }
 
-  const posts = await archiveDb.posts.where("thread_root_id").anyOf(normalizedRootIds).toArray();
+  // Why: each matching index entry's key IS the thread_root_id, so .keys() counts members
+  // without deserializing the records (#120).
+  const threadRootIds = await archiveDb.posts
+    .where("thread_root_id")
+    .anyOf(normalizedRootIds)
+    .keys();
   const counts = new Map<string, number>();
 
   for (const rootId of normalizedRootIds) {
     counts.set(rootId, 0);
   }
 
-  for (const post of posts) {
-    const threadRootId = normalizePostId(post.thread_root_id);
-
-    if (threadRootId === null) {
-      continue;
-    }
-
-    counts.set(threadRootId, (counts.get(threadRootId) ?? 0) + 1);
+  for (const threadRootId of threadRootIds) {
+    const rootId = String(threadRootId);
+    counts.set(rootId, (counts.get(rootId) ?? 0) + 1);
   }
 
   return counts;
@@ -80,15 +80,75 @@ export async function listPostIds(): Promise<string[]> {
   return archiveDb.posts.toCollection().primaryKeys();
 }
 
-export async function listRootOrSinglePostIds(): Promise<string[]> {
-  return (
-    await archiveDb.posts
-      .filter((post) => {
-        const threadRootId = normalizePostId(post.thread_root_id);
-        return threadRootId === null || threadRootId === post.x_post_id;
-      })
-      .primaryKeys()
-  ).map(String);
+export type ViewerRootPostIds = {
+  rootIds: string[];
+  // Thread size per root, derived from the same key array — page hydration reuses this instead
+  // of issuing a per-root count query for every listed post.
+  threadPostCountByRootId: Map<string, number>;
+};
+
+export async function listViewerRootPostIds(): Promise<ViewerRootPostIds> {
+  // Why: with thread_root_id normalized (v19: singles store their own id), the distinct index
+  // values are exactly the viewer-list roots. Both reads below are single getAllKeys round
+  // trips; cursor-based alternatives (uniqueKeys, anyOf) cost one IPC hop per entry, which on a
+  // single-post-heavy archive (roots ≈ N) measured slower than the old full-table filter scan.
+  // Dedup happens in JS, and the primary-key set drops dead roots — a thread whose root record
+  // was deleted would otherwise inflate totalCount with entries the pager can never yield.
+  let [threadRootIds, existingPostIds] = await Promise.all([
+    archiveDb.posts.orderBy("thread_root_id").keys(),
+    archiveDb.posts.toCollection().primaryKeys()
+  ]);
+
+  // Why: a post missing from the index (null thread_root_id — e.g. restored from a pre-v19
+  // backup, which bypasses Dexie migrations) would silently vanish from the viewer list. The
+  // arrays above already reveal the gap for free (index entries < primary keys), so the repair
+  // scan runs only when a write path actually broke the invariant. Measured note: a dedicated
+  // per-request index.count() guard cost ~100ms at 19k posts — length comparison costs nothing.
+  if (threadRootIds.length < existingPostIds.length) {
+    await backfillMissingThreadRootIds();
+    threadRootIds = await archiveDb.posts.orderBy("thread_root_id").keys();
+  }
+
+  const existing = new Set(existingPostIds.map(String));
+  const threadPostCountByRootId = new Map<string, number>();
+
+  for (const key of threadRootIds) {
+    const rootId = String(key);
+    threadPostCountByRootId.set(rootId, (threadPostCountByRootId.get(rootId) ?? 0) + 1);
+  }
+
+  const rootIds: string[] = [];
+
+  for (const rootId of threadPostCountByRootId.keys()) {
+    if (existing.has(rootId)) {
+      rootIds.push(rootId);
+    }
+  }
+
+  return { rootIds, threadPostCountByRootId };
+}
+
+async function backfillMissingThreadRootIds(): Promise<void> {
+  await archiveDb.posts
+    .filter((post) => normalizePostId(post.thread_root_id) === null)
+    .modify((post) => {
+      post.thread_root_id = post.x_post_id;
+    });
+}
+
+// Why: mapping filtered members to their thread root previously bulk-read every matching record.
+// The [x_post_id+thread_root_id] compound index yields the same pairs in one index-only pass.
+export async function mapThreadRootIdsByPostId(): Promise<Map<string, string>> {
+  const pairs = await archiveDb.posts.orderBy("[x_post_id+thread_root_id]").keys();
+  const threadRootIdByPostId = new Map<string, string>();
+
+  for (const pair of pairs) {
+    if (Array.isArray(pair) && pair.length === 2) {
+      threadRootIdByPostId.set(String(pair[0]), String(pair[1]));
+    }
+  }
+
+  return threadRootIdByPostId;
 }
 
 export async function listPostUsernames(): Promise<string[]> {

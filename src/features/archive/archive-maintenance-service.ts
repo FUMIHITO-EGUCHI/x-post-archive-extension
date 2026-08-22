@@ -382,7 +382,7 @@ async function replaceArchiveDatabaseRecords(
       archiveDb.post_tags
     ],
     async () => {
-      await archiveDb.posts.bulkPut(backup.data.posts);
+      await archiveDb.posts.bulkPut(backup.data.posts.map(normalizeRestoredPostRecord));
       onProgress?.({
         phase: "Restoring database",
         completed: 1,
@@ -421,6 +421,18 @@ async function replaceArchiveDatabaseRecords(
   );
 }
 
+// Why: pre-v19 backups store null thread_root_id for single posts, and restore runs in the
+// viewer context where Dexie migrations do not re-run. Inserting them as-is would drop those
+// records out of the thread_root_id index the viewer list is built from (#120).
+function normalizeRestoredPostRecord(post: PostRecord): PostRecord {
+  const threadRootId =
+    typeof post.thread_root_id === "string" && post.thread_root_id.trim() !== ""
+      ? post.thread_root_id
+      : post.x_post_id;
+
+  return post.thread_root_id === threadRootId ? post : { ...post, thread_root_id: threadRootId };
+}
+
 async function mergeArchiveDatabaseRecords(
   backup: ArchiveBackupManifest,
   onProgress?: (progress: ArchiveTransferProgress) => void
@@ -440,7 +452,9 @@ async function mergeArchiveDatabaseRecords(
           .filter((post): post is PostRecord => post !== undefined)
           .map((post) => post.x_post_id)
       );
-      const postsToAdd = backup.data.posts.filter((post) => !existingPostIds.has(post.x_post_id));
+      const postsToAdd = backup.data.posts
+        .filter((post) => !existingPostIds.has(post.x_post_id))
+        .map(normalizeRestoredPostRecord);
       await archiveDb.posts.bulkAdd(postsToAdd);
       onProgress?.({
         phase: "Restoring database",
