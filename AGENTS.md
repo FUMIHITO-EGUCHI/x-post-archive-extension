@@ -96,7 +96,8 @@ X の投稿を保存して後から見返しやすくすることが目的。X �
 - handoff 前には Goal、In scope、Out of scope、Constraints、Compressed findings、Files to read first、Acceptance criteria、Open questions が分かる状態を目指す
 - タスク管理は **GitHub Issues + Projects v2**（X Archive Handoff ボード）を single source of truth とする。旧 `ai-handoff/` のファイル運用は削除済み（履歴は git log 参照）
 - Issue 作成は Claude / Codex / human いずれも可。New Issue → テンプレ選択（Task / Investigation / Bug）→ 初期ラベル `status: todo` + `owner:` + `priority:` + `type:` + `area:`。他 AI に投げる場合は `owner: <相手>` で止める
-- 作業中は Issue コメントに逐次追記（本文は objective / scope / checklist のみ編集）。完了申請は `status: ready-for-close` + `## Result` / `## Verification` / `## Changed files` コメント。close は人間のみ
+- 作業中は Issue コメントに逐次追記（本文は objective / scope / checklist のみ編集）。完了申請は `status: ready-for-close` + `## Result` / `## Verification` / `## Changed files` コメント
+- **AI は自分の判断で Issue を close しない。** ユーザーが明示的に close を指示したときだけ実行し、その際は `status: accepted` に付け替えてから閉じる。指示なしに完了扱いへ進めないための線であって、指示があればそれはユーザーの判断
 - commit message に `#<issue>` 必須（雑務は `[skip-issue]`）。`commit-msg` hook が強制
 - 詳細運用は `docs/handoff/README.md`、AI 向け最短ルールは `.claude/rules/handoff.md`
 

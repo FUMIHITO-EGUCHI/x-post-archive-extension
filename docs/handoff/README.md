@@ -22,7 +22,7 @@
 | `area:` | `viewer` / `content` / `background` / `db` / `handoff` / `other` |
 
 - 「done」は **close 状態**で表現する（`status: done` ラベルは存在しない）
-- close は**人間のみ**が行う
+- close は**人間の判断**で行う。AI は自分の判断では close せず、ユーザーが明示的に指示したときだけ代行する
 
 ---
 
@@ -89,11 +89,13 @@ blank issue は無効化している。
 <`git diff --name-only <base>..HEAD` の結果>
 ```
 
-3. **AI は close しない**。ここで人間の確認待ちに入る。
+3. **AI はここで止まる**。自分の判断では close せず、人間の確認待ちに入る。
 
-### 3.4 Close（人間のみ）
+### 3.4 Close（人間の判断）
 
 人間が内容を確認し、実機検証が必要なら実施。問題なければ `gh issue close <n>` または UI で close。
+
+close の代行を AI に指示してもよい。その場合 AI は `status: accepted` に付け替えてから閉じる。判断そのものは人間が持つ、という線は変わらない。
 
 ---
 
@@ -228,9 +230,9 @@ Issue を作ると自動でボードに乗る（auto-add ワークフロー）�
 3. `status: ready-for-close` ラベルが付いている
 4. 最終コメントに `## Result` / `## Verification` / `## Changed files` が揃っている
 5. commit message に `#<issue>` が含まれている
-6. 人間が Issue を close した
+6. 人間の判断で Issue が close された
 
-1〜5 を AI が満たし、6 は人間のみ。
+1〜5 を AI が満たし、6 は人間が判断する（実行は AI に代行させてもよい）。
 
 ---
 

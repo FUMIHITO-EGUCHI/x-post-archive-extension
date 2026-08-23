@@ -114,7 +114,7 @@ npx ccusage@latest
 
 ## 7. やってはいけないこと
 
-- Action から Issue を close する（close は人間のみ）
+- Action から Issue を close する（対話中の AI はユーザーの明示指示があれば close を代行してよいが、Action にはその指示を受け取る経路がないため常に対象外）
 - Action から PR を merge / approve する
 - `track_progress` コメントを手書きで触る
 - `model:` ラベルを2つ以上貼る（1つだけ）
