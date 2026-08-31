@@ -26,15 +26,18 @@ X's built-in export is slow, limited, and routes through their servers. Your lik
 
 ## Installation
 
+### Chrome Web Store
+
+[**Offline X Archive** on the Chrome Web Store](https://chromewebstore.google.com/detail/offline-x-archive/nghonhilodmaolpdicmdnfcnldhkfjhp)
+
 ### Chrome / Edge (manual sideload)
+
+Use this to run an unreleased build, or to build from source yourself.
 
 1. Clone or download this repo
 2. `npm install && npm run build`
 3. Open `chrome://extensions`, enable Developer Mode
 4. Click "Load unpacked" and select `.output/chrome-mv3/`
-
-<!-- ### Chrome Web Store
-[PLACEHOLDER — CWS link when published] -->
 
 ### Firefox
 
@@ -91,7 +94,7 @@ In Chrome, load `.output/chrome-mv3/` as an unpacked extension.
 
 ## Roadmap
 
-- [ ] Chrome Web Store submission
+- [x] Chrome Web Store submission
 - [ ] Firefox Add-ons support
 - [ ] Bulk export to JSON / CSV / Markdown
 - [ ] Likes import improvement
