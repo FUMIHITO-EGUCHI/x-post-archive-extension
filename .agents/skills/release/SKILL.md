@@ -84,13 +84,17 @@ git commit -m "chore: release vX.Y.Z"
 git tag vX.Y.Z
 ```
 
-### 8. 配布物の生成
+### 8. 配布物のローカル確認
 
 ```bash
 npm run zip
 ```
 
-成功したら `.output/` 配下に zip ファイルが生成されることを確認する。
+`.output/x-post-archive-extension-<version>-chrome.zip` が生成されることを確認する。
+
+これは事前確認であって、**配布される zip はこれではない**。GitHub Release に添付されるのは
+`release.yml` が runner 上でビルドし直したものになる。ここで失敗するなら runner でも失敗するので、
+push 前に気づくためのステップとして実行する。
 
 ### 9. push 確認と実行
 
@@ -107,20 +111,21 @@ git push
 git push --tags
 ```
 
-### 10. GitHub Release の作成
+### 10. release.yml の結果を確認する
 
-push 完了後、`gh release create` で GitHub Release を作成する。
-リリースノート本文は `docs/release-notes/vX.Y.Z.md` の内容を使用する。
+**`gh release create` は実行しない。** tag の push で `.github/workflows/release.yml` が発火し、
+lint / typecheck / test / build / zip を通したうえで GitHub Release を作成する。手で叩くと
+tag 名が衝突して workflow 側が失敗する（Issue #135。v1.1.0 で実際に起きた）。
+
+push 後、workflow の完了を確認する：
 
 ```bash
-gh release create vX.Y.Z \
-  --title "vX.Y.Z" \
-  --notes-file docs/release-notes/vX.Y.Z.md \
-  .output/<zip-filename>
+gh run list --workflow=release.yml --limit 1
+gh release view vX.Y.Z
 ```
 
-`.output/` 配下の zip ファイルをリリースアセットとして添付する。
 成功したら GitHub Release の URL をユーザーに報告する。
+失敗していたらログを確認し、原因をユーザーに報告する。
 
 ---
 
@@ -129,4 +134,9 @@ gh release create vX.Y.Z \
 - `git push --force` は使わない
 - push はユーザーの確認を得てから行う
 - zip 生成失敗はブロッカーとして扱う（typecheck / build と同様）
-- `gh release create` 失敗時はユーザーに報告して手動対応を促す
+- **GitHub Release の作成は `release.yml` が canonical**。この手順から `gh release create` を
+  実行してはならない
+- `release.yml` は tag 名と `package.json` の version が一致しない場合、
+  `docs/release-notes/vX.Y.Z.md` が無い場合、version から導出した zip が無い場合に失敗する。
+  ステップ 4〜8 を飛ばすとここで落ちる
+- `release.yml` が失敗した場合はユーザーに報告して手動対応を促す

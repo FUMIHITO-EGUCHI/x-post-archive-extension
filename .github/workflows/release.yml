@@ -9,6 +9,13 @@ on:
 # own minimum scope. This makes any future-added job default to no privileges.
 permissions: {}
 
+# Guards a re-run or a re-pushed tag against racing itself. It does NOT guard
+# against a human running `gh release create` by hand — that is what killed the
+# v1.1.0 run (#135), and the fix for it lives in .agents/skills/release/SKILL.md.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     name: build + publish GitHub Release
@@ -16,36 +23,62 @@ jobs:
     permissions:
       contents: write   # required to create a GitHub Release
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - name: typecheck (tsc --noEmit)
-        run: npm run typecheck
-      - name: build (wxt build)
-        run: npm run build
-      - name: zip (wxt zip)
-        run: npm run zip
-      - name: Locate release artifact and notes
-        id: artifacts
+      - name: Preflight (tag matches package.json, release notes exist)
+        # Runs before `npm ci` so a mistyped tag fails in seconds rather than
+        # after a full install and build. GITHUB_REF_NAME is a built-in env var,
+        # so nothing is interpolated into the shell.
+        id: preflight
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          pkg_version=$(node -p "require('./package.json').version")
+          if [ "$version" != "$pkg_version" ]; then
+            echo "::error::Tag $tag implies version $version, but package.json says $pkg_version" >&2
+            exit 1
+          fi
           notes="docs/release-notes/${tag}.md"
           if [ ! -f "$notes" ]; then
             echo "::error::Release notes not found at $notes" >&2
             exit 1
           fi
-          zip=$(ls .output/*.zip 2>/dev/null | head -1)
-          if [ -z "$zip" ]; then
-            echo "::error::No zip produced under .output/" >&2
+          pkg_name=$(node -p "require('./package.json').name")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "notes=$notes" >> "$GITHUB_OUTPUT"
+          echo "zip=.output/${pkg_name}-${version}-chrome.zip" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - name: lint (eslint, content-safe boundary)
+        run: npm run lint
+      - name: typecheck (tsc --noEmit)
+        run: npm run typecheck
+      - name: test (vitest)
+        run: npm test
+      - name: build + content-script bundle guard
+        # `npm run guard:content-scripts` runs `wxt build` then verifies the
+        # built content scripts do not contain Dexie / DexieError / U+FFFF.
+        # Same gate ci.yml uses, so a tag cannot ship what a PR would fail on.
+        run: npm run guard:content-scripts
+      - name: zip (wxt zip)
+        run: npm run zip
+      - name: Verify release artifact
+        # The expected filename comes from package.json (name + version) in the
+        # preflight, never from `ls .output/*.zip | head -1`: a stale zip left
+        # over from an earlier build would otherwise be shipped under the new
+        # tag without a word.
+        env:
+          RELEASE_ZIP: ${{ steps.preflight.outputs.zip }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RELEASE_ZIP" ]; then
+            echo "::error::Expected artifact not found: $RELEASE_ZIP" >&2
+            ls -la .output/ >&2 || true
             exit 1
           fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "notes=$notes" >> "$GITHUB_OUTPUT"
-          echo "zip=$zip" >> "$GITHUB_OUTPUT"
       - name: Create GitHub Release
         # Pass step outputs through env: rather than expanding ${{ ... }} inside
         # the run: block, so values cannot be interpreted as shell syntax even
@@ -53,11 +86,10 @@ jobs:
         # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#understanding-the-risk-of-script-injections
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.artifacts.outputs.tag }}
-          RELEASE_NOTES: ${{ steps.artifacts.outputs.notes }}
-          RELEASE_ZIP: ${{ steps.artifacts.outputs.zip }}
+          RELEASE_NOTES: ${{ steps.preflight.outputs.notes }}
+          RELEASE_ZIP: ${{ steps.preflight.outputs.zip }}
         run: |
-          gh release create "$RELEASE_TAG" \
-            --title "$RELEASE_TAG" \
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
             --notes-file "$RELEASE_NOTES" \
             "$RELEASE_ZIP"
