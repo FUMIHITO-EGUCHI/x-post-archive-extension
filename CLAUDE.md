@@ -24,7 +24,7 @@ X（旧Twitter）投稿を1件ずつ保存・検索する Chrome 拡張（Manife
 - 作業開始時: Issue を選んで `status: in-progress` ラベルを付ける
 - 作業中: Issue コメントに逐次追記。本文は objective / scope / checklist のみ編集
 - 完了申請: `status: ready-for-close` ラベル + `## Result` / `## Verification` / `## Changed files` を含むコメント
-- **close は人間のみ**。AI は close しない
+- **close は AI の判断で行わない**。ユーザーが明示的に指示したときだけ実行し、その際は `status: accepted` に付け替えてから閉じる
 - commit message は `#<issue>` を必須（雑務は `[skip-issue]`）。`commit-msg` hook が強制
 - AI 間 handoff は `docs/handoff/README.md` の雛形に従う
 

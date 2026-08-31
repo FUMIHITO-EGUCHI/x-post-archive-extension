@@ -27,7 +27,7 @@ paths:
 | `area:` | `viewer` / `content` / `background` / `db` / `handoff` / `other` |
 
 - `status: done` は存在しない。完了は **close 状態**で表現
-- **close は人間のみ**。AI は絶対に `gh issue close` しない
+- **AI は自分の判断で close しない**。ユーザーが明示的に指示したときだけ `gh issue close` を実行し、その際は `status: accepted` に付け替えてから閉じる
 
 ## 作業フロー
 
