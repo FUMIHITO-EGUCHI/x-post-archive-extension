@@ -80,7 +80,7 @@ For questions about this policy or the Extension's data handling, open an issue 
 
 ## プライバシーポリシー（日本語）
 
-**最終更新日:** 2026-05-25
+**最終更新日:** 2026-08-31
 
 本ドキュメントは、Chrome 拡張機能 **Offline X Archive**（以下「本拡張機能」）におけるユーザーデータの取り扱いを定める。本ポリシーは、本リポジトリおよび Chrome ウェブストアで配布される Chrome 拡張機能に適用される。英語版と本日本語版で内容に差異がある場合は、英語版を正とする。
 
