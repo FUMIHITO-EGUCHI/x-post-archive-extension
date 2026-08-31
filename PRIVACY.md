@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated:** 2026-05-25
+**Last updated:** 2026-08-31
 
 > 日本語版は本ドキュメント末尾の [プライバシーポリシー（日本語）](#プライバシーポリシー日本語) を参照。
 
@@ -32,6 +32,7 @@ The Extension uses the following Chrome APIs to provide its functionality:
 | `storage`, `unlimitedStorage` | Local persistence in IndexedDB and `chrome.storage` for user settings and saved posts. |
 | `cookies` | Reading the `ct0` CSRF cookie from `x.com` / `twitter.com` is required to fetch the user's own active session's GraphQL endpoint (`TweetDetail`) for capturing the full post and thread context the user is currently viewing. The cookie value is used only on the user's own machine to compose the request to `x.com` and is never transmitted to the developer or any third party. |
 | `alarms` | Background service worker scheduling for retrying failed saves and processing queued work. |
+| `webRequest` | Observation only. Non-blocking listeners scoped to `https://x.com/i/api/graphql/*` and `https://twitter.com/i/api/graphql/*` let the Extension notice when the user likes or bookmarks a post from a flow the in-page interceptor cannot see (the photo lightbox), so the user's "save on like" / "save on bookmark" settings still apply there. No request is cancelled, redirected, or modified (`webRequestBlocking` is not requested), the only value read from a request body is the post ID, and nothing observed leaves the device. |
 | `host_permissions` (`https://x.com/*`, `https://twitter.com/*`, `https://pbs.twimg.com/*`, `https://video.twimg.com/*`) | Required to attach the save UI to the X interface, fetch the post via the user's authenticated session, and locally cache referenced media. |
 
 ## Data the Extension does NOT collect
@@ -109,6 +110,7 @@ For questions about this policy or the Extension's data handling, open an issue 
 | `storage`, `unlimitedStorage` | ユーザー設定および保存投稿の IndexedDB / `chrome.storage` への永続化 |
 | `cookies` | `x.com` / `twitter.com` の `ct0` CSRF クッキーを参照し、ユーザー自身の認証済みセッションで GraphQL エンドポイント（`TweetDetail`）にリクエストを送るために使用する。クッキー値はユーザー端末上で `x.com` へのリクエスト組み立てにのみ用い、開発者および第三者には一切送信しない。 |
 | `alarms` | バックグラウンドサービスワーカーの再起動・保存ジョブの再試行・キュー処理のスケジューリング |
+| `webRequest` | 観測専用。`https://x.com/i/api/graphql/*` と `https://twitter.com/i/api/graphql/*` に限定した非ブロッキングリスナーにより、ページ内 interceptor では観測できない導線（写真ライトボックス）でのいいね／ブックマークを検知し、「いいねした投稿を保存」「ブックマークした投稿を保存」の設定をその導線でも有効にする。リクエストのキャンセル・リダイレクト・改変は行わず（`webRequestBlocking` は要求しない）、リクエストボディから読み取る値は投稿 ID のみで、観測内容が端末外へ出ることはない。 |
 | `host_permissions`（`https://x.com/*`, `https://twitter.com/*`, `https://pbs.twimg.com/*`, `https://video.twimg.com/*`） | X の画面に保存 UI を組み込み、ユーザー自身の認証済みセッション経由で投稿を取得し、参照メディアをローカルキャッシュするために必要 |
 
 ### 収集しないデータ

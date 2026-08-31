@@ -160,6 +160,12 @@ CWS は permission ごとに正当化を入力する欄がある。1 つずつ�
 
 **JA:** Manifest V3 の background service worker をスケジュールで起こし、失敗した保存のリトライやスレッド展開キューの処理を進めるために必要です。`alarms` がないと service worker がアクション間で停止し、キューが進まなくなります。
 
+### `webRequest`
+
+**EN:** Observation only, added in v1.1.0. The extension registers non-blocking `webRequest.onBeforeRequest` / `onCompleted` / `onErrorOccurred` listeners scoped to `https://x.com/i/api/graphql/*` and `https://twitter.com/i/api/graphql/*`, so it can notice when the user themselves likes or bookmarks a post and honour the user's "save on like" / "save on bookmark" settings. X issues some of those actions from its own service worker (the photo lightbox flow), where the extension's in-page interceptor cannot observe them; without `webRequest` those settings silently do nothing in that flow. The listeners never cancel, redirect, or modify a request — `webRequestBlocking` is not requested — and the only value read out of a request body is the post ID. Nothing observed is transmitted off the user's device.
+
+**JA:** 観測専用。v1.1.0 で追加しました。`https://x.com/i/api/graphql/*` と `https://twitter.com/i/api/graphql/*` に限定した非ブロッキングの `webRequest.onBeforeRequest` / `onCompleted` / `onErrorOccurred` リスナーを登録し、ユーザー自身が投稿をいいね／ブックマークしたことを検知して「いいねした投稿を保存」「ブックマークした投稿を保存」の設定に従うために使います。X はこれらの操作の一部を自身の service worker から送信するため（写真ライトボックスの導線）、拡張のページ内 interceptor では観測できません。`webRequest` がないと、その導線でこれらの設定が無反応になります。リスナーはリクエストのキャンセル・リダイレクト・改変を一切行わず（`webRequestBlocking` は要求しません）、リクエストボディから読み取る値は投稿 ID のみです。観測した内容が端末外へ送信されることはありません。
+
 ### `host_permissions`: `https://x.com/*`, `https://twitter.com/*`
 
 **EN:** Required to attach the save UI to the X interface (content script injection) and to fetch the user's own session-authenticated post and thread data via the same endpoints the user's browser already uses while signed in.
