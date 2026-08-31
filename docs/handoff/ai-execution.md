@@ -132,9 +132,21 @@ npx ccusage@latest
 2. Claude Code CLI で `/install-github-app` 実行 → `CLAUDE_CODE_OAUTH_TOKEN` secret が自動登録
 3. **副作用で生成される `claude-code-review.yml` は削除**（`claude-pr-review.yml` と重複）
 4. 各 workflow の `with:` に `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}` が配線済みであること
-5. workflow 編集は **default branch (main) と PR branch の内容を一致させる**（claude-code-action のセキュリティ仕様。PR branch でだけ workflow を変えると 401）
+5. claude-code-action を呼ぶ workflow ファイルは **default branch と PR branch で内容を一致させる**。
+   一致しない PR では action が実行前に自分を止める（claude-code-action のセキュリティ仕様）
 
-ハマりどころ表は [`bootstrap.md` §5](./bootstrap.md#5-ハマりどころbootstrap-時の典型エラー) 参照。
+```
+Skipping action due to workflow validation: Workflow validation failed. The workflow file must
+exist and have identical content to the version on the repository default branch.
+```
+
+**このとき check は失敗せず、warning 付きで success になる。** レビューが一度も走っていないのに
+PR 上では緑に見える。以前ここには「401 になる」と書いてあったが誤りで、赤い × を探しても出てこない。
+PR #138（Issue #137）で実測した挙動。
+
+したがって `claude-*.yml` 自身を変更する PR は **AI レビューを受けられない**。人間が差分を読むか、
+merge して default branch を揃えたあとに追随の PR でレビューさせる。merge 後は内容が一致するので
+次の PR から通常どおり動く。
 
 workflow 側に `anthropic_api_key:` は **書かない**（OAuth 経由で認証）。
 
