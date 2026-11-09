@@ -63,7 +63,7 @@ export function useMediaLightbox() {
 
     async function loadVideo() {
       try {
-        const blob = await readBlobFromOpfs(currentVideo.media.opfs_path);
+        const blob = await readBlobFromOpfs(currentVideo.media.opfs_path, currentVideo.media.mime_type);
         const createdUrl = URL.createObjectURL(blob);
 
         if (cancelled) {
@@ -334,7 +334,7 @@ function LightboxImage({
   media: MediaRecord | null;
   language: ArchiveLanguage;
 }) {
-  const objectUrl = useObjectUrl(media?.opfs_path ?? null, media !== null);
+  const objectUrl = useObjectUrl(media?.opfs_path ?? null, media !== null, media?.mime_type);
 
   if (media === null || objectUrl === null) {
     return (
@@ -354,7 +354,11 @@ function LightboxImage({
   );
 }
 
-function useObjectUrl(opfsPath: string | null, enabled: boolean): string | null {
+function useObjectUrl(
+  opfsPath: string | null,
+  enabled: boolean,
+  mimeType?: string | null
+): string | null {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -371,7 +375,7 @@ function useObjectUrl(opfsPath: string | null, enabled: boolean): string | null 
 
     async function loadObjectUrl() {
       try {
-        const blob = await readBlobFromOpfs(targetPath);
+        const blob = await readBlobFromOpfs(targetPath, mimeType);
         createdUrl = URL.createObjectURL(blob);
 
         if (!cancelled) {
@@ -400,7 +404,7 @@ function useObjectUrl(opfsPath: string | null, enabled: boolean): string | null 
         URL.revokeObjectURL(createdUrl);
       }
     };
-  }, [enabled, opfsPath]);
+  }, [enabled, opfsPath, mimeType]);
 
   return objectUrl;
 }

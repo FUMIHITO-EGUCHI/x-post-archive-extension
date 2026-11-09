@@ -49,10 +49,13 @@ export async function writeBlobToOpfs(
   };
 }
 
-export async function readBlobFromOpfs(opfsPath: string): Promise<Blob> {
+export async function readBlobFromOpfs(
+  opfsPath: string,
+  mimeType?: string | null
+): Promise<Blob> {
   const fileHandle = await getFileHandle(opfsPath, false);
   const file = await fileHandle.getFile();
-  return file;
+  return mimeType ? file.slice(0, file.size, mimeType) : file;
 }
 
 export async function deleteBlobFromOpfs(opfsPath: string): Promise<void> {

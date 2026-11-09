@@ -8,6 +8,7 @@ import type { ArchiveTagSummaryRecord } from "../../../types/viewer";
 import { createLogger } from "../../logging/logger";
 import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
 import type { ArchiveLanguage } from "../../settings/archive-language";
+import { downloadPostMedia } from "../utils/media-download";
 import { safeHref } from "../utils/safe-href";
 import { TagPickerOverlay } from "./tag-picker-overlay";
 
@@ -99,6 +100,7 @@ export function PostCard({
           </div>
         </div>
         <div className="post-card-actions">
+          <SaveMediaButton post={post} language={language} />
           <button
             className="post-refetch-button"
             type="button"
@@ -298,6 +300,7 @@ function QuotedPostCard({
           <span className="post-handle">@{post.x_username}</span>
         </p>
         <span className="quoted-post-date">{formatPostedAt(post.posted_at, language)}</span>
+        <SaveMediaButton post={post} language={language} />
       </div>
 
       {post.post_text.trim() !== "" && <p className="quoted-post-text">{post.post_text}</p>}
@@ -337,6 +340,54 @@ function QuotedPostCard({
   );
 }
 
+function SaveMediaButton({ post, language }: {
+  post: ArchivePostRecord;
+  language: ArchiveLanguage;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  if (!post.media.some((media) => media.storage_status === "ready")) {
+    return null;
+  }
+
+  async function saveMedia() {
+    setSaving(true);
+    setHasError(false);
+    try {
+      const { failedCount } = await downloadPostMedia(post);
+      setHasError(failedCount > 0);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="post-media-save">
+      <button
+        className="post-media-save-button"
+        type="button"
+        aria-label={language === "ja"
+          ? `@${post.x_username} の投稿のメディアを保存`
+          : `Save media from post by @${post.x_username}`}
+        disabled={saving}
+        onClick={() => { void saveMedia(); }}
+      >
+        {saving
+          ? language === "ja" ? "保存中..." : "Saving..."
+          : language === "ja" ? "保存" : "Save media"}
+      </button>
+      {hasError && (
+        <span className="post-media-save-error" role="status">
+          {language === "ja"
+            ? "一部のメディアを保存できませんでした"
+            : "Some media could not be saved."}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function MediaCard({
   language,
   media,
@@ -351,7 +402,8 @@ function MediaCard({
   const [setContainerRef, isNearViewport] = useDeferredVisibility<HTMLElement>();
   const imageObjectUrl = useObjectUrl(
     media.media_type === "image" && media.storage_status === "ready" ? media.opfs_path : null,
-    isNearViewport
+    isNearViewport,
+    media.mime_type
   );
   const previewObjectUrl = useObjectUrl(
     media.media_type === "video" &&
@@ -528,7 +580,11 @@ function useDeferredVisibility<T extends Element>(): [(node: T | null) => void, 
   return [setNode, isVisible];
 }
 
-function useObjectUrl(opfsPath: string | null, enabled: boolean): string | null {
+function useObjectUrl(
+  opfsPath: string | null,
+  enabled: boolean,
+  mimeType?: string | null
+): string | null {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -545,7 +601,7 @@ function useObjectUrl(opfsPath: string | null, enabled: boolean): string | null 
 
     async function loadObjectUrl() {
       try {
-        const blob = await readBlobFromOpfs(targetPath);
+        const blob = await readBlobFromOpfs(targetPath, mimeType);
         createdUrl = URL.createObjectURL(blob);
 
         if (!cancelled) {
@@ -574,7 +630,7 @@ function useObjectUrl(opfsPath: string | null, enabled: boolean): string | null 
         URL.revokeObjectURL(createdUrl);
       }
     };
-  }, [enabled, opfsPath]);
+  }, [enabled, opfsPath, mimeType]);
 
   return objectUrl;
 }
