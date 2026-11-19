@@ -127,6 +127,24 @@ gh release view vX.Y.Z
 成功したら GitHub Release の URL をユーザーに報告する。
 失敗していたらログを確認し、原因をユーザーに報告する。
 
+### 11. Chrome Web Store への提出（publish-cws job）
+
+`release` job が成功すると、同じ workflow の `publish-cws` job が GitHub Environment
+`chrome-web-store` の承認待ちになる。承認すると CWS API v2 で同じ zip をアップロードし、
+審査に提出する（審査通過で自動公開）。
+
+- 承認はユーザーが行う。Actions の run 画面の「Review deployments」か、`gh run view <run-id>` が示す URL から。
+  **AI が代わりに承認しない**
+- 承認後、job ログの `Publish state: PENDING_REVIEW`（または `PUBLISHED`）と step summary の
+  Chrome Web Store status を確認してユーザーに報告する
+
+```bash
+gh run view <run-id> --job <publish-cws の job-id> --log
+```
+
+初期設定（GCP の WIF / Dashboard のサービスアカウント登録 / GitHub Environment）は
+`docs/release/cws-api-v2-setup.md`。疎通確認だけなら `cws-status` workflow を手動実行する。
+
 ---
 
 ## 注意事項
@@ -136,6 +154,10 @@ gh release view vX.Y.Z
 - zip 生成失敗はブロッカーとして扱う（typecheck / build と同様）
 - **GitHub Release の作成は `release.yml` が canonical**。この手順から `gh release create` を
   実行してはならない
+- **Chrome Web Store への提出も `release.yml` の `publish-cws` が canonical**。同じ version を
+  Dashboard で手動アップロードしない（job が「version already uploaded」で失敗する）
+- `publish-cws` が失敗しても GitHub Release は作成済み。原因を直したら失敗した job だけ再実行する
+  （zip artifact の保持は 7 日）。審査中の提出が残っていると job は止まる。Dashboard で取り消すか審査完了を待つ
 - `release.yml` は tag 名と `package.json` の version が一致しない場合、
   `docs/release-notes/vX.Y.Z.md` が無い場合、version から導出した zip が無い場合に失敗する。
   ステップ 4〜8 を飛ばすとここで落ちる
