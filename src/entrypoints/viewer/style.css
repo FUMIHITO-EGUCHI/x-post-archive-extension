@@ -1183,9 +1183,29 @@ body {
   color: var(--color-accent-text);
 }
 
+.viewer-filter-modal-close svg {
+  display: block;
+  flex: none;
+}
+
 .viewer-filter-tab-panel {
   display: grid;
   gap: 16px;
+}
+
+.viewer-filter-tab-panel > .viewer-tag-modal-controls,
+.viewer-filter-tab-panel > .viewer-user-modal-controls,
+.viewer-filter-tab-panel > .viewer-date-modal-controls,
+.viewer-filter-tab-panel > .viewer-tag-modal-summary {
+  margin-bottom: 0;
+}
+
+.viewer-filter-tab-panel > .viewer-tag-modal-summary {
+  padding: 8px 14px;
+}
+
+.viewer-filter-tab-panel > .viewer-tag-modal-summary + .viewer-tag-modal-summary {
+  margin-top: -10px;
 }
 
 .viewer-list-controls {
