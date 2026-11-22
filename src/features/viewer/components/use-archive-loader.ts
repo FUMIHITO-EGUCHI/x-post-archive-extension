@@ -53,7 +53,7 @@ export function useArchiveLoader() {
     setLoadNotice(null);
 
     try {
-      const response = await requestPostsPage({
+      const request = {
         offset: input.offset,
         limit: input.limit,
         sortField: input.sortField,
@@ -65,7 +65,8 @@ export function useArchiveLoader() {
         authorFilter: input.authorFilter,
         keywordFilter: input.keywordFilter,
         ...buildDateFilterRequest(input.dateFilterTarget, input.dateFrom, input.dateTo)
-      });
+      };
+      const response = await requestPostsPage(request);
 
       if (requestId !== loadArchiveRequestIdRef.current) {
         return;

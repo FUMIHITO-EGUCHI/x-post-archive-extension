@@ -1,3 +1,5 @@
+import { formatCount } from "./viewer-formatters";
+import { Icon } from "./icons";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { PostSortField, SortDirection } from "../../../types/viewer";
 import type { ArchiveLanguage } from "../../settings/archive-language";
@@ -5,12 +7,17 @@ import type { ArchiveLanguage } from "../../settings/archive-language";
 export type FilterModalTab = "user" | "tag" | "date";
 
 export type StickyToolbarFilterChip = {
-  key: FilterModalTab;
+  key: FilterModalTab | "keyword";
+  label: string;
+  onRemove: () => void;
+  excluded?: boolean;
 };
 
 export type StickyToolbarProps = {
   language: ArchiveLanguage;
-  countLabel: string;
+  matchedCount: number;
+  totalCount: number;
+  isFiltered: boolean;
   settingsButtonRef: RefObject<HTMLButtonElement | null>;
   searchInputRef: RefObject<HTMLInputElement | null>;
   onOpenSettings: () => void;
@@ -34,7 +41,9 @@ export type StickyToolbarProps = {
 
 export function StickyToolbar({
   language,
-  countLabel,
+  matchedCount,
+  totalCount,
+  isFiltered,
   settingsButtonRef,
   searchInputRef,
   onOpenSettings,
@@ -89,6 +98,7 @@ export function StickyToolbar({
               className="viewer-icon-button"
               type="button"
               aria-label={language === "ja" ? "検索を閉じる" : "Close search"}
+              title={language === "ja" ? "検索を閉じる" : "Close search"}
               onClick={onCloseSearch}
             >
               <SearchCloseIcon />
@@ -145,6 +155,7 @@ export function StickyToolbar({
             className="viewer-icon-button"
             type="button"
             aria-label={language === "ja" ? "キーワード検索" : "Keyword search"}
+            title={language === "ja" ? "キーワード検索" : "Keyword search"}
             aria-pressed={keywordFilter !== null && keywordFilter.trim().length > 0}
             onClick={onOpenSearch}
           >
@@ -158,12 +169,14 @@ export function StickyToolbar({
               : "viewer-secondary-button viewer-filter-open-button"
           }
           type="button"
+          aria-label={language === "ja" ? "絞り込み" : "Filter"}
+          title={language === "ja" ? "絞り込み" : "Filter"}
           aria-pressed={activeFilterCount > 0}
           onClick={() => {
             onOpenFilter(firstActiveFilterTab);
           }}
         >
-          <span>{language === "ja" ? "絞り込み" : "Filter"}</span>
+          <Icon name="Filter" />
           {activeFilterCount > 0 && (
             <span className="viewer-filter-open-badge">{activeFilterCount}</span>
           )}
@@ -171,51 +184,91 @@ export function StickyToolbar({
         <button
           className="viewer-secondary-button"
           type="button"
+          aria-label={language === "ja" ? "絞り込み結果にタグ付け" : "Tag filtered posts"}
+          title={language === "ja" ? "絞り込み結果にタグ付け" : "Tag filtered posts"}
           onClick={onOpenBulkTag}
           disabled={isBulkTagDisabled}
         >
-          {language === "ja" ? "一括タグ付け" : "Bulk tag"}
+          <Icon name="Tag" />
         </button>
       </div>
 
-      <div
-        className="viewer-toolbar-center"
-        aria-label={language === "ja" ? "適用中の絞り込み" : "Active filters"}
-      >
-        {activeFilterCount === 0 ? (
-          <span className="viewer-toolbar-empty">
-            {language === "ja" ? "絞り込みなし" : "No filters"}
-          </span>
-        ) : (
-          <span
-            className="viewer-filter-chip-collapsed"
-            aria-label={language === "ja" ? "適用中の絞り込み" : "Active filters"}
-          >
-            <button
-              className="viewer-filter-chip-overflow viewer-filter-chip-overflow-inner"
-              type="button"
-              onClick={() => {
-                onOpenFilter(firstActiveFilterTab);
-              }}
-            >
-              {language === "ja"
-                ? `+${activeFilterCount} 件の絞り込み中`
-                : `+${activeFilterCount} active filters`}
-            </button>
+      {activeFilterCount > 0 && (
+        <div
+          className="viewer-toolbar-center"
+          aria-label={language === "ja" ? "適用中の絞り込み" : "Active filters"}
+        >
+          <div className="viewer-filter-chip-list">
+            {filterChips.map((chip) => (
+              <div
+                className={`viewer-filter-chip${chip.excluded ? " viewer-filter-chip-excluded" : ""}`}
+                key={`${chip.key}:${chip.label}`}
+              >
+                <button
+                  className="viewer-filter-chip-label"
+                  type="button"
+                  title={chip.label}
+                  onClick={() => {
+                    if (chip.key === "keyword") {
+                      onOpenSearch();
+                      searchInputRef.current?.focus({ preventScroll: true });
+                      return;
+                    }
+                    onOpenFilter(chip.key);
+                  }}
+                >
+                  {chip.label}
+                </button>
+                <button
+                  className="viewer-filter-chip-clear"
+                  type="button"
+                  aria-label={language === "ja" ? `${chip.label}の絞り込みを解除` : `Remove filter: ${chip.label}`}
+                  title={language === "ja" ? `${chip.label}の絞り込みを解除` : `Remove filter: ${chip.label}`}
+                  onClick={() => {
+                    if (chip.key === "keyword" && debounceTimeoutRef.current !== null) {
+                      window.clearTimeout(debounceTimeoutRef.current);
+                      debounceTimeoutRef.current = null;
+                    }
+                    chip.onRemove();
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          {activeFilterCount > 1 && (
             <button
               className="viewer-filter-chip-clear-all"
               type="button"
               aria-label={language === "ja" ? "すべての絞り込みを解除" : "Clear all filters"}
-              onClick={onClearAllFilters}
+              title={language === "ja" ? "すべての絞り込みを解除" : "Clear all filters"}
+              onClick={() => {
+                if (debounceTimeoutRef.current !== null) {
+                  window.clearTimeout(debounceTimeoutRef.current);
+                  debounceTimeoutRef.current = null;
+                }
+                onClearAllFilters();
+              }}
             >
               ×
             </button>
-          </span>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <div className="viewer-toolbar-right">
-        <span className="viewer-toolbar-count">{countLabel}</span>
+        <span className="viewer-toolbar-count">
+          {isFiltered ? (
+            <>
+              <strong>{formatCount(matchedCount, language)}</strong> / {formatCount(totalCount, language)}
+            </>
+          ) : language === "ja" ? (
+            `${formatCount(totalCount, language)}件`
+          ) : (
+            `${formatCount(totalCount, language)} posts`
+          )}
+        </span>
         <label className="viewer-sort-label viewer-sort-label-inline">
           <span className="viewer-visually-hidden">
             {language === "ja" ? "並び順" : "Sort"}
@@ -252,15 +305,18 @@ export function StickyToolbar({
                   ? "昇順で並び替え中。降順へ切り替える"
                   : "Sorting ascending. Switch to descending"
             }
+            title={
+              sortDirection === "desc"
+                ? language === "ja"
+                  ? "降順で並び替え中。昇順へ切り替える"
+                  : "Sorting descending. Switch to ascending"
+                : language === "ja"
+                  ? "昇順で並び替え中。降順へ切り替える"
+                  : "Sorting ascending. Switch to descending"
+            }
             onClick={onSortDirectionToggle}
           >
-            {sortDirection === "desc"
-              ? language === "ja"
-                ? "降順"
-                : "Desc"
-              : language === "ja"
-                ? "昇順"
-                : "Asc"}
+            <Icon name={sortDirection === "desc" ? "ArrowDown" : "ArrowUp"} />
           </button>
         )}
         <button
@@ -268,6 +324,7 @@ export function StickyToolbar({
           className="viewer-icon-button viewer-toolbar-settings-button"
           type="button"
           aria-label={language === "ja" ? "設定を開く" : "Open settings"}
+          title={language === "ja" ? "設定を開く" : "Open settings"}
           onClick={onOpenSettings}
         >
           <GearIcon />

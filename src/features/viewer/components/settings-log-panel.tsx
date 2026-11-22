@@ -69,11 +69,6 @@ export function SettingsLogPanel({ language }: { language: ArchiveLanguage }) {
     <section className="viewer-settings-card">
       <div className="viewer-settings-card-header">
         <h3>{isJapanese ? "動作ログ" : "Activity logs"}</h3>
-        <p>
-          {isJapanese
-            ? "保存やエラーの履歴を、種類と期間で絞り込んで確認できます。新しいものから 200 件まで表示します。"
-            : "Review save activity and errors by type and time range. Up to 200 recent matching entries are shown."}
-        </p>
       </div>
 
       <div

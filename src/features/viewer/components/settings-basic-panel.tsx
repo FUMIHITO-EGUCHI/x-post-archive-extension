@@ -52,11 +52,6 @@ export function SettingsBasicPanel({
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "テーマ" : "Theme"}</h3>
-          <p>
-            {isJapanese
-              ? "アーカイブ画面の見た目をライトとダークで切り替えます。"
-              : "Choose whether the archive viewer uses a light or dark theme."}
-          </p>
         </div>
         <div className="viewer-font-option-list" role="radiogroup" aria-label={isJapanese ? "テーマ" : "Theme"}>
           {(
@@ -83,7 +78,7 @@ export function SettingsBasicPanel({
                 handleOptionGroupKeyDown(event, ["light", "dark"], currentTheme, onThemeChange);
               }}
             >
-              <strong>{label}</strong>
+              <strong>{label}</strong><span className={`theme-swatches theme-swatches-${value}`} aria-hidden="true"><i /><i /><i /></span>
             </button>
           ))}
         </div>
@@ -92,11 +87,6 @@ export function SettingsBasicPanel({
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "表示言語" : "Language"}</h3>
-          <p>
-            {isJapanese
-              ? "設定画面やアーカイブ内の表示文言を切り替えます。新しく保存する投稿の初期タグ名もこの言語に合わせます。"
-              : "Change the language used in settings and archive text, including the default tags added to newly saved posts."}
-          </p>
         </div>
         <div
           className="viewer-font-option-list"
@@ -132,40 +122,25 @@ export function SettingsBasicPanel({
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "自動保存" : "Automatic saving"}</h3>
-          <p>
-            {isJapanese
-              ? "X でいいねやブックマークを付けた投稿を、自動でアーカイブに追加します。"
-              : "Add posts to your archive automatically when you like or bookmark them on X."}
-          </p>
         </div>
         <div className="viewer-settings-toggle-list">
           {[
             {
               key: "autoArchiveOnLike" as const,
               checked: archiveSettings.autoArchiveOnLike,
-              title: isJapanese ? "いいねした投稿を保存" : "Save liked posts",
-              note: null
+              title: isJapanese ? "いいねした投稿を保存" : "Save liked posts"
             },
             {
               key: "autoArchiveOnBookmark" as const,
               checked: archiveSettings.autoArchiveOnBookmark,
-              title: isJapanese ? "ブックマークした投稿を保存" : "Save bookmarked posts",
-              // Why: X is rolling out a timeline action bar with no bookmark button (#130) —
-              // two profiles on the same account rendered different bars, so this cannot be
-              // stated as a flat fact. Without the note the toggle just reads as broken.
-              note: isJapanese
-                ? "X の環境によっては、タイムラインのアクションバーにブックマークボタンが表示されません。無い場合は投稿の詳細ページからブックマークすると保存されます。"
-                : "Some X clients render the timeline action bar without a bookmark button. When it is missing, bookmark from the post's detail page instead."
+              title: isJapanese ? "ブックマークした投稿を保存" : "Save bookmarked posts"
             }
-          ].map(({ key, checked, title, note }) => (
+          ].map(({ key, checked, title }) => (
             <label key={key} className="viewer-settings-toggle-item">
               <input
                 type="checkbox"
                 checked={checked}
                 aria-label={title}
-                // aria-label replaces the label text for screen readers, so the note beside it
-                // would otherwise be announced to nobody.
-                aria-describedby={note === null ? undefined : `${key}-note`}
                 onChange={(event) => {
                   void onArchiveSettingsChange({
                     ...archiveSettings,
@@ -175,16 +150,15 @@ export function SettingsBasicPanel({
               />
               <span className="viewer-settings-toggle-copy">
                 <strong>{title}</strong>
-                {note !== null && <span id={`${key}-note`}>{note}</span>}
               </span>
             </label>
           ))}
         </div>
-        <label className="viewer-file-input-label">
+        <label className="viewer-file-input-label viewer-duplicate-threshold">
           <span>
             {isJapanese
-              ? "一括取り込みの duplicate-only batch 自動停止閾値"
-              : "Bulk import duplicate-only batch stop threshold"}
+              ? "連続重複で停止"
+              : "Stop after consecutive duplicates"}
           </span>
           <input
             className="tag-input"
@@ -212,22 +186,13 @@ export function SettingsBasicPanel({
               });
             }}
           />
-          <span className="viewer-settings-inline-note">
-            {isJapanese
-              ? "X の履歴ページ（ブックマーク / いいね）での一括取り込みで、duplicate だけの保存バッチが連続した回数です。新規保存か失敗が入ると連続数はリセットされます。"
-              : "Shared by the bulk import on X's History page (Bookmarks and Likes). This counts consecutive duplicate-only save batches and resets when a batch includes a new save or a failure."}
-          </span>
+          <span>{isJapanese ? "回" : "times"}</span>
         </label>
       </section>
 
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "文字サイズ" : "Font size"}</h3>
-          <p>
-            {isJapanese
-              ? "アーカイブ内の文字を読みやすい大きさに調整します。"
-              : "Make text in the archive viewer smaller or larger."}
-          </p>
         </div>
         <div
           className="viewer-font-option-list"
@@ -270,11 +235,6 @@ export function SettingsBasicPanel({
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "前回の表示を復元" : "Reopen where you left off"}</h3>
-          <p>
-            {isJapanese
-              ? "アーカイブを開き直したときに、前回の並び順や絞り込み、スクロール位置をどこまで戻すか選べます。"
-              : "Choose how much of your previous view to restore when you reopen the archive."}
-          </p>
         </div>
         <div
           className="viewer-font-option-list"
@@ -283,25 +243,11 @@ export function SettingsBasicPanel({
         >
           {(
             [
-              [
-                "off",
-                isJapanese ? "オフ" : "Off",
-                isJapanese ? "毎回まっさらな状態で一覧を開きます。" : "Always open the archive from a fresh state."
-              ],
-              [
-                "filters",
-                isJapanese ? "フィルタのみ" : "Filters only",
-                isJapanese ? "並び順とタグフィルタを復元します。" : "Restore sort and tag filter choices."
-              ],
-              [
-                "filters-and-position",
-                isJapanese ? "フィルタ + 位置" : "Filters + position",
-                isJapanese
-                  ? "並び順、タグフィルタ、読み込み済み件数、スクロール位置を復元します。"
-                  : "Restore sort, tag filter, loaded items, and scroll position."
-              ]
+              ["off", isJapanese ? "オフ" : "Off"],
+              ["filters", isJapanese ? "フィルタのみ" : "Filters only"],
+              ["filters-and-position", isJapanese ? "フィルタ + 位置" : "Filters + position"]
             ] as const
-          ).map(([value, label, description]) => (
+          ).map(([value, label]) => (
             <button
               key={value}
               className={
@@ -324,7 +270,6 @@ export function SettingsBasicPanel({
               }}
             >
               <strong>{label}</strong>
-              <span>{description}</span>
             </button>
           ))}
         </div>
@@ -344,11 +289,6 @@ export function SettingsBasicPanel({
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "ストレージ使用量" : "Storage usage"}</h3>
-          <p>
-            {isJapanese
-              ? "この拡張機能がブラウザ内で使っている保存容量の目安です。"
-              : "See roughly how much browser storage this extension is using."}
-          </p>
         </div>
         {storageEstimate.status === "unsupported" ? (
           <p className="viewer-message">
@@ -381,11 +321,6 @@ export function SettingsBasicPanel({
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "アーカイブ概要" : "Archive summary"}</h3>
-          <p>
-            {isJapanese
-              ? "このアーカイブに今どれだけ投稿やメディアが保存されているかを確認できます。"
-              : "See how many posts, media items, and accounts are currently saved in this archive."}
-          </p>
         </div>
         <dl className="viewer-settings-metric-list">
           <div className="viewer-settings-metric">

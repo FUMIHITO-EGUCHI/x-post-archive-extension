@@ -43,7 +43,7 @@ import { useFilterModal } from "./use-filter-modal";
 import { useViewerSession } from "./use-viewer-session";
 import { useArchiveMetadata } from "./use-archive-metadata";
 import {
-  formatArchiveCountLabel,
+  formatDateInputLabel,
   formatEmptyArchiveMessage,
   normalizeDateInputValue
 } from "./viewer-formatters";
@@ -72,6 +72,7 @@ export function ViewerApp() {
   const previousScreenRef = useRef<ViewerScreen>("archive");
   const {
     archiveSummary,
+    decrementPostCount,
     availableTags,
     refreshArchiveMetadata,
     userSummaries
@@ -511,6 +512,7 @@ export function ViewerApp() {
         // locally and refresh only the metadata; a deleted thread root's remaining replies show
         // up on the next full reload.
         removePostFromCurrentPage(xPostId);
+        decrementPostCount();
         await refreshArchiveMetadata();
       }
     } catch (error) {
@@ -640,26 +642,59 @@ export function ViewerApp() {
 
   if (activeAuthorFilter !== null) {
     filterChips.push({
-      key: "user"
+      key: "user",
+      label: `@${activeAuthorFilter}`,
+      onRemove: () => {
+        void handleToggleAuthorFilter(activeAuthorFilter);
+      }
     });
   }
 
-  if (selectedTagFilter !== null || selectedExcludeTagFilter !== null) {
+  if (activeTagFilter !== null) {
     filterChips.push({
-      key: "tag"
+      key: "tag",
+      label: `#${(selectedTagFilter === null ? activeTagFilter : getTagDisplayName(selectedTagFilter.tag)).replace(/^#/, "")}`,
+      onRemove: () => {
+        void handleToggleTagFilter(activeTagFilter);
+      }
+    });
+  }
+
+  if (activeExcludeTagFilter !== null) {
+    filterChips.push({
+      key: "tag",
+      label: `−#${(selectedExcludeTagFilter === null ? activeExcludeTagFilter : getTagDisplayName(selectedExcludeTagFilter.tag)).replace(/^#/, "")}`,
+      excluded: true,
+      onRemove: () => {
+        void handleToggleExcludeTagFilter(activeExcludeTagFilter);
+      }
     });
   }
 
   if (hasActiveDateFilter) {
     filterChips.push({
-      key: "date"
+      key: "date",
+      label: `${activeDateFrom === null ? "" : formatDateInputLabel(activeDateFrom, language)} – ${activeDateTo === null ? "" : formatDateInputLabel(activeDateTo, language)}`,
+      onRemove: () => {
+        void handleClearDateFilter();
+      }
+    });
+  }
+
+  if (activeKeywordFilter !== null) {
+    filterChips.push({
+      key: "keyword",
+      label: `"${activeKeywordFilter}"`,
+      onRemove: () => {
+        void handleKeywordChange(null);
+      }
     });
   }
 
   const firstActiveFilterTab: FilterModalTab =
     activeAuthorFilter !== null
       ? "user"
-      : selectedTagFilter !== null || selectedExcludeTagFilter !== null
+      : activeTagFilter !== null || activeExcludeTagFilter !== null
         ? "tag"
         : hasActiveDateFilter
           ? "date"
@@ -678,12 +713,9 @@ export function ViewerApp() {
       {screen === "archive" ? (
         <>
           <StickyToolbar
-            countLabel={formatArchiveCountLabel(
-              posts.length,
-              archiveTotalCount,
-              hasMorePosts,
-              language
-            )}
+            matchedCount={archiveTotalCount}
+            totalCount={archiveSummary.postCount}
+            isFiltered={filterChips.length > 0 || activeKeywordFilter !== null}
             filterChips={filterChips}
             firstActiveFilterTab={firstActiveFilterTab}
             isBulkTagDisabled={status !== "ready" || archiveTotalCount === 0}
@@ -740,8 +772,8 @@ export function ViewerApp() {
             {loadNotice !== null && isRuntimeUnresponsive && (
               <p className="viewer-message" role="alert">
                 {language === "ja"
-                  ? "拡張機能が応答していません。再起動すると復旧する場合があります（このタブは閉じ、進行中の保存は中断されます）。"
-                  : "The extension is not responding. Restarting it can recover (this tab will close and any in-progress saves will be aborted)."}
+                  ? "拡張機能が応答していません。再起動するとこのタブは閉じ、進行中の保存は中断されます。"
+                  : "The extension is not responding. Restarting closes this tab and interrupts in-progress saves."}
                 <br />
                 <button
                   type="button"

@@ -1,3 +1,4 @@
+import { Icon } from "./icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ArchiveTagSummaryRecord } from "../../../types/viewer";
@@ -197,7 +198,7 @@ export function SettingsTagManagementPanel({
       return;
     }
 
-    setMergeTargetTagId(selectedTags[0]?.tag.tag_id ?? null);
+    setMergeTargetTagId(selectedTags[1]?.tag.tag_id ?? null);
     setMergeError(null);
     setMergeConfirmationRequired(false);
     setPreserveFutureTagUses(true);
@@ -265,11 +266,6 @@ export function SettingsTagManagementPanel({
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "タグを整理" : "Organize tags"}</h3>
-          <p>
-            {isJapanese
-              ? "自分で付けたタグの名前変更や統合を行います。アプリが自動で付けるタグはここでは変更できません。"
-              : "Rename or merge your own tags. Built-in tags added by the app cannot be changed here."}
-          </p>
         </div>
 
         <label className="viewer-file-input-label">
@@ -286,16 +282,13 @@ export function SettingsTagManagementPanel({
         </label>
 
         <div className="viewer-tag-management-selection" aria-label={isJapanese ? "選択中のタグ" : "Selected tags"}>
-          <section className="viewer-tag-management-selection-slot" aria-label={isJapanese ? "左の選択タグ" : "Selected left tag"}>
-            <span className="viewer-tag-management-selection-label">
-              {isJapanese ? "左の選択" : "Selected left"}
-            </span>
+          <section className="viewer-tag-management-selection-slot" aria-label={isJapanese ? "旧タグ" : "Source tag"}>
             {leftSelectedTag === null ? (
               <p className="viewer-tag-management-selection-empty">
-                {isJapanese ? "最初のタグを選択してください。" : "Select the first tag."}
+                {isJapanese ? "旧タグ" : "Source tag"}
               </p>
             ) : (
-              <div className="viewer-tag-management-selection-card">
+              <div className="viewer-tag-management-selection-card viewer-tag-source">
                 <strong>{leftSelectedTag.tag.display_name}</strong>
                 <span>
                   {formatCount(leftSelectedTag.postCount, language)} {isJapanese ? "件の投稿" : "posts"}
@@ -304,13 +297,11 @@ export function SettingsTagManagementPanel({
             )}
           </section>
 
-          <section className="viewer-tag-management-selection-slot" aria-label={isJapanese ? "右の選択タグ" : "Selected right tag"}>
-            <span className="viewer-tag-management-selection-label">
-              {isJapanese ? "右の選択" : "Selected right"}
-            </span>
+          <Icon name="ArrowRight" />
+          <section className="viewer-tag-management-selection-slot" aria-label={isJapanese ? "統合先" : "Target tag"}>
             {rightSelectedTag === null ? (
               <p className="viewer-tag-management-selection-empty">
-                {isJapanese ? "2つ目のタグを選択してください。" : "Select the second tag."}
+                {isJapanese ? "統合先" : "Target tag"}
               </p>
             ) : (
               <div className="viewer-tag-management-selection-card">
@@ -333,11 +324,6 @@ export function SettingsTagManagementPanel({
             {isJapanese ? "統合内容を確認" : "Review merge"}
           </button>
         </div>
-        <p className="viewer-settings-inline-note">
-          {isJapanese
-            ? "一覧から 2 つのタグを選ぶと、統合内容を確認できます。"
-            : "Select two tags from the list to review the merge details."}
-        </p>
 
         {notice !== null && <p className={feedbackClassName(noticeTone)}>{notice}</p>}
 
@@ -361,6 +347,7 @@ export function SettingsTagManagementPanel({
               aria-label={isJapanese ? "タグ管理一覧" : "Tag management list"}
             >
               <div className="viewer-tag-management-row viewer-tag-management-row-header" role="row">
+                <span aria-hidden="true" />
                 <span role="columnheader">{isJapanese ? "タグ名" : "Tag"}</span>
                 <span role="columnheader">{isJapanese ? "投稿数" : "Posts"}</span>
                 <span role="columnheader">{isJapanese ? "リネーム" : "Rename"}</span>
@@ -400,6 +387,13 @@ export function SettingsTagManagementPanel({
                       }
                     }}
                   >
+                    <div className="viewer-tag-management-cell" role="cell" aria-hidden="true">
+                      {!isEditing && (
+                        <span className={`tag-picker-option-check${isSelected ? " tag-picker-check-selected" : ""}`}>
+                          {isSelected && <Icon name="Check" />}
+                        </span>
+                      )}
+                    </div>
                     <div className="viewer-tag-management-cell" role="cell">
                       <strong>{summary.tag.display_name}</strong>
                     </div>
@@ -491,11 +485,6 @@ export function SettingsTagManagementPanel({
             </div>
             {hasMoreTags && (
               <div className="viewer-incremental-list-footer">
-                <p className="viewer-incremental-list-meta">
-                  {isJapanese
-                    ? `残り ${formatCount(remainingTagCount, language)} 件のタグがあります。`
-                    : `${formatCount(remainingTagCount, language)} more tags available.`}
-                </p>
                 <button
                   className="viewer-secondary-button"
                   type="button"
@@ -503,7 +492,7 @@ export function SettingsTagManagementPanel({
                     loadMoreTags();
                   }}
                 >
-                  {isJapanese ? "さらに表示" : "Load more"}
+                  {isJapanese ? `さらに ${formatCount(remainingTagCount, language)} 件` : `${formatCount(remainingTagCount, language)} more`}
                 </button>
               </div>
             )}
@@ -531,11 +520,6 @@ export function SettingsTagManagementPanel({
             <div className="viewer-modal-header">
               <div className="viewer-modal-copy">
                 <h2>{isJapanese ? "タグを統合" : "Merge tags"}</h2>
-                <p>
-                  {isJapanese
-                    ? "どちらの名前を残すか選んで、2つのタグを1つにまとめます。"
-                    : "Choose which name to keep, then combine the two tags into one."}
-                </p>
               </div>
               <button
                 ref={mergeDialogCloseButtonRef}
@@ -573,22 +557,15 @@ export function SettingsTagManagementPanel({
             </div>
 
             {mergeTargetTagId !== null && (
-              <p className="viewer-settings-inline-note">
-                {(() => {
-                  const target = selectedTags.find(({ tag }) => tag.tag_id === mergeTargetTagId) ?? null;
-                  const source = selectedTags.find(({ tag }) => tag.tag_id !== mergeTargetTagId) ?? null;
-
-                  if (target === null || source === null) {
-                    return isJapanese
-                      ? "統合対象を確認できません。"
-                      : "Selected merge targets are unavailable.";
-                  }
-
-                  return isJapanese
-                    ? `「${source.tag.display_name}」を削除し、「${target.tag.display_name}」へ統合します。`
-                    : `Merge "${source.tag.display_name}" into "${target.tag.display_name}".`;
-                })()}
-              </p>
+              <div className="viewer-tag-management-selection">
+                <span className="viewer-tag-management-selection-card viewer-tag-source">
+                  {selectedTags.find(({ tag }) => tag.tag_id !== mergeTargetTagId)?.tag.display_name}
+                </span>
+                <Icon name="ArrowRight" />
+                <span className="viewer-tag-management-selection-card">
+                  {selectedTags.find(({ tag }) => tag.tag_id === mergeTargetTagId)?.tag.display_name}
+                </span>
+              </div>
             )}
 
             <label className="viewer-tag-management-merge-option">
@@ -606,11 +583,6 @@ export function SettingsTagManagementPanel({
                     ? "今後このタグ名が使われたときも同じ統合先へ自動変換する"
                     : "Automatically redirect future uses of this source tag to the same merged tag"}
                 </strong>
-                <small>
-                  {isJapanese
-                    ? "オンのまま統合すると、以後この元タグ名で保存された投稿も統合先タグへ寄せます。"
-                    : "When enabled, future saves using the old tag name will also be converted to the merged target."}
-                </small>
               </span>
             </label>
 

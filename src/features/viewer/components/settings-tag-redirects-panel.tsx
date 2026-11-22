@@ -104,11 +104,6 @@ export function SettingsTagRedirectsPanel({ language }: SettingsTagRedirectsPane
     <section className="viewer-settings-card">
       <div className="viewer-settings-card-header">
         <h3>{isJapanese ? "自動タグ変換" : "Automatic tag redirects"}</h3>
-        <p>
-          {isJapanese
-            ? "統合したタグの古い名前が再び使われたときに、どのタグへ自動で置き換えるかを確認できます。"
-            : "Review which tag each old merged tag will be replaced with the next time it is used."}
-        </p>
       </div>
 
       {errorMessage !== null ? (
@@ -156,32 +151,19 @@ export function SettingsTagRedirectsPanel({ language }: SettingsTagRedirectsPane
                           : "Deleting..."
                         : isDeleteConfirmationActive
                           ? isJapanese
-                            ? "削除する"
-                            : "Delete"
+                            ? "削除を確定"
+                            : "Confirm delete"
                           : isJapanese
                             ? "削除"
                             : "Delete"}
                     </button>
                   </div>
-
-                  {isDeleteConfirmationActive && !isPendingDelete && (
-                    <p className="viewer-settings-inline-note">
-                      {isJapanese
-                        ? "もう一度押すと、この自動タグ変換を削除します。"
-                        : "Press the button again to delete this automatic tag redirect."}
-                    </p>
-                  )}
                 </div>
               );
             })}
           </div>
           {hasMoreRedirects && (
             <div className="viewer-incremental-list-footer">
-              <p className="viewer-incremental-list-meta">
-                {isJapanese
-                  ? `残り ${formatCount(remainingRedirectCount, language)} 件の自動タグ変換があります。`
-                  : `${formatCount(remainingRedirectCount, language)} more redirects available.`}
-              </p>
               <button
                 className="viewer-secondary-button"
                 type="button"
@@ -189,7 +171,7 @@ export function SettingsTagRedirectsPanel({ language }: SettingsTagRedirectsPane
                   loadMoreRedirects();
                 }}
               >
-                {isJapanese ? "さらに表示" : "Load more"}
+                {isJapanese ? `さらに ${formatCount(remainingRedirectCount, language)} 件` : `${formatCount(remainingRedirectCount, language)} more`}
               </button>
             </div>
           )}

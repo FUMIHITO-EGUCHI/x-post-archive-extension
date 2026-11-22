@@ -47,8 +47,16 @@ export function useArchiveMetadata() {
     }
   }
 
+  function decrementPostCount(): void {
+    setArchiveSummary((summary) => ({
+      ...summary,
+      postCount: Math.max(0, summary.postCount - 1)
+    }));
+  }
+
   return {
     archiveSummary,
+    decrementPostCount,
     availableTags,
     refreshArchiveMetadata,
     userSummaries

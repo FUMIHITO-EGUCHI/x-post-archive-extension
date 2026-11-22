@@ -178,24 +178,3 @@ export function formatEmptyArchiveMessage(input: {
     ? `次の条件に一致する保存済み投稿はありません: ${activeFilters.join(" / ")}`
     : `No saved posts match: ${activeFilters.join(" / ")}.`;
 }
-
-export function formatArchiveCountLabel(
-  loadedCount: number,
-  totalCount: number,
-  hasMorePosts: boolean,
-  language: ArchiveLanguage
-): string {
-  if (totalCount === 0) {
-    return language === "ja" ? "表示中 0件 / 全 0件" : "Showing 0 / 0 posts";
-  }
-
-  if (hasMorePosts) {
-    return language === "ja"
-      ? `表示中 ${formatCount(loadedCount, language)}件 / 全 ${formatCount(totalCount, language)}件`
-      : `Showing ${formatCount(loadedCount, language)} / ${formatCount(totalCount, language)} posts`;
-  }
-
-  return language === "ja"
-    ? `表示中 ${formatCount(totalCount, language)}件 / 全 ${formatCount(totalCount, language)}件`
-    : `Showing ${formatCount(totalCount, language)} / ${formatCount(totalCount, language)} posts`;
-}

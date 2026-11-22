@@ -1,3 +1,4 @@
+import { Icon } from "./icons";
 import { useEffect, useState } from "react";
 import { requestThreadExpandAuthStaleCheck } from "../../runtime/client";
 import type { ArchiveLanguage } from "../../settings/archive-language";
@@ -74,9 +75,10 @@ export function TemplateStaleNotice({
     <section className="viewer-message viewer-message-warning template-stale-notice" role="status">
       <div className="template-stale-notice-body">
         <p className="template-stale-notice-title">
+          <Icon name="Alert" />
           {isJapanese
-            ? "X 側で投稿詳細を一度開いて、取得テンプレートを更新してください。"
-            : "Open any X post detail once to refresh the fetch template."}
+            ? "スレッド取得の更新が必要"
+            : "Thread fetching needs a refresh"}
         </p>
         <p className="template-stale-notice-text">
           {isJapanese
@@ -84,6 +86,14 @@ export function TemplateStaleNotice({
             : `${authStaleState.count} thread fetch item(s) are paused by stale auth.`}
         </p>
       </div>
+      <a
+        className="viewer-secondary-button"
+        href="https://x.com/home"
+        target="_blank"
+        rel="noreferrer"
+      >
+        {isJapanese ? "X を開く" : "Open X"}
+      </a>
       <button
         className="viewer-secondary-button template-stale-notice-dismiss"
         type="button"

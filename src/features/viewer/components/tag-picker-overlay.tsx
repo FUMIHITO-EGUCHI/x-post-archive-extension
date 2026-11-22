@@ -1,3 +1,4 @@
+import { Icon } from "./icons";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
@@ -236,12 +237,7 @@ export function TagPickerOverlay({
       >
         <div className="viewer-modal-header">
           <div className="viewer-modal-copy">
-            <h2 id={titleId}>{language === "ja" ? "投稿タグを編集" : "Edit post tags"}</h2>
-            <p>
-              {language === "ja"
-                ? "候補から選ぶか、新しいタグをその場で作成できます。付与済みタグは再度選ぶと外れます。"
-                : "Choose an existing tag or create a new one. Selecting an assigned tag removes it."}
-            </p>
+            <h2 id={titleId}>{language === "ja" ? "タグ" : "Tags"}</h2>
           </div>
           <button
             className="viewer-secondary-button viewer-modal-close-button"
@@ -336,7 +332,7 @@ export function TagPickerOverlay({
                   }}
                   disabled={isPending}
                 >
-                  <span className="tag-picker-option-check">{option.isAssigned ? "✓" : ""}</span>
+                  <span className="tag-picker-option-check">{option.isAssigned ? <Icon name="Check" /> : null}</span>
                   <span className="tag-picker-option-copy">{option.tag.display_name}</span>
                   <span className="tag-picker-option-count">
                     {formatTagCount(option.postCount, language)}
@@ -354,7 +350,7 @@ export function TagPickerOverlay({
 
 function formatTagCount(postCount: number, language: ArchiveLanguage): string {
   const count = new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(postCount);
-  return language === "ja" ? `${count}件` : count;
+  return count;
 }
 
 function sanitizeForId(value: string): string {

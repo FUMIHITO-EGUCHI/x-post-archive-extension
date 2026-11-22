@@ -1,3 +1,4 @@
+import { Icon } from "./icons";
 import { useMemo, useRef, useState } from "react";
 import type { ArchiveTagSummaryRecord, PostFilterInput } from "../../../types/viewer";
 import {
@@ -76,7 +77,7 @@ export function BulkTagModal({
   const progressPercent =
     preview === null || preview.candidatePostIds.length === 0
       ? 0
-      : Math.round((processedCount / preview.candidatePostIds.length) * 100);
+      : Math.round((taggedCount / preview.candidatePostIds.length) * 100);
   const canPreview =
     normalizeTagInput(tagDraft) !== null && phase !== "previewing" && phase !== "applying";
 
@@ -160,9 +161,7 @@ export function BulkTagModal({
 
   const summaryLabel =
     preview === null
-      ? isJapanese
-        ? `現在の絞り込み: ${formatCount(currentFilteredCount, language)}件`
-        : `Current filter: ${formatCount(currentFilteredCount, language)} posts`
+      ? null
       : isJapanese
         ? `${formatCount(preview.totalMatchCount, language)}件中 ${formatCount(preview.candidatePostIds.length, language)}件に付与（${formatCount(preview.skipCount, language)}件はスキップ）`
         : `${formatCount(preview.candidatePostIds.length, language)} of ${formatCount(preview.totalMatchCount, language)} posts will be tagged (${formatCount(preview.skipCount, language)} skipped)`;
@@ -190,12 +189,7 @@ export function BulkTagModal({
       >
         <div className="viewer-modal-header">
           <div className="viewer-modal-copy">
-            <h2>{isJapanese ? "一括タグ付け" : "Bulk tag"}</h2>
-            <p>
-              {isJapanese
-                ? "現在の絞り込み結果に対して、まとめて手動タグを付与します。"
-                : "Assign one manual tag to every post in the current filtered result."}
-            </p>
+            <h2 className="bulk-tag-title"><Icon name="Tag" /> <strong>{formatCount(preview?.totalMatchCount ?? currentFilteredCount, language)}</strong> {isJapanese ? "件にタグ付け" : "posts to tag"}</h2>
           </div>
           <button
             className="viewer-secondary-button"
@@ -207,7 +201,7 @@ export function BulkTagModal({
           </button>
         </div>
 
-        <p className="viewer-settings-inline-note">{summaryLabel}</p>
+        {summaryLabel !== null && <p className="viewer-settings-inline-note">{summaryLabel}</p>}
 
         <div className="bulk-tag-form">
           <label className="viewer-sort-label">
@@ -269,9 +263,7 @@ export function BulkTagModal({
                 ? isJapanese
                   ? "対象投稿はすべてこのタグを持っています。"
                   : "Every matching post already has this tag."
-                : isJapanese
-                  ? "適用すると 100 件ずつ処理します。"
-                  : "Apply processes the matching posts in batches of 100."}
+                : null}
             </p>
           </div>
         )}
@@ -281,7 +273,7 @@ export function BulkTagModal({
             <div className="viewer-progress-header">
               <strong>{isJapanese ? "適用中" : "Applying"}</strong>
               <span>
-                {formatCount(processedCount, language)} /{" "}
+                {formatCount(taggedCount, language)} /{" "}
                 {formatCount(preview.candidatePostIds.length, language)}
               </span>
             </div>
