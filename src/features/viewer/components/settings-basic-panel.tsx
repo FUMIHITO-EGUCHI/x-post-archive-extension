@@ -78,7 +78,7 @@ export function SettingsBasicPanel({
                 handleOptionGroupKeyDown(event, ["light", "dark"], currentTheme, onThemeChange);
               }}
             >
-              <strong>{label}</strong><span className={`theme-swatches theme-swatches-${value}`} aria-hidden="true"><i /><i /><i /></span>
+              <strong>{label}</strong>
             </button>
           ))}
         </div>
@@ -128,12 +128,12 @@ export function SettingsBasicPanel({
             {
               key: "autoArchiveOnLike" as const,
               checked: archiveSettings.autoArchiveOnLike,
-              title: isJapanese ? "いいねした投稿を保存" : "Save liked posts"
+              title: isJapanese ? "いいね" : "Likes"
             },
             {
               key: "autoArchiveOnBookmark" as const,
               checked: archiveSettings.autoArchiveOnBookmark,
-              title: isJapanese ? "ブックマークした投稿を保存" : "Save bookmarked posts"
+              title: isJapanese ? "ブックマーク" : "Bookmarks"
             }
           ].map(({ key, checked, title }) => (
             <label key={key} className="viewer-settings-toggle-item">

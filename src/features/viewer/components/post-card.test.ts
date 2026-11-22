@@ -67,7 +67,9 @@ it("presents accessible compact actions, metrics, and thread count", async () =>
   expect(container.querySelector('.post-thread-badge[aria-label="Thread: 3 posts"]')).not.toBeNull();
   expect(container.querySelectorAll(".post-metric dt.viewer-visually-hidden")).toHaveLength(3);
   expect(container.querySelector(".post-saved-date dt")?.textContent).toBe("Saved");
-  expect(container.querySelector(".post-tag-picker-button")?.textContent).toBe("+ Tag");
+  expect(container.querySelector(".post-tag-picker-button")?.textContent).toBe("");
+  expect(container.querySelector(".post-tag-picker-button svg")).not.toBeNull();
+  expect(container.querySelector(".post-tag-picker-button")?.getAttribute("aria-label")).toContain("Edit tags");
 });
 
 it("places Save before Refetch and saves the quoted post independently", async () => {

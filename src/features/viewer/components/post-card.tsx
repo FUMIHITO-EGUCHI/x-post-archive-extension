@@ -270,7 +270,7 @@ export function PostCard({
               }}
               disabled={tagActionPostId === post.x_post_id}
             >
-              {language === "ja" ? "+ タグ" : "+ Tag"}
+              <Icon name="Plus" className="post-tag-picker-icon" />
             </button>
             {tagPickerPostId === post.x_post_id && (
               <TagPickerOverlay

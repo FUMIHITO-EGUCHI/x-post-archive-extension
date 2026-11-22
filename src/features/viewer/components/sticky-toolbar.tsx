@@ -199,43 +199,50 @@ export function StickyToolbar({
           aria-label={language === "ja" ? "適用中の絞り込み" : "Active filters"}
         >
           <div className="viewer-filter-chip-list">
-            {filterChips.map((chip) => (
-              <div
-                className={`viewer-filter-chip${chip.excluded ? " viewer-filter-chip-excluded" : ""}`}
-                key={`${chip.key}:${chip.label}`}
-              >
-                <button
-                  className="viewer-filter-chip-label"
-                  type="button"
-                  title={chip.label}
-                  onClick={() => {
-                    if (chip.key === "keyword") {
-                      onOpenSearch();
-                      searchInputRef.current?.focus({ preventScroll: true });
-                      return;
-                    }
-                    onOpenFilter(chip.key);
-                  }}
+            {filterChips.map((chip) => {
+              const chipName = chip.excluded === true
+                ? language === "ja" ? `除外: ${chip.label}` : `Excluded: ${chip.label}`
+                : chip.label;
+
+              return (
+                <div
+                  className={`viewer-filter-chip${chip.excluded ? " viewer-filter-chip-excluded" : ""}`}
+                  key={`${chip.key}:${chip.label}`}
                 >
-                  {chip.label}
-                </button>
-                <button
-                  className="viewer-filter-chip-clear"
-                  type="button"
-                  aria-label={language === "ja" ? `${chip.label}の絞り込みを解除` : `Remove filter: ${chip.label}`}
-                  title={language === "ja" ? `${chip.label}の絞り込みを解除` : `Remove filter: ${chip.label}`}
-                  onClick={() => {
-                    if (chip.key === "keyword" && debounceTimeoutRef.current !== null) {
-                      window.clearTimeout(debounceTimeoutRef.current);
-                      debounceTimeoutRef.current = null;
-                    }
-                    chip.onRemove();
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+                  <button
+                    className="viewer-filter-chip-label"
+                    type="button"
+                    title={chipName}
+                    aria-label={chipName}
+                    onClick={() => {
+                      if (chip.key === "keyword") {
+                        onOpenSearch();
+                        searchInputRef.current?.focus({ preventScroll: true });
+                        return;
+                      }
+                      onOpenFilter(chip.key);
+                    }}
+                  >
+                    {chip.label}
+                  </button>
+                  <button
+                    className="viewer-filter-chip-clear"
+                    type="button"
+                    aria-label={language === "ja" ? `${chipName}の絞り込みを解除` : `Remove filter: ${chipName}`}
+                    title={language === "ja" ? `${chipName}の絞り込みを解除` : `Remove filter: ${chipName}`}
+                    onClick={() => {
+                      if (chip.key === "keyword" && debounceTimeoutRef.current !== null) {
+                        window.clearTimeout(debounceTimeoutRef.current);
+                        debounceTimeoutRef.current = null;
+                      }
+                      chip.onRemove();
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
           </div>
           {activeFilterCount > 1 && (
             <button

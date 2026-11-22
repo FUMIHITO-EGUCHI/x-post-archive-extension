@@ -3010,21 +3010,30 @@ body {
 .post-metric { padding: 0; border: 0; background: transparent; color: var(--color-text-sub); }
 .post-metric dd { font-size: inherit; }
 .post-saved-date { margin-left: auto; color: var(--color-text-sub); font-size: .85em; }
-.post-tag-picker-button { width: auto; height: auto; padding: 5px 10px; border: 1px dashed var(--color-accent); background: transparent; font-size: inherit; box-shadow: none; }
+.post-tag-picker-button,
+:root[data-theme="dark"] .post-tag-picker-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 2.6em;
+  height: auto;
+  padding: 8px 12px;
+  border: 1px dashed var(--color-accent);
+  border-radius: 999px;
+  background: transparent;
+  font-size: calc(13px * var(--viewer-font-scale));
+  font-weight: 700;
+  line-height: normal;
+  box-shadow: none;
+}
+.post-tag-picker-icon { width: 1.15em; height: 1.15em; }
 .post-tag-toolbar .tag-list { flex: 0 1 auto; }
 .viewer-filter-open-button { position: relative; }
 .viewer-filter-open-badge { position: absolute; top: -3px; right: -3px; }
 .viewer-spin { animation: viewer-spin 1s linear infinite; }
 @keyframes viewer-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .viewer-spin { animation: none; } }
-.theme-swatches { display: inline-flex; gap: 3px; }
-.theme-swatches i { width: 12px; height: 12px; border: 1px solid #8899ac; border-radius: 2px; }
-.theme-swatches-light i:nth-child(1) { background: #f8fbff; }
-.theme-swatches-light i:nth-child(2) { background: #fff; }
-.theme-swatches-light i:nth-child(3) { background: #1d4ed8; }
-.theme-swatches-dark i:nth-child(1) { background: #15202b; }
-.theme-swatches-dark i:nth-child(2) { background: #22303c; }
-.theme-swatches-dark i:nth-child(3) { background: #1d9bf0; }
 .viewer-danger-action { background: var(--color-danger); color: white; }
 .viewer-tag-management-selection { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }
 .viewer-tag-management-selection-empty { border-style: dashed; }
