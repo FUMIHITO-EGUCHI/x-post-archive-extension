@@ -13,12 +13,14 @@ export const ICON_PATHS = {
   Check: "M5 12.5l4.5 4.5L19 7",
   Alert: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18Z M12 7.5v5.5 M12 16.5h.01",
   Spinner: "M12 3a9 9 0 1 1-9 9",
-  Filter: "M3 5h18l-7 8.5V19l-4 2v-7.5Z",
+  Filter: "M3 4h18l-7 8.5V18l-4 2v-7.5Z",
   Tag: "M3 3h8l10 10-8 8L3 11Z M7.5 7.5h.01",
   ArrowDown: "M12 4v16 M6 14l6 6 6-6",
   ArrowUp: "M12 20V4 M6 10l6-6 6 6",
   ArrowRight: "M4 12h16 M14 6l6 6-6 6",
   Plus: "M12 5v14 M5 12h14",
+  Close: "M6 6l12 12 M18 6L6 18",
+  Search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13Z M15.5 15.5L20 20",
   Pause: "M9 5v14 M15 5v14"
 } as const;
 

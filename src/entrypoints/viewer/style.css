@@ -3055,3 +3055,27 @@ body {
   .viewer-tag-management-selection { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
   .post-tag-picker-button { width: auto; }
 }
+
+/* Icon centering: icons are block-level flex items inside centered buttons so
+   no text baseline or line-height pushes them off center. */
+.viewer-toolbar-icon-button,
+.viewer-filter-open-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.viewer-icon-button svg,
+.viewer-sticky-toolbar button svg,
+.post-icon-button svg,
+.post-tag-picker-button svg,
+.viewer-filter-chip-clear svg,
+.viewer-filter-chip-clear-all svg {
+  display: block;
+  flex: none;
+}
+.viewer-sticky-toolbar .viewer-filter-chip-clear,
+.viewer-sticky-toolbar .viewer-filter-chip-clear-all {
+  padding: 0;
+}
+.viewer-sticky-toolbar .viewer-filter-chip-clear svg { width: 12px; height: 12px; }
+.viewer-sticky-toolbar .viewer-filter-chip-clear-all svg { width: 14px; height: 14px; }

@@ -101,7 +101,7 @@ export function StickyToolbar({
               title={language === "ja" ? "検索を閉じる" : "Close search"}
               onClick={onCloseSearch}
             >
-              <SearchCloseIcon />
+              <Icon name="Close" />
             </button>
             <input
               ref={searchInputRef}
@@ -159,7 +159,7 @@ export function StickyToolbar({
             aria-pressed={keywordFilter !== null && keywordFilter.trim().length > 0}
             onClick={onOpenSearch}
           >
-            <SearchOpenIcon />
+            <Icon name="Search" />
           </button>
         )}
         <button
@@ -182,7 +182,7 @@ export function StickyToolbar({
           )}
         </button>
         <button
-          className="viewer-secondary-button"
+          className="viewer-secondary-button viewer-toolbar-icon-button"
           type="button"
           aria-label={language === "ja" ? "絞り込み結果にタグ付け" : "Tag filtered posts"}
           title={language === "ja" ? "絞り込み結果にタグ付け" : "Tag filtered posts"}
@@ -238,7 +238,7 @@ export function StickyToolbar({
                       chip.onRemove();
                     }}
                   >
-                    ×
+                    <Icon name="Close" />
                   </button>
                 </div>
               );
@@ -258,7 +258,7 @@ export function StickyToolbar({
                 onClearAllFilters();
               }}
             >
-              ×
+              <Icon name="Close" />
             </button>
           )}
         </div>
@@ -348,30 +348,6 @@ function GearIcon() {
         d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.15 7.15 0 0 0-1.63-.94L14.4 2.8a.49.49 0 0 0-.49-.4h-3.84a.49.49 0 0 0-.49.4L9.2 5.32c-.58.22-1.13.53-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.66 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.43 7.43 0 0 0-.05.94 7.43 7.43 0 0 0 .05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.5.41 1.05.72 1.63.94l.38 2.52c.05.24.25.4.49.4h3.84c.24 0 .44-.16.49-.4l.38-2.52c.58-.22 1.13-.53 1.63-.94l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"
         fill="currentColor"
       />
-    </svg>
-  );
-}
-
-function SearchOpenIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.44 4.45 1.06-1.06-4.45-4.44A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z"
-        fill="currentColor"
-      />
-      <path d="M10.5 22 L8 18.5 L13 18.5 Z" fill="currentColor" />
-    </svg>
-  );
-}
-
-function SearchCloseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.44 4.45 1.06-1.06-4.45-4.44A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z"
-        fill="currentColor"
-      />
-      <path d="M10.5 1 L8 3.5 L13 3.5 Z" fill="currentColor" />
     </svg>
   );
 }
