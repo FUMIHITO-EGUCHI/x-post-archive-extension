@@ -38,14 +38,21 @@ export function injectSaveButton(
     flex: "0 0 auto"
   });
   button.addEventListener("mouseenter", () => {
-    if (button.dataset.xArchiveState === "idle") {
+    const state = button.dataset.xArchiveState;
+
+    if (state === "idle") {
       button.style.color = "#1d9bf0";
       button.style.background = "rgba(29,155,240,.1)";
+    } else if (state === "error") {
+      button.style.background = "rgba(244,33,46,.1)";
     }
   });
   button.addEventListener("mouseleave", () => {
-    button.style.background = "transparent";
-    if (button.dataset.xArchiveState === "idle") button.style.color = "#536471";
+    const state = button.dataset.xArchiveState;
+
+    if (state === "idle" || state === "error") {
+      applyRestingColors(button, state);
+    }
   });
   setButtonState(button, "idle");
 
@@ -103,8 +110,7 @@ function applyButtonState(button: HTMLButtonElement, state: SaveButtonState): vo
   button.disabled = state === "saving" || state === "saved";
   button.setAttribute("aria-label", xUiStrings().save[state]);
   button.title = xUiStrings().save[state];
-  button.style.color = state === "saved" ? "#00ba7c" : state === "error" ? "#f4212e" : "#536471";
-  button.style.background = "transparent";
+  applyRestingColors(button, state);
   const icon = createUiIcon(
     state === "idle" ? "archive" : state === "saving" ? "spinner" : state === "saved" ? "check" : "alert"
   );
@@ -115,6 +121,11 @@ function applyButtonState(button: HTMLButtonElement, state: SaveButtonState): vo
       { duration: 1000, iterations: Infinity }
     );
   }
+}
+
+function applyRestingColors(button: HTMLButtonElement, state: SaveButtonState): void {
+  button.style.color = state === "saved" ? "#00ba7c" : state === "error" ? "#f4212e" : "#536471";
+  button.style.background = "transparent";
 }
 
 function clearTransientStateTimer(button: HTMLButtonElement): void {
