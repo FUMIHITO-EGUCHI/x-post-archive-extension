@@ -18,6 +18,8 @@ export const ICON_PATHS = {
   ArrowDown: "M12 4v16 M6 14l6 6 6-6",
   ArrowUp: "M12 20V4 M6 10l6-6 6 6",
   ArrowRight: "M4 12h16 M14 6l6 6-6 6",
+  Swap: "M7 4L4 7l3 3 M4 7h13 M17 14l3 3-3 3 M20 17H7",
+  Pencil: "M4 20h4L19 9l-4-4L4 16Z M13.5 6.5l4 4",
   Plus: "M12 5v14 M5 12h14",
   Close: "M6 6l12 12 M18 6L6 18",
   Search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13Z M15.5 15.5L20 20",
