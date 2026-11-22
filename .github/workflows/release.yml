@@ -107,7 +107,8 @@ jobs:
 
   # Separate runner: the Google token never shares a runner with npm dependencies.
   # The environment provides approval and the WIF condition binds its claim.
-  # Setup: docs/release/cws-api-v2-setup.md
+  # Required environment variables and failure handling:
+  # .agents/skills/release/SKILL.md (step 11).
   publish-cws:
     name: publish to Chrome Web Store (API v2)
     needs: release
