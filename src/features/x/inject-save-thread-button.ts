@@ -1,6 +1,11 @@
+import { onXUiLanguageChange, xUiStrings } from "./x-ui-strings";
 import type { SavePostInput } from "../../types/archive";
 
 export type SaveThreadButtonState = "idle" | "saving" | "saved" | "error" | "disabled";
+
+function isSaveThreadButtonState(value: string | undefined): value is SaveThreadButtonState {
+  return value === "idle" || value === "saving" || value === "saved" || value === "error" || value === "disabled";
+}
 
 const THREAD_BUTTON_ROOT_ID = "xpa-save-thread-root";
 const THREAD_BUTTON_SELECTOR = "[data-xpa-save-thread-button]";
@@ -72,46 +77,23 @@ export function setSaveThreadButtonState(
   state: SaveThreadButtonState,
   posts: SavePostInput[] = []
 ): void {
-  switch (state) {
-    case "idle":
-      button.disabled = false;
-      button.textContent = `連投を保存（${posts.length}件）`;
-      button.style.background = "#0f62fe";
-      button.style.borderColor = "#2f6fed";
-      button.style.color = "#ffffff";
-      button.style.cursor = "pointer";
-      break;
-    case "saving":
-      button.disabled = true;
-      button.textContent = "連投を保存中...";
-      button.style.background = "#eef5fb";
-      button.style.borderColor = "#c5d7ea";
-      button.style.color = "#4b6278";
-      button.style.cursor = "wait";
-      break;
-    case "saved":
-      button.disabled = true;
-      button.textContent = "連投を保存済み";
-      button.style.background = "#e7f8ee";
-      button.style.borderColor = "#9bd4b5";
-      button.style.color = "#157347";
-      button.style.cursor = "default";
-      break;
-    case "error":
-      button.disabled = false;
-      button.textContent = "連投保存を再試行";
-      button.style.background = "#fff1f1";
-      button.style.borderColor = "#f0b4b4";
-      button.style.color = "#b42318";
-      button.style.cursor = "pointer";
-      break;
-    case "disabled":
-      button.disabled = true;
-      button.textContent = "連投ではありません";
-      button.style.background = "#f5f7f9";
-      button.style.borderColor = "#d7dee5";
-      button.style.color = "#697784";
-      button.style.cursor = "default";
-      break;
-  }
+  button.dataset.xArchiveState = state;
+  if (posts.length > 0) button.dataset.xArchiveCount = String(posts.length);
+  button.hidden = state === "disabled";
+  button.disabled = state === "saving" || state === "saved" || state === "disabled";
+  const label = xUiStrings().thread[state](Number(button.dataset.xArchiveCount ?? 0));
+  if (button.textContent !== label) button.textContent = label;
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  button.style.background = state === "error" ? "#fff1f1" : state === "saved" ? "#e7f8ee" : state === "saving" ? "#eef5fb" : "#0f62fe";
+  button.style.color = state === "error" ? "#b42318" : state === "saved" ? "#157347" : state === "saving" ? "#4b6278" : "#ffffff";
+  button.style.cursor = button.disabled ? "default" : "pointer";
 }
+
+onXUiLanguageChange(() => {
+  const button = getSaveThreadButton();
+  if (button !== null) {
+    const state = button.dataset.xArchiveState;
+    setSaveThreadButtonState(button, isSaveThreadButtonState(state) ? state : "disabled");
+  }
+});

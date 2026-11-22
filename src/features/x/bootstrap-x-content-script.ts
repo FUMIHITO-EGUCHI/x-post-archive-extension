@@ -462,7 +462,7 @@ function syncSaveThreadButton(): void {
     return;
   }
 
-  if (!button.disabled || button.textContent === "連投ではありません") {
+  if (!button.disabled || button.dataset.xArchiveState === "disabled") {
     setSaveThreadButtonState(button, "idle", latestThreadPosts);
   }
 }

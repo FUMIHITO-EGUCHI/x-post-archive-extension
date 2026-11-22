@@ -10,6 +10,7 @@ import { readBlobFromOpfs } from "../../media-storage/opfs-media-storage";
 import type { ArchiveLanguage } from "../../settings/archive-language";
 import { downloadPostMedia } from "../utils/media-download";
 import { safeHref } from "../utils/safe-href";
+import { Icon } from "./icons";
 import { TagPickerOverlay } from "./tag-picker-overlay";
 
 const logger = createLogger("viewer");
@@ -80,29 +81,48 @@ export function PostCard({
           <p className="post-username">
             <span>{post.display_name}</span>
             <span className="post-handle">@{post.x_username}</span>
+            <span
+              className="post-date"
+              title={`${language === "ja" ? "投稿日時" : "Posted"}: ${new Date(post.posted_at).toLocaleString(language)}`}
+            >
+              {" · "}{formatPostedAt(post.posted_at, language)}
+            </span>
             {threadPostCount > 1 && (
-              <span className="post-thread-badge">
-                {language === "ja"
-                  ? `全${formatCount(threadPostCount, language)}件`
-                  : `${formatCount(threadPostCount, language)} posts`}
+              <span
+                className="post-thread-badge"
+                title={language === "ja" ? `スレッド ${threadPostCount}件` : `Thread: ${threadPostCount} posts`}
+                aria-label={language === "ja" ? `スレッド ${threadPostCount}件` : `Thread: ${threadPostCount} posts`}
+              >
+                <Icon name="Thread" /> {formatCount(threadPostCount, language)}
               </span>
             )}
           </p>
-          <div className="post-date-list">
-            <p className="post-date">
-              <span className="post-date-label">{language === "ja" ? "投稿日時" : "Posted"}</span>
-              <span>{formatPostedAt(post.posted_at, language)}</span>
-            </p>
-            <p className="post-date">
-              <span className="post-date-label">{language === "ja" ? "保存日時" : "Saved"}</span>
-              <span>{formatSavedAt(post.saved_at, language)}</span>
-            </p>
-          </div>
         </div>
         <div className="post-card-actions">
           <SaveMediaButton post={post} language={language} />
+          {postHref === undefined ? (
+            <span
+              className="post-icon-button disabled"
+              aria-label={language === "ja" ? "元投稿を開く" : "Open original post"}
+              title={language === "ja" ? "元投稿を開く" : "Open original post"}
+            >
+              <Icon name="ExternalLink" />
+            </span>
+          ) : (
+            <a
+              className="post-icon-button"
+              href={postHref}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={language === "ja" ? "元投稿を開く" : "Open original post"}
+              title={language === "ja" ? "元投稿を開く" : "Open original post"}
+            >
+              <Icon name="ExternalLink" />
+            </a>
+          )}
           <button
-            className="post-refetch-button"
+            className="post-icon-button post-refetch-button"
+            title={language === "ja" ? "再取得" : "Refetch"}
             type="button"
             aria-label={
               language === "ja"
@@ -114,16 +134,14 @@ export function PostCard({
             }}
             disabled={refetchCurrentPostId === post.x_post_id}
           >
-            {refetchCurrentPostId === post.x_post_id
-              ? language === "ja"
-                ? "再取得中..."
-                : "Refetching..."
-              : language === "ja"
-                ? "再取得"
-                : "Refetch"}
+            <Icon
+              name="Refresh"
+              className={refetchCurrentPostId === post.x_post_id ? "viewer-spin" : undefined}
+            />
           </button>
           <button
-            className="post-delete-button"
+            className="post-icon-button post-delete-button"
+            title={language === "ja" ? "削除" : "Delete"}
             type="button"
             aria-label={
               language === "ja"
@@ -135,13 +153,10 @@ export function PostCard({
             }}
             disabled={deletingId === post.x_post_id}
           >
-            {deletingId === post.x_post_id
-              ? language === "ja"
-                ? "削除中..."
-                : "Deleting..."
-              : language === "ja"
-                ? "削除"
-                : "Delete"}
+            <Icon
+              name={deletingId === post.x_post_id ? "Spinner" : "Trash"}
+              className={deletingId === post.x_post_id ? "viewer-spin" : undefined}
+            />
           </button>
         </div>
       </div>
@@ -191,16 +206,27 @@ export function PostCard({
         aria-label={language === "ja" ? "投稿の反応数" : "Post engagement"}
       >
         <div className="post-metric">
-          <dt>{language === "ja" ? "返信" : "Replies"}</dt>
+          <Icon name="Reply" />
+          <dt className="viewer-visually-hidden">{language === "ja" ? "返信" : "Replies"}</dt>
           <dd>{formatCount(post.reply_count, language)}</dd>
         </div>
         <div className="post-metric">
-          <dt>{language === "ja" ? "リポスト" : "Reposts"}</dt>
+          <Icon name="Repost" />
+          <dt className="viewer-visually-hidden">{language === "ja" ? "リポスト" : "Reposts"}</dt>
           <dd>{formatCount(post.repost_count, language)}</dd>
         </div>
         <div className="post-metric">
-          <dt>{language === "ja" ? "いいね" : "Likes"}</dt>
+          <Icon name="Heart" />
+          <dt className="viewer-visually-hidden">{language === "ja" ? "いいね" : "Likes"}</dt>
           <dd>{formatCount(post.like_count, language)}</dd>
+        </div>
+        <div
+          className="post-saved-date"
+          title={`${language === "ja" ? "保存日時" : "Saved"}: ${new Date(post.saved_at).toLocaleString(language)}`}
+        >
+          <dt className="viewer-visually-hidden">{language === "ja" ? "保存日時" : "Saved"}</dt>
+          <Icon name="Archive" />
+          <dd>{formatSavedAt(post.saved_at, language)}</dd>
         </div>
       </dl>
 
@@ -244,7 +270,7 @@ export function PostCard({
               }}
               disabled={tagActionPostId === post.x_post_id}
             >
-              +
+              {language === "ja" ? "+ タグ" : "+ Tag"}
             </button>
             {tagPickerPostId === post.x_post_id && (
               <TagPickerOverlay
@@ -265,13 +291,7 @@ export function PostCard({
         </div>
       </div>
 
-      {postHref === undefined ? (
-        <span className="post-link">{language === "ja" ? "元投稿を開く" : "Open original post"}</span>
-      ) : (
-        <a className="post-link" href={postHref} target="_blank" rel="noreferrer">
-          {language === "ja" ? "元投稿を開く" : "Open original post"}
-        </a>
-      )}
+
     </article>
   );
 }
@@ -328,12 +348,23 @@ function QuotedPostCard({
       )}
 
       {postHref === undefined ? (
-        <span className="quoted-post-link">
-          {language === "ja" ? "引用元を開く" : "Open quoted post"}
+        <span
+          className="post-icon-button disabled"
+          aria-label={language === "ja" ? "引用元を開く" : "Open quoted post"}
+          title={language === "ja" ? "引用元を開く" : "Open quoted post"}
+        >
+          <Icon name="ExternalLink" />
         </span>
       ) : (
-        <a className="quoted-post-link" href={postHref} target="_blank" rel="noreferrer">
-          {language === "ja" ? "引用元を開く" : "Open quoted post"}
+        <a
+          className="post-icon-button"
+          href={postHref}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={language === "ja" ? "引用元を開く" : "Open quoted post"}
+          title={language === "ja" ? "引用元を開く" : "Open quoted post"}
+        >
+          <Icon name="ExternalLink" />
         </a>
       )}
     </section>

@@ -264,11 +264,6 @@ export function SettingsArchiveMaintenancePanel({
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "投稿の再取得" : "Refetch saved posts"}</h3>
-          <p>
-            {isJapanese
-              ? "保存済み投稿を X.com から再取得して、本文・表示名・反応数・メディア情報を更新します。"
-              : "Re-open saved posts on X.com and refresh text, display name, engagement, and media metadata."}
-          </p>
         </div>
         <div className="viewer-settings-action-row">
           <button
@@ -354,11 +349,6 @@ export function SettingsArchiveMaintenancePanel({
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "バックアップを書き出す" : "Export backup"}</h3>
-          <p>
-            {isJapanese
-              ? "今のアーカイブを 1 つの ZIP にまとめて保存します。別の端末への移行や手元保管に使えます。"
-              : "Save your current archive as one ZIP file for safekeeping or moving to another device."}
-          </p>
         </div>
         <div className="viewer-settings-action-row">
           <button
@@ -394,25 +384,20 @@ export function SettingsArchiveMaintenancePanel({
       <section className="viewer-settings-card">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "バックアップから復元" : "Restore from backup"}</h3>
-          <p>
-            {isJapanese
-              ? "バックアップ ZIP の内容を復元します。現在のアーカイブを置き換えるか、既存データに追加するかを選べます。"
-              : "Restore a backup ZIP by replacing the current archive or merging it into existing data."}
-          </p>
         </div>
         <div className="viewer-font-option-list" role="radiogroup" aria-label={isJapanese ? "復元モード" : "Restore mode"}>
           {[
             {
               value: "replace" as const,
               label: isJapanese
-                ? "置き換え: 現在のアーカイブを削除して復元"
-                : "Replace: clear current archive and restore"
+                ? "置き換え"
+                : "Replace"
             },
             {
               value: "merge" as const,
               label: isJapanese
-                ? "マージ: 既存データに追加"
-                : "Merge: add to existing archive"
+                ? "追加"
+                : "Merge"
             }
           ].map((option) => (
             <button
@@ -446,7 +431,7 @@ export function SettingsArchiveMaintenancePanel({
             {isJapanese ? "バックアップ ZIP を選択" : "Select backup ZIP"}
           </button>
           <button
-            className="viewer-action-button"
+            className={restoreMode === "replace" ? "viewer-action-button viewer-danger-action" : "viewer-action-button"}
             type="button"
             onClick={() => {
               void handleRestore();
@@ -482,12 +467,10 @@ export function SettingsArchiveMaintenancePanel({
       <section className="viewer-settings-card viewer-settings-card-danger">
         <div className="viewer-settings-card-header">
           <h3>{isJapanese ? "保存済みアーカイブを削除" : "Delete saved archive"}</h3>
-          <p>
-            {isJapanese
-              ? "この拡張機能に保存されている投稿やメディアをすべて削除します。元に戻せません。"
-              : "Delete all posts, tags, and media saved in this extension. This cannot be undone."}
-          </p>
         </div>
+        <p className="viewer-message viewer-message-warning">
+          {isJapanese ? "保存済みの投稿・タグ・メディアをすべて削除します。元に戻せません。" : "All saved posts, tags, and media will be deleted. This cannot be undone."}
+        </p>
         <p className="viewer-settings-inline-note">
           {isJapanese ? "現在のアーカイブ" : "Current archive"}: {deleteSummary}
         </p>

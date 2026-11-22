@@ -1,4 +1,11 @@
+import { createUiIcon } from "./ui-icons";
+import { onXUiLanguageChange, xUiStrings } from "./x-ui-strings";
+
 export type SaveButtonState = "idle" | "saving" | "saved" | "error";
+
+function isSaveButtonState(value: string | undefined): value is SaveButtonState {
+  return value === "idle" || value === "saving" || value === "saved" || value === "error";
+}
 
 const BUTTON_SELECTOR = "[data-xpa-save-button]";
 const transientStateTimers = new WeakMap<HTMLButtonElement, number>();
@@ -16,17 +23,37 @@ export function injectSaveButton(
   const button = document.createElement("button");
   button.type = "button";
   button.dataset.xpaSaveButton = "true";
-  button.style.border = "1px solid #c5d7ea";
-  button.style.background = "#ffffff";
-  button.style.color = "#0f1419";
-  button.style.borderRadius = "999px";
-  button.style.padding = "6px 12px";
-  button.style.fontSize = "13px";
-  button.style.fontWeight = "700";
-  button.style.cursor = "pointer";
-  button.style.marginTop = "8px";
-  button.style.alignSelf = "flex-start";
-  button.style.zIndex = "1";
+  Object.assign(button.style, {
+    border: "0",
+    background: "transparent",
+    color: "#536471",
+    borderRadius: "50%",
+    width: "32px",
+    height: "32px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0",
+    cursor: "pointer",
+    flex: "0 0 auto"
+  });
+  button.addEventListener("mouseenter", () => {
+    const state = button.dataset.xArchiveState;
+
+    if (state === "idle") {
+      button.style.color = "#1d9bf0";
+      button.style.background = "rgba(29,155,240,.1)";
+    } else if (state === "error") {
+      button.style.background = "rgba(244,33,46,.1)";
+    }
+  });
+  button.addEventListener("mouseleave", () => {
+    const state = button.dataset.xArchiveState;
+
+    if (state === "idle" || state === "error") {
+      applyRestingColors(button, state);
+    }
+  });
   setButtonState(button, "idle");
 
   button.addEventListener("click", (event) => {
@@ -79,32 +106,26 @@ export function flashButtonState(
 }
 
 function applyButtonState(button: HTMLButtonElement, state: SaveButtonState): void {
-  switch (state) {
-    case "idle":
-      button.disabled = false;
-      button.textContent = "Save";
-      button.style.background = "#ffffff";
-      button.style.color = "#0f1419";
-      break;
-    case "saving":
-      button.disabled = true;
-      button.textContent = "Saving...";
-      button.style.background = "#eef5fb";
-      button.style.color = "#4b6278";
-      break;
-    case "saved":
-      button.disabled = true;
-      button.textContent = "Saved";
-      button.style.background = "#e7f8ee";
-      button.style.color = "#157347";
-      break;
-    case "error":
-      button.disabled = false;
-      button.textContent = "Retry";
-      button.style.background = "#fff1f1";
-      button.style.color = "#b42318";
-      break;
+  button.dataset.xArchiveState = state;
+  button.disabled = state === "saving" || state === "saved";
+  button.setAttribute("aria-label", xUiStrings().save[state]);
+  button.title = xUiStrings().save[state];
+  applyRestingColors(button, state);
+  const icon = createUiIcon(
+    state === "idle" ? "archive" : state === "saving" ? "spinner" : state === "saved" ? "check" : "alert"
+  );
+  button.replaceChildren(icon);
+  if (state === "saving" && typeof icon.animate === "function" && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+    icon.animate(
+      [{ transform: "rotate(0deg)" }, { transform: "rotate(360deg)" }],
+      { duration: 1000, iterations: Infinity }
+    );
   }
+}
+
+function applyRestingColors(button: HTMLButtonElement, state: SaveButtonState): void {
+  button.style.color = state === "saved" ? "#00ba7c" : state === "error" ? "#f4212e" : "#536471";
+  button.style.background = "transparent";
 }
 
 function clearTransientStateTimer(button: HTMLButtonElement): void {
@@ -121,9 +142,16 @@ function clearTransientStateTimer(button: HTMLButtonElement): void {
 function findInsertionTarget(article: HTMLElement): HTMLElement {
   const actionGroup = article.querySelector<HTMLElement>('[role="group"]');
 
-  if (actionGroup?.parentElement instanceof HTMLElement) {
-    return actionGroup.parentElement;
+  if (actionGroup instanceof HTMLElement) {
+    return actionGroup;
   }
 
   return article;
 }
+
+onXUiLanguageChange(() => {
+  document.querySelectorAll<HTMLButtonElement>(BUTTON_SELECTOR).forEach((button) => {
+    const state = button.dataset.xArchiveState;
+    applyButtonState(button, isSaveButtonState(state) ? state : "idle");
+  });
+});

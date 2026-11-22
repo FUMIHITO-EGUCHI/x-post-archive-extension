@@ -159,11 +159,6 @@ export function UnifiedFilterModal({
         <div className="viewer-filter-modal-header">
           <div className="viewer-modal-copy">
             <h2 id={dialogTitleId}>{language === "ja" ? "絞り込み" : "Filters"}</h2>
-            <p>
-              {language === "ja"
-                ? "ユーザー、タグ、日付で保存済み投稿を絞り込みます。"
-                : "Filter saved posts by user, tag, or date."}
-            </p>
           </div>
           <button
             ref={closeButtonRef}
@@ -382,15 +377,10 @@ function UserFilterPanel({
               />
             )}
           </div>
-          {false && hasMoreUserOptions && (
+          {hasMoreUserOptions && (
             <div className="viewer-incremental-list-footer">
-              <p className="viewer-incremental-list-meta">
-                {language === "ja"
-                  ? `残り ${formatCount(remainingUserOptionCount, language)} 人のユーザーがいます。`
-                  : `${formatCount(remainingUserOptionCount, language)} more users available.`}
-              </p>
               <button className="viewer-secondary-button" type="button" onClick={onLoadMoreUsers}>
-                {language === "ja" ? "さらに表示" : "Load more"}
+                {language === "ja" ? `さらに ${formatCount(remainingUserOptionCount, language)} 件` : `${formatCount(remainingUserOptionCount, language)} more`}
               </button>
             </div>
           )}
@@ -578,15 +568,10 @@ function TagFilterPanel({
               />
             )}
           </div>
-          {false && hasMoreTagOptions && (
+          {hasMoreTagOptions && (
             <div className="viewer-incremental-list-footer">
-              <p className="viewer-incremental-list-meta">
-                {language === "ja"
-                  ? `残り ${formatCount(remainingTagOptionCount, language)} 件のタグがあります。`
-                  : `${formatCount(remainingTagOptionCount, language)} more tags available.`}
-              </p>
               <button className="viewer-secondary-button" type="button" onClick={onLoadMoreTags}>
-                {language === "ja" ? "さらに表示" : "Load more"}
+                {language === "ja" ? `さらに ${formatCount(remainingTagOptionCount, language)} 件` : `${formatCount(remainingTagOptionCount, language)} more`}
               </button>
             </div>
           )}

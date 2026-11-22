@@ -11,6 +11,7 @@ function isLikesTimelinePathname(pathname: string): boolean {
 }
 
 const controls = createTimelineImportControls({
+  pageKind: "likes",
   rootId: "xpa-likes-import-root",
   overlayId: "xpa-likes-import-overlay",
   toggleButtonId: "xpa-likes-import-toggle",
@@ -26,13 +27,6 @@ const controls = createTimelineImportControls({
   },
   autoTagOptions: {
     includeLikedTag: true
-  },
-  label: {
-    englishPageName: "Likes",
-    englishImportNoun: "Likes",
-    englishArticleNoun: "like",
-    japanesePageName: "\u3044\u3044\u306d",
-    japaneseImportNoun: "\u3044\u3044\u306d"
   }
 });
 

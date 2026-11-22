@@ -13,6 +13,7 @@ function isBookmarksTimelinePathname(pathname: string): boolean {
 }
 
 const controls = createTimelineImportControls({
+  pageKind: "bookmarks",
   rootId: "xpa-bookmarks-import-root",
   overlayId: "xpa-bookmarks-import-overlay",
   toggleButtonId: "xpa-bookmarks-import-toggle",
@@ -28,13 +29,6 @@ const controls = createTimelineImportControls({
   },
   autoTagOptions: {
     includeBookmarkedTag: true
-  },
-  label: {
-    englishPageName: "Bookmarks",
-    englishImportNoun: "Bookmarks",
-    englishArticleNoun: "bookmark",
-    japanesePageName: "\u30d6\u30c3\u30af\u30de\u30fc\u30af",
-    japaneseImportNoun: "\u30d6\u30c3\u30af\u30de\u30fc\u30af"
   }
 });
 

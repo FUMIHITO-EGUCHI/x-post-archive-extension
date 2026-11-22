@@ -58,6 +58,18 @@ it("hides Save media for posts containing only failed or pending media", async (
   expect(container.querySelector(".post-media-save-button")).toBeNull();
 });
 
+it("presents accessible compact actions, metrics, and thread count", async () => {
+  await render({ post: { ...post, thread_post_count: 3 }, language: "en", refetchCurrentPostId: "123" });
+  const actions = container.querySelector(".post-card-actions")!;
+  expect(actions.querySelector('a[aria-label="Open original post"]')?.getAttribute("href")).toBe(post.post_url);
+  expect(actions.querySelector('button[title="Refetch"] svg.viewer-spin')).not.toBeNull();
+  expect(actions.querySelector('button[title="Delete"] svg')).not.toBeNull();
+  expect(container.querySelector('.post-thread-badge[aria-label="Thread: 3 posts"]')).not.toBeNull();
+  expect(container.querySelectorAll(".post-metric dt.viewer-visually-hidden")).toHaveLength(3);
+  expect(container.querySelector(".post-saved-date dt")?.textContent).toBe("Saved");
+  expect(container.querySelector(".post-tag-picker-button")?.textContent).toBe("+ Tag");
+});
+
 it("places Save before Refetch and saves the quoted post independently", async () => {
   const quoted = { ...post, x_post_id: "456", x_username: "quoted" };
   await render({ post: { ...post, quoted_post: quoted }, language: "en" });

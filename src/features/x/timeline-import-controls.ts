@@ -1,3 +1,5 @@
+import { createUiIcon } from "./ui-icons";
+import { onXUiLanguageChange, xUiStrings } from "./x-ui-strings";
 import {
   requestClearLogs,
   requestDebugLog,
@@ -24,6 +26,7 @@ import {
 } from "../../types/archive";
 
 export type TimelineImportControlsConfig = {
+  pageKind: "likes" | "bookmarks";
   rootId: string;
   overlayId: string;
   toggleButtonId: string;
@@ -33,13 +36,6 @@ export type TimelineImportControlsConfig = {
   autoTagOptions: {
     includeLikedTag?: boolean;
     includeBookmarkedTag?: boolean;
-  };
-  label: {
-    englishPageName: string;
-    englishImportNoun: string;
-    englishArticleNoun: string;
-    japanesePageName: string;
-    japaneseImportNoun: string;
   };
 };
 
@@ -72,6 +68,7 @@ const MAX_TIMELINE_SCROLL_STEP_PX = 1000;
 let rootElement: HTMLDivElement | null = null;
 let currentRun: ImportRun | null = null;
 let overlayExpanded = false;
+let needsTargetPage = false;
 let overlayLanguage: ArchiveLanguage = detectDefaultArchiveLanguage();
 let lastOverlayStats: OverlayStats = createDefaultOverlayStats();
 
@@ -97,7 +94,6 @@ type OverlayStats = {
   stopReason: ImportStopReason;
   duplicateBatchStreak: number;
   duplicateBatchThreshold: number;
-  message: string;
 };
 
 type ImportRun = {
@@ -150,7 +146,7 @@ function removeImportControls(): void {
     currentRun.stopReason = "left-page";
     currentRun.stats.status = "stopped";
     currentRun.stats.stopReason = "left-page";
-    currentRun.stats.message = getOverlayMessage("leftPageSaving");
+
   }
 
   overlayExpanded = false;
@@ -207,18 +203,82 @@ function createRootElement(): HTMLDivElement {
   overlay.style.padding = "16px";
   overlay.style.boxShadow = "0 20px 48px rgba(15, 23, 42, 0.14)";
   overlay.style.backdropFilter = "blur(12px)";
-  overlay.innerHTML = [
-    `<div data-xpa-overlay-status style="font-size:13px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#2563eb;">${getLocalizedStatusLabel("idle")}</div>`,
-    `<div data-xpa-overlay-message style="margin-top:8px;font-size:14px;line-height:1.5;">${getOverlayMessage("ready")}</div>`,
-    '<dl style="margin:14px 0 0;display:grid;grid-template-columns:1fr auto;gap:8px 12px;font-size:13px;">',
-    `<dt data-xpa-overlay-label-collected style="color:#475569;">${getMetricLabel("collected")}</dt><dd data-xpa-overlay-collected style="margin:0;font-weight:700;">0</dd>`,
-    `<dt data-xpa-overlay-label-saved style="color:#475569;">${getMetricLabel("saved")}</dt><dd data-xpa-overlay-saved style="margin:0;font-weight:700;">0</dd>`,
-    `<dt data-xpa-overlay-label-duplicates style="color:#475569;">${getMetricLabel("duplicates")}</dt><dd data-xpa-overlay-duplicates style="margin:0;font-weight:700;">0</dd>`,
-    `<dt data-xpa-overlay-label-failed style="color:#475569;">${getMetricLabel("failed")}</dt><dd data-xpa-overlay-failed style="margin:0;font-weight:700;">0</dd>`,
-    `<dt data-xpa-overlay-label-scanned style="color:#475569;">${getMetricLabel("scanned")}</dt><dd data-xpa-overlay-scanned style="margin:0;font-weight:700;">0</dd>`,
-    `<dt data-xpa-overlay-label-waiting style="color:#475569;">${getMetricLabel("waiting")}</dt><dd data-xpa-overlay-waiting style="margin:0;font-weight:700;">0</dd>`,
-    "</dl>"
-  ].join("");
+  const status = document.createElement("div");
+  Object.assign(status.style, {
+    display: "inline-block",
+    borderRadius: "999px",
+    padding: "4px 9px",
+    fontSize: "13px",
+    fontWeight: "700"
+  });
+  const dot = document.createElement("span");
+  dot.dataset.xpaOverlayDot = "";
+  Object.assign(dot.style, {
+    display: "none",
+    width: "7px",
+    height: "7px",
+    borderRadius: "50%",
+    background: "currentColor",
+    marginRight: "6px"
+  });
+  if (typeof dot.animate === "function" && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+    dot.animate([{ opacity: 1 }, { opacity: 0.25 }, { opacity: 1 }], { duration: 1200, iterations: Infinity });
+  }
+  const statusLabel = document.createElement("span");
+  statusLabel.dataset.xpaOverlayStatus = "";
+  status.append(dot, statusLabel);
+  overlay.append(status);
+  const message = document.createElement("div");
+  message.dataset.xpaOverlayMessage = "";
+  Object.assign(message.style, {
+    marginTop: "8px",
+    fontSize: "13px"
+  });
+  overlay.append(message);
+  const progress = document.createElement("progress");
+  progress.dataset.xpaOverlayProgress = "";
+  progress.max = 1;
+  Object.assign(progress.style, {
+    width: "100%",
+    marginTop: "12px",
+    accentColor: "#1d9bf0"
+  });
+  overlay.append(progress);
+  const metrics = document.createElement("div");
+  Object.assign(metrics.style, {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "6px",
+    marginTop: "10px",
+    fontSize: "12px"
+  });
+  for (const key of ["collected", "saved", "duplicates", "failed", "scanned", "waiting"]) {
+    const chip = document.createElement("span");
+    Object.assign(chip.style, {
+      background: "#f1f5f9",
+      borderRadius: "999px",
+      padding: "4px 7px"
+    });
+    const label = document.createElement("span");
+    label.setAttribute(`data-xpa-overlay-label-${key}`, "");
+    const value = document.createElement("strong");
+    value.setAttribute(`data-xpa-overlay-${key}`, "");
+    chip.append(label, document.createTextNode(" "), value);
+    metrics.append(chip);
+  }
+  const streak = document.createElement("span");
+  streak.dataset.xpaOverlayStreak = "";
+  Object.assign(streak.style, {
+    background: "#fff7ed",
+    borderRadius: "999px",
+    padding: "4px 7px"
+  });
+  const streakIcon = createUiIcon("pause");
+  streakIcon.setAttribute("width", "14");
+  streakIcon.setAttribute("height", "14");
+  streak.append(streakIcon, document.createTextNode(""));
+  metrics.append(streak);
+  overlay.append(metrics);
 
   const actionButton = document.createElement("button");
   actionButton.id = ACTION_BUTTON_ID;
@@ -245,7 +305,7 @@ function createRootElement(): HTMLDivElement {
     currentRun.stopReason = "manual";
     currentRun.stats.status = "stopping";
     currentRun.stats.stopReason = "manual";
-    currentRun.stats.message = getOverlayMessage("stopping");
+
     updateOverlay(currentRun.stats);
   });
   overlay.appendChild(actionButton);
@@ -258,6 +318,7 @@ function createRootElement(): HTMLDivElement {
 
 async function startImport(): Promise<void> {
   try {
+    needsTargetPage = false;
     const [nextLanguage, settings] = await Promise.all([
       loadArchiveLanguage(),
       loadArchiveSettings()
@@ -265,10 +326,10 @@ async function startImport(): Promise<void> {
     overlayLanguage = nextLanguage;
 
     if (!isTimelinePage()) {
+      needsTargetPage = true;
       updateOverlay({
         ...createDefaultOverlayStats(),
-        status: "failed",
-        message: getOverlayMessage("openTargetPage")
+        status: "failed"
       });
       return;
     }
@@ -287,8 +348,7 @@ async function startImport(): Promise<void> {
         status: "collecting",
         stopReason: "none",
         duplicateBatchStreak: 0,
-        duplicateBatchThreshold: settings.bulkImportDuplicateBatchThreshold,
-        message: getOverlayMessage("collectingVisiblePosts")
+        duplicateBatchThreshold: settings.bulkImportDuplicateBatchThreshold
       }
     };
     currentRun = run;
@@ -328,7 +388,7 @@ async function startImport(): Promise<void> {
           run.stopRequested = true;
           run.stopReason = "left-page";
           run.stats.stopReason = "left-page";
-          run.stats.message = getOverlayMessage("leftPageSaving");
+
           break;
         }
 
@@ -341,7 +401,7 @@ async function startImport(): Promise<void> {
         if (pendingMediaWaits.size >= MAX_WAITING_POSTS_BEFORE_SCROLL_PAUSE) {
           run.stats.waiting = pendingMediaWaits.size;
           run.stats.status = "collecting";
-          run.stats.message = getOverlayMessage("pausingForWaitingPosts", pendingMediaWaits.size);
+
           updateOverlay(run.stats);
           await wait(WAITING_PAUSE_MS);
 
@@ -374,14 +434,7 @@ async function startImport(): Promise<void> {
         run.stats.collected = collectedPosts.size;
         run.stats.waiting = pendingMediaWaits.size;
         run.stats.status = "collecting";
-        run.stats.message =
-          addedCount > 0
-            ? getOverlayMessage("collectedOnPass", addedCount)
-            : pendingMediaWaits.size > 0
-              ? getOverlayMessage("waitingForMediaHints", pendingMediaWaits.size)
-            : scrollHeightIncreased
-              ? getOverlayMessage("waitingForRender")
-              : getOverlayMessage("noNewPosts");
+
         updateOverlay(run.stats);
 
         noProgressPasses =
@@ -399,7 +452,7 @@ async function startImport(): Promise<void> {
       run.stats.stopReason = run.stopReason;
       run.stats.duplicateBatchStreak = run.duplicateBatchStreak;
       run.stats.duplicateBatchThreshold = run.duplicateBatchThreshold;
-      run.stats.message = getSavingStatusMessage(run.stats);
+
       updateOverlay(run.stats);
 
       queuePendingMediaWaits(collectedPosts, saveQueue, pendingMediaWaits);
@@ -410,21 +463,18 @@ async function startImport(): Promise<void> {
         run.stats.status = "stopped";
         run.stats.waiting = pendingMediaWaits.size;
         run.stats.stopReason = run.stopReason;
-        run.stats.message = getStoppedStatusMessage(run.stats);
+
       } else {
         run.stats.status = "completed";
         run.stats.waiting = pendingMediaWaits.size;
         run.stats.stopReason = "none";
-        run.stats.message = getOverlayMessage("completed");
+
       }
     } catch (error) {
-      console.error(`${config.label.englishImportNoun} import failed.`, error);
+      console.error(`${config.traceEventPrefix} failed.`, error);
       run.stats.status = "failed";
       run.stats.waiting = pendingMediaWaits.size;
-      run.stats.message =
-        error instanceof Error && error.message.trim() !== ""
-          ? error.message
-          : getOverlayMessage("failed");
+
     } finally {
       overlayExpanded = true;
       updateOverlay(run.stats);
@@ -478,7 +528,7 @@ async function processSaveQueue(
         }
       }
     } catch (error) {
-      console.error(`Bulk ${config.label.englishArticleNoun} import batch save failed.`, {
+      console.error(`${config.traceEventPrefix} batch save failed.`, {
         postIds: batch.map((item) => item.post.x_post_id),
         error
       });
@@ -504,13 +554,12 @@ async function processSaveQueue(
       run.stopReason = "duplicate-threshold";
       run.stats.status = "stopping";
       run.stats.stopReason = "duplicate-threshold";
-      run.stats.message = getDuplicateThresholdSavingMessage(run.stats);
+
       run.stats.waiting = saveQueue.size;
       updateOverlay(run.stats);
       continue;
     }
 
-    run.stats.message = formatProcessedProgressMessage(run.stats);
     run.stats.waiting = saveQueue.size;
     updateOverlay(run.stats);
   }
@@ -534,7 +583,7 @@ function collectVisiblePosts(
     try {
       extracted = extractPostFromArticle(article);
     } catch (error) {
-      console.warn(`Skipping a ${config.label.englishArticleNoun} import article because extraction failed.`, {
+      console.warn(`${config.traceEventPrefix} extraction failed; skipping article.`, {
         xPostId,
         error
       });
@@ -820,7 +869,7 @@ async function saveQueuedPostBundle(
       quotedPostId = item.quotedPost.x_post_id;
     }
   } catch (error) {
-    console.warn(`Quoted post save failed during ${config.label.englishArticleNoun} import. Saving the main post without linkage.`, {
+    console.warn(`${config.traceEventPrefix} quoted post save failed. Saving the main post without linkage.`, {
       quotedPostId: item.quotedPost.x_post_id,
       error
     });
@@ -895,14 +944,53 @@ function updateOverlay(stats: OverlayStats): void {
 
   overlay.hidden = !shouldShowOverlay;
   toggleButton.disabled = false;
-  toggleButton.textContent = getToggleButtonText(shouldShowOverlay, isRunning);
+  const toggleText = getToggleButtonText(shouldShowOverlay, isRunning);
+  if (toggleButton.textContent !== toggleText) toggleButton.textContent = toggleText;
   toggleButton.style.opacity = "1";
   actionButton.disabled = stats.status === "stopping";
-  actionButton.textContent = getActionButtonText(isRunning);
+  const actionText = getActionButtonText(isRunning);
+  if (actionButton.textContent !== actionText) actionButton.textContent = actionText;
   actionButton.style.opacity = stats.status === "stopping" ? "0.6" : "1";
 
   setOverlayText(root, "status", getLocalizedStatusLabel(stats.status));
-  setOverlayText(root, "message", stats.message);
+  const ui = xUiStrings();
+  const visibleMessage =
+    stats.stopReason === "manual" ? ui.manual
+      : stats.stopReason === "left-page" ? ui.left
+        : stats.stopReason === "duplicate-threshold" ? ui.duplicate
+          : stats.status === "failed"
+            ? needsTargetPage ? ui.open(config.pageKind === "likes" ? ui.likes : ui.bookmarks) : ui.failure
+            : "";
+  setOverlayText(root, "message", visibleMessage);
+  const statusNode = root.querySelector<HTMLElement>("[data-xpa-overlay-status]");
+  if (statusNode?.parentElement) {
+    const color =
+      stats.status === "failed" ? "#b91c1c"
+        : stats.status === "completed" ? "#15803d"
+          : stats.status === "stopping" || stats.status === "stopped" ? "#b45309"
+            : isRunning ? "#1d4ed8" : "#475569";
+    statusNode.parentElement.style.color = color;
+    statusNode.parentElement.style.background = `${color}18`;
+  }
+  const dot = root.querySelector<HTMLElement>("[data-xpa-overlay-dot]");
+  if (dot !== null) {
+    dot.style.display = stats.status === "collecting" || stats.status === "saving" ? "inline-block" : "none";
+  }
+  const progress = root.querySelector<HTMLProgressElement>("[data-xpa-overlay-progress]");
+  if (progress !== null) {
+    progress.max = Math.max(1, stats.collected);
+    progress.value = Math.min(progress.max, stats.saved + stats.duplicates + stats.failed);
+    progress.setAttribute("aria-label", ui.progress);
+    progress.title = ui.progress;
+  }
+  const streak = root.querySelector<HTMLElement>("[data-xpa-overlay-streak]");
+  if (streak !== null) {
+    const value = ` ${stats.duplicateBatchStreak}/${stats.duplicateBatchThreshold}`;
+    if (streak.lastChild?.textContent !== value && streak.lastChild !== null) {
+      streak.lastChild.textContent = value;
+    }
+    streak.title = ui.streak;
+  }
   setOverlayText(root, "collected", String(stats.collected));
   setOverlayText(root, "saved", String(stats.saved));
   setOverlayText(root, "duplicates", String(stats.duplicates));
@@ -929,15 +1017,6 @@ async function refreshOverlayLanguage(): Promise<void> {
   }
 
   if (rootElement !== null) {
-    if (currentRun === null && lastOverlayStats.status === "idle") {
-      lastOverlayStats = createDefaultOverlayStats();
-    } else if (currentRun === null) {
-      lastOverlayStats = {
-        ...lastOverlayStats,
-        message: localizeOverlayMessage(lastOverlayStats)
-      };
-    }
-
     updateOverlay(currentRun?.stats ?? lastOverlayStats);
   }
 }
@@ -957,280 +1036,29 @@ function createDefaultOverlayStats(): OverlayStats {
     waiting: 0,
     stopReason: "none",
     duplicateBatchStreak: 0,
-    duplicateBatchThreshold: DEFAULT_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD,
-    message: getOverlayMessage("ready")
+    duplicateBatchThreshold: DEFAULT_BULK_IMPORT_DUPLICATE_BATCH_THRESHOLD
   };
 }
 
-function localizeOverlayMessage(stats: OverlayStats): string {
-  switch (stats.status) {
-    case "idle":
-      return getOverlayMessage("ready");
-    case "collecting":
-      return stats.waiting > 0
-        ? getOverlayMessage("waitingForMediaHints", stats.waiting)
-        : getOverlayMessage("collectingVisiblePosts");
-    case "saving":
-      return getSavingStatusMessage(stats);
-    case "stopping":
-      return getSavingStatusMessage(stats);
-    case "stopped":
-      return getStoppedStatusMessage(stats);
-    case "completed":
-      return getOverlayMessage("completed");
-    case "failed":
-      return stats.message.trim() === "" ? getOverlayMessage("failed") : stats.message;
-  }
-}
-
-function getSavingStatusMessage(stats: OverlayStats): string {
-  switch (stats.stopReason) {
-    case "manual":
-      return getOverlayMessage("collectionStoppedSaving");
-    case "left-page":
-      return getOverlayMessage("leftPageSaving");
-    case "duplicate-threshold":
-      return getDuplicateThresholdSavingMessage(stats);
-    case "none":
-      return getOverlayMessage("finishingQueuedSaves");
-  }
-}
-
-function getStoppedStatusMessage(stats: OverlayStats): string {
-  switch (stats.stopReason) {
-    case "manual":
-      return getOverlayMessage("collectionStoppedSaved");
-    case "left-page":
-      return getLeftPageSavedMessage();
-    case "duplicate-threshold":
-      return getDuplicateThresholdStoppedMessage(stats);
-    case "none":
-      return getOverlayMessage("completed");
-  }
-}
-
-function getDuplicateThresholdSavingMessage(stats: OverlayStats): string {
-  if (overlayLanguage === "ja") {
-    return `duplicate-only batch が ${stats.duplicateBatchThreshold} 回連続したため収集を停止しました。キュー済みの投稿を保存しています。`;
-  }
-
-  return `Stopped collecting after ${stats.duplicateBatchThreshold} duplicate-only batches in a row. Saving queued posts.`;
-}
-
-function getDuplicateThresholdStoppedMessage(stats: OverlayStats): string {
-  if (overlayLanguage === "ja") {
-    return `duplicate-only batch が ${stats.duplicateBatchThreshold} 回連続したため停止しました。キュー済みの投稿は保存されました。`;
-  }
-
-  return `Stopped after ${stats.duplicateBatchThreshold} duplicate-only batches in a row. Queued posts were saved.`;
-}
-
-function getLeftPageSavedMessage(): string {
-  if (overlayLanguage === "ja") {
-    return `${config.label.japanesePageName}\u30da\u30fc\u30b8\u3092\u96e2\u308c\u305f\u305f\u3081\u505c\u6b62\u3057\u307e\u3057\u305f\u3002\u30ad\u30e5\u30fc\u6e08\u307f\u306e\u6295\u7a3f\u306f\u4fdd\u5b58\u3055\u308c\u307e\u3057\u305f\u3002`;
-  }
-
-  return `Stopped because you left the ${config.label.englishPageName} page. Queued posts were saved.`;
-}
-function formatProcessedProgressMessage(stats: OverlayStats): string {
-  const processedCount = stats.saved + stats.duplicates + stats.failed;
-
-  if (stats.duplicateBatchStreak <= 0) {
-    return getOverlayMessage("processedProgress", processedCount, stats.collected);
-  }
-
-  if (overlayLanguage === "ja") {
-    return `${processedCount} / ${stats.collected} 件を処理しました。duplicate-only batch 連続 ${stats.duplicateBatchStreak} / ${stats.duplicateBatchThreshold}。`;
-  }
-
-  return `Processed ${processedCount} / ${stats.collected} posts. Duplicate-only batch streak: ${stats.duplicateBatchStreak} / ${stats.duplicateBatchThreshold}.`;
-}
-
 function getToggleButtonText(isExpanded: boolean, isRunning: boolean): string {
-  if (overlayLanguage === "ja") {
-    return isExpanded && !isRunning ? "\u53d6\u308a\u8fbc\u307f\u3092\u96a0\u3059" : `${config.label.japaneseImportNoun}\u3092\u53d6\u308a\u8fbc\u3080`;
-  }
-
-  return isExpanded && !isRunning ? "Hide Import" : `Import ${config.label.englishImportNoun}`;
+  const ui = xUiStrings();
+  return isExpanded && !isRunning
+    ? ui.hide
+    : ui.import(config.pageKind === "likes" ? ui.likes : ui.bookmarks);
 }
 function getActionButtonText(isRunning: boolean): string {
-  if (overlayLanguage === "ja") {
-    return isRunning ? "停止" : "開始";
-  }
-
-  return isRunning ? "Stop" : "Start";
+  return isRunning ? xUiStrings().stop : xUiStrings().start;
 }
-
 function getLocalizedStatusLabel(status: OverlayStatus): string {
-  if (overlayLanguage === "ja") {
-    switch (status) {
-      case "idle":
-        return "待機中";
-      case "collecting":
-        return "収集中";
-      case "saving":
-        return "保存中";
-      case "stopping":
-        return "停止中";
-      case "stopped":
-        return "停止済み";
-      case "completed":
-        return "完了";
-      case "failed":
-        return "失敗";
-    }
-  }
-
-  switch (status) {
-    case "idle":
-      return "Idle";
-    case "collecting":
-      return "Collecting";
-    case "saving":
-      return "Saving";
-    case "stopping":
-      return "Stopping";
-    case "stopped":
-      return "Stopped";
-    case "completed":
-      return "Completed";
-    case "failed":
-      return "Failed";
-  }
+  return xUiStrings().status[status];
 }
-
-function getMetricLabel(
-  metric: "collected" | "saved" | "duplicates" | "failed" | "scanned" | "waiting"
-): string {
-  if (overlayLanguage === "ja") {
-    switch (metric) {
-      case "collected":
-        return "収集";
-      case "saved":
-        return "保存";
-      case "duplicates":
-        return "重複";
-      case "failed":
-        return "失敗";
-      case "scanned":
-        return "走査";
-      case "waiting":
-        return "待機";
-    }
-  }
-
-  switch (metric) {
-    case "collected":
-      return "Collected";
-    case "saved":
-      return "Saved";
-    case "duplicates":
-      return "Duplicates";
-    case "failed":
-      return "Failed";
-    case "scanned":
-      return "Scanned";
-    case "waiting":
-      return "Waiting";
-  }
-}
-
-function getOverlayMessage(
-  key:
-    | "ready"
-    | "leftPageSaving"
-    | "stopping"
-    | "openTargetPage"
-    | "collectingVisiblePosts"
-    | "collectedOnPass"
-    | "waitingForMediaHints"
-    | "pausingForWaitingPosts"
-    | "waitingForRender"
-    | "noNewPosts"
-    | "collectionStoppedSaving"
-    | "finishingQueuedSaves"
-    | "collectionStoppedSaved"
-    | "completed"
-    | "failed"
-    | "processedProgress",
-  ...values: number[]
-): string {
-  if (overlayLanguage === "ja") {
-    switch (key) {
-      case "ready":
-        return `${config.label.japanesePageName}\u6b04\u304b\u3089\u306e\u53d6\u308a\u8fbc\u307f\u3092\u958b\u59cb\u3067\u304d\u307e\u3059\u3002`;
-      case "leftPageSaving":
-        return `${config.label.japanesePageName}\u6b04\u3092\u96e2\u308c\u305f\u305f\u3081\u505c\u6b62\u3057\u307e\u3057\u305f\u3002\u30ad\u30e5\u30fc\u6e08\u307f\u306e\u6295\u7a3f\u3092\u4fdd\u5b58\u3057\u3066\u3044\u307e\u3059\u3002`;
-      case "stopping":
-        return "\u53ce\u96c6\u3092\u505c\u6b62\u3057\u3066\u3044\u307e\u3059\u3002\u96c6\u3081\u305f\u6295\u7a3f\u306f\u5f15\u304d\u7d9a\u304d\u4fdd\u5b58\u3057\u307e\u3059\u3002";
-      case "openTargetPage":
-        return `\u53d6\u308a\u8fbc\u307f\u3092\u59cb\u3081\u308b\u524d\u306b X \u306e${config.label.japanesePageName}\u6b04\u3092\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002`;
-      case "collectingVisiblePosts":
-        return "\u8868\u793a\u4e2d\u306e\u6295\u7a3f\u3092\u53ce\u96c6\u4e2d\u3067\u3059\u3002";
-      case "collectedOnPass":
-        return `\u3053\u306e\u5468\u56de\u3067 ${values[0] ?? 0} \u4ef6\u306e\u65b0\u3057\u3044\u6295\u7a3f\u3092\u898b\u3064\u3051\u307e\u3057\u305f\u3002`;
-      case "waitingForMediaHints":
-        return `${values[0] ?? 0} \u4ef6\u306e\u6295\u7a3f\u3067\u30e1\u30c7\u30a3\u30a2\u63cf\u753b\u3092\u5f85\u3063\u3066\u3044\u307e\u3059\u3002`;
-      case "pausingForWaitingPosts":
-        return `\u5f85\u6a5f\u4e2d\u306e\u6295\u7a3f\u304c ${values[0] ?? 0} \u4ef6\u3042\u308b\u305f\u3081\u3001\u30b9\u30af\u30ed\u30fc\u30eb\u3092\u6b62\u3081\u3066\u63cf\u753b\u3092\u5f85\u3063\u3066\u3044\u307e\u3059\u3002`;
-      case "waitingForRender":
-        return "\u65b0\u3057\u304f\u8aad\u307f\u8fbc\u307e\u308c\u305f\u6295\u7a3f\u306e\u63cf\u753b\u3092\u5f85\u3063\u3066\u3044\u307e\u3059\u3002";
-      case "noNewPosts":
-        return "\u3053\u306e\u5468\u56de\u3067\u306f\u65b0\u3057\u3044\u6295\u7a3f\u306f\u898b\u3064\u304b\u308a\u307e\u305b\u3093\u3067\u3057\u305f\u3002";
-      case "collectionStoppedSaving":
-        return "\u53ce\u96c6\u3092\u6b62\u3081\u307e\u3057\u305f\u3002\u30ad\u30e5\u30fc\u6e08\u307f\u306e\u6295\u7a3f\u3092\u4fdd\u5b58\u3057\u3066\u3044\u307e\u3059\u3002";
-      case "finishingQueuedSaves":
-        return "\u6b8b\u3063\u3066\u3044\u308b\u4fdd\u5b58\u51e6\u7406\u3092\u5b8c\u4e86\u3057\u3066\u3044\u307e\u3059\u3002";
-      case "collectionStoppedSaved":
-        return "\u53ce\u96c6\u3092\u505c\u6b62\u3057\u307e\u3057\u305f\u3002\u30ad\u30e5\u30fc\u6e08\u307f\u306e\u6295\u7a3f\u306f\u4fdd\u5b58\u3057\u307e\u3057\u305f\u3002";
-      case "completed":
-        return "\u53d6\u308a\u8fbc\u307f\u304c\u5b8c\u4e86\u3057\u307e\u3057\u305f\u3002";
-      case "failed":
-        return `${config.label.japanesePageName}\u6b04\u306e\u53d6\u308a\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002`;
-      case "processedProgress":
-        return `${values[0] ?? 0} / ${values[1] ?? 0} \u4ef6\u3092\u51e6\u7406\u3057\u307e\u3057\u305f\u3002`;
-    }
-  }
-
-  switch (key) {
-    case "ready":
-      return `Ready to import from ${config.label.englishPageName}.`;
-    case "leftPageSaving":
-      return `Stopped because you left the ${config.label.englishPageName} page. Saving queued posts.`;
-    case "stopping":
-      return "Stopping collection. Collected posts will still be saved.";
-    case "openTargetPage":
-      return `Open an X ${config.label.englishPageName} page before starting import.`;
-    case "collectingVisiblePosts":
-      return "Collecting visible posts.";
-    case "collectedOnPass":
-      return `Collected ${values[0] ?? 0} new posts on this pass.`;
-    case "waitingForMediaHints":
-      return `Waiting for media to render on ${values[0] ?? 0} posts.`;
-    case "pausingForWaitingPosts":
-      return `Paused scrolling because ${values[0] ?? 0} posts are still waiting for media.`;
-    case "waitingForRender":
-      return "Waiting for newly loaded posts to render.";
-    case "noNewPosts":
-      return "No new posts found on this pass.";
-    case "collectionStoppedSaving":
-      return "Collection stopped. Saving queued posts.";
-    case "finishingQueuedSaves":
-      return "Finishing queued saves.";
-    case "collectionStoppedSaved":
-      return "Collection stopped. Queued posts were saved.";
-    case "completed":
-      return "Import completed.";
-    case "failed":
-      return `${config.label.englishPageName} import failed.`;
-    case "processedProgress":
-      return `Processed ${values[0] ?? 0} / ${values[1] ?? 0} posts.`;
-  }
+function getMetricLabel(metric: "collected" | "saved" | "duplicates" | "failed" | "scanned" | "waiting"): string {
+  return xUiStrings().metric[metric];
 }
 function setOverlayText(root: HTMLElement, key: string, text: string): void {
   const node = root.querySelector<HTMLElement>(`[data-xpa-overlay-${key}]`);
 
-  if (node !== null) {
+  if (node !== null && node.textContent !== text) {
     node.textContent = text;
   }
 }
@@ -1241,6 +1069,8 @@ function wait(ms: number): Promise<void> {
   });
 }
 
+
+onXUiLanguageChange(() => updateOverlay(currentRun?.stats ?? lastOverlayStats));
 
 return {
   isTimelinePage,
