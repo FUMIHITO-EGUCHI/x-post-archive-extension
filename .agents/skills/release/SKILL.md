@@ -142,8 +142,32 @@ gh release view vX.Y.Z
 gh run view <run-id> --job <publish-cws の job-id> --log
 ```
 
-初期設定（GCP の WIF / Dashboard のサービスアカウント登録 / GitHub Environment）は
-`docs/release/cws-api-v2-setup.md`。疎通確認だけなら `cws-status` workflow を手動実行する。
+疎通確認だけなら `cws-status` workflow を手動実行する（`master` から、承認が要る）。
+
+初回設定（GCP の Workload Identity Federation / Dashboard へのサービスアカウント登録 /
+GitHub Environment）は repo の外でオーナーが管理している。job が前提とするのは次の状態だけ:
+
+- Environment `chrome-web-store` に variables `CWS_WIF_PROVIDER` / `CWS_SERVICE_ACCOUNT` /
+  `CWS_PUBLISHER_ID` / `CWS_EXTENSION_ID` がある
+- GCP 側の WIF provider は、リポジトリ ID と `environment == chrome-web-store` を条件にしている。
+  environment 名や job の environment 指定を変えると認証が通らなくなる
+
+#### publish-cws が失敗したとき
+
+GitHub Release は作成済みなので、原因を直したら **失敗した job だけ再実行する**
+（`gh run rerun <run-id> --failed`、承認がもう一度要る）。workflow 全体を再実行すると
+`release` job が既存の Release と衝突して失敗する。
+
+- `... is required; configure it in the chrome-web-store environment variables`:
+  Environment の variables が欠けている。ユーザーに設定を頼む
+- auth step（`google-github-actions/auth`）で失敗: GCP 側の WIF / IAM の問題。repo からは直せないので
+  ログを添えてユーザーに報告する
+- CWS API が HTTP 401 / 403: サービスアカウントが Dashboard の Account に登録されていない可能性。ユーザーに確認を頼む
+- `A submission is already in review`: 前回の提出が審査中。審査完了を待つか、ユーザーに Dashboard で取り消してもらう
+- `version already uploaded`: 同じ version が公開済みか提出済み。`package.json` の version を上げて新しい tag で出し直す
+- 公開時のエラーで visibility に触れている: Dashboard で visibility を変えた後は、一度 Dashboard から手動で公開しないと API で公開できない
+- zip artifact の保持は 7 日。過ぎた run は再実行できないので、GitHub Release に添付された zip を
+  ユーザーに Dashboard から手動でアップロードしてもらう
 
 ---
 
@@ -156,8 +180,7 @@ gh run view <run-id> --job <publish-cws の job-id> --log
   実行してはならない
 - **Chrome Web Store への提出も `release.yml` の `publish-cws` が canonical**。同じ version を
   Dashboard で手動アップロードしない（job が「version already uploaded」で失敗する）
-- `publish-cws` が失敗しても GitHub Release は作成済み。原因を直したら失敗した job だけ再実行する
-  （zip artifact の保持は 7 日）。審査中の提出が残っていると job は止まる。Dashboard で取り消すか審査完了を待つ
+- `publish-cws` の失敗時の対処は step 11 の「publish-cws が失敗したとき」
 - `release.yml` は tag 名と `package.json` の version が一致しない場合、
   `docs/release-notes/vX.Y.Z.md` が無い場合、version から導出した zip が無い場合に失敗する。
   ステップ 4〜8 を飛ばすとここで落ちる
