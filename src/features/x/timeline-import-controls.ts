@@ -273,7 +273,7 @@ function createRootElement(): HTMLDivElement {
     borderRadius: "999px",
     padding: "4px 7px"
   });
-  const streakIcon = createUiIcon("pause");
+  const streakIcon = createUiIcon("Pause");
   streakIcon.setAttribute("width", "14");
   streakIcon.setAttribute("height", "14");
   streak.append(streakIcon, document.createTextNode(""));

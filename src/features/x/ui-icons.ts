@@ -1,14 +1,6 @@
-import { ICON_PATHS } from "../ui/icon-paths";
+import { ICON_PATHS, type IconName } from "../ui/icon-paths";
 
-const paths = {
-  archive: ICON_PATHS.Archive,
-  spinner: ICON_PATHS.Spinner,
-  check: ICON_PATHS.Check,
-  alert: ICON_PATHS.Alert,
-  pause: ICON_PATHS.Pause
-};
-
-export function createUiIcon(name: keyof typeof paths): SVGSVGElement {
+export function createUiIcon(name: IconName): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("width", "20");
@@ -20,7 +12,7 @@ export function createUiIcon(name: keyof typeof paths): SVGSVGElement {
   svg.setAttribute("stroke-linejoin", "round");
   svg.setAttribute("aria-hidden", "true");
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("d", paths[name]);
+  path.setAttribute("d", ICON_PATHS[name]);
   svg.append(path);
   return svg;
 }

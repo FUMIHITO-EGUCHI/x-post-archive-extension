@@ -112,7 +112,7 @@ function applyButtonState(button: HTMLButtonElement, state: SaveButtonState): vo
   button.title = xUiStrings().save[state];
   applyRestingColors(button, state);
   const icon = createUiIcon(
-    state === "idle" ? "archive" : state === "saving" ? "spinner" : state === "saved" ? "check" : "alert"
+    state === "idle" ? "Archive" : state === "saving" ? "Spinner" : state === "saved" ? "Check" : "Alert"
   );
   button.replaceChildren(icon);
   if (state === "saving" && typeof icon.animate === "function" && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
