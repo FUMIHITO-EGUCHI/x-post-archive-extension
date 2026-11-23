@@ -1810,13 +1810,14 @@ body {
 
 .quoted-post-header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
 }
 
 .quoted-post-header > :first-child {
   min-width: 0;
+  flex: 1;
 }
 
 .quoted-post-username {
@@ -1829,12 +1830,6 @@ body {
   font-size: calc(15px * var(--viewer-font-scale));
   font-weight: 700;
   overflow-wrap: anywhere;
-}
-
-.quoted-post-date {
-  font-size: calc(12px * var(--viewer-font-scale));
-  color: #5e7389;
-  white-space: nowrap;
 }
 
 .quoted-post-text {
@@ -2873,7 +2868,6 @@ body {
 :root[data-theme="dark"] .viewer-modal-copy p,
 :root[data-theme="dark"] .post-handle,
 :root[data-theme="dark"] .post-date,
-:root[data-theme="dark"] .quoted-post-date,
 :root[data-theme="dark"] .post-media-alt,
 :root[data-theme="dark"] .post-media-status,
 :root[data-theme="dark"] .tag-picker-option-count,
@@ -3316,4 +3310,8 @@ body {
   border-color: var(--color-accent);
   background: var(--color-accent);
   color: #fff;
+}
+
+.quoted-post-card .post-metrics {
+  margin: 0;
 }

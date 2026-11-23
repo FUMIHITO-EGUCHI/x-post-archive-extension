@@ -83,6 +83,30 @@ it("places Save before Refetch and saves the quoted post independently", async (
   expect(downloadPostMedia).toHaveBeenCalledExactlyOnceWith(quoted);
 });
 
+it("lays out the quoted post header and metrics like the main card", async () => {
+  const quoted = {
+    ...post,
+    x_post_id: "456",
+    x_username: "quoted",
+    post_url: "https://x.com/quoted/status/456",
+    like_count: 12
+  };
+  await render({ post: { ...post, quoted_post: quoted }, language: "en" });
+  const quotedCard = container.querySelector(".quoted-post-card")!;
+  const actions = quotedCard.querySelector(".quoted-post-header .post-card-actions");
+  expect(actions?.querySelector('a[aria-label="Open quoted post"]')?.getAttribute("href")).toBe(
+    quoted.post_url
+  );
+  expect(quotedCard.querySelectorAll(".post-metric")).toHaveLength(3);
+  expect(quotedCard.querySelector(".post-saved-date")).toBeNull();
+});
+
+it("omits quoted post metrics when no counts were captured", async () => {
+  const quoted = { ...post, x_post_id: "456", x_username: "quoted" };
+  await render({ post: { ...post, quoted_post: quoted }, language: "en" });
+  expect(container.querySelector(".quoted-post-card .post-metrics")).toBeNull();
+});
+
 it("disables while saving, displays partial failure, and clears it on retry", async () => {
   let finish!: (result: { failedCount: number }) => void;
   vi.mocked(downloadPostMedia).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
