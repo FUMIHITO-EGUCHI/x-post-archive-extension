@@ -344,3 +344,44 @@ it("keeps a collision open on blur and removes the error when typing", async () 
   expect(view.container.querySelector('[role="alert"]')).toBeNull();
   await view.cleanup();
 });
+
+it("does not resend a failed rename when the input loses focus", async () => {
+  vi.mocked(requestRenameTag).mockRejectedValueOnce(new Error("Network down"));
+  const view = await setup();
+  await click(button(view.container, "Rename ウマ娘"));
+  const editor = input(view.container);
+  await changeInput(editor, "New name");
+  await act(async () => {
+    editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  expect(view.container.querySelector('[role="alert"]')?.textContent).toContain("Network down");
+  await act(async () => {
+    input(view.container).dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  });
+  expect(requestRenameTag).toHaveBeenCalledTimes(1);
+  await view.cleanup();
+});
+
+it("opens another tag for editing while the previous rename is still saving", async () => {
+  let finish!: (value: Awaited<ReturnType<typeof requestRenameTag>>) => void;
+  vi.mocked(requestRenameTag).mockImplementationOnce(() => new Promise((resolve) => {
+    finish = resolve;
+  }));
+  const view = await setup();
+  await click(button(view.container, "Rename ウマ娘"));
+  const editor = input(view.container);
+  await changeInput(editor, "ブルアカ");
+  await act(async () => {
+    editor.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  });
+  expect(requestRenameTag).toHaveBeenCalledExactlyOnceWith("uma", "ブルアカ");
+  await click(button(view.container, "Rename ブルーアーカイブ"));
+  expect(input(view.container).value).toBe("ブルーアーカイブ");
+  await act(async () => {
+    finish({ type: "tag.rename", ok: false, error: "collision", conflictingTagId: "blue" });
+  });
+  expect(input(view.container).value).toBe("ブルーアーカイブ");
+  expect(view.container.querySelector('[role="alert"]')).toBeNull();
+  expect(view.container.textContent).toContain('Could not rename "ウマ娘": "ブルアカ" already exists.');
+  await view.cleanup();
+});
