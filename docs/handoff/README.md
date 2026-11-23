@@ -1,113 +1,20 @@
 # AI Handoff — Issue-based Workflow
 
-このリポジトリのタスク管理は **GitHub Issues + Projects v2** を single source of truth とする。
-旧 `ai-handoff/` のファイルベース運用は廃止・削除済み（履歴を辿る場合は git log を使う）。
+タスクは GitHub Issues で管理する。状態は Issue の open / closed と関連 PR で表し、ラベルは使わない。旧 `ai-handoff/` の履歴は git log を参照する。
 
-- Backend: GitHub Issues（private repo）
-- Human view: GitHub Projects v2 **X Archive Handoff**
-- AI interface: `gh` CLI（ADR-0002 により MCP から一本化）
-- 詳細仕様: `SPEC.md`
-- 移行判断の背景: `docs/decisions/0001-task-management-on-github-issues.md`
+運用の背景は `docs/decisions/0001-task-management-on-github-issues.md` と `docs/decisions/0004-simplify-issue-workflow.md`、AI 実行制御は `docs/handoff/ai-execution.md` を参照する。
 
----
+## Issue と作業
 
-## 1. Labels
+- Task、Investigation、Bug のテンプレートから適切なものを選ぶ。Issue の作成者は Claude、Codex、人間のいずれでもよい。
+- 作業前に目的、範囲、完了条件と関連する作業を確認する。大きなタスクは必要に応じて子 Issue に分ける。
+- 必要な経過、ブロッカー、検証結果はコメントで共有する。本文は objective / scope / checklist のメンテナンスに使う。
+- 作業の重複を避け、引き継ぎが必要ならコメントで相手と次の作業を明示する。
+- 人間が Issue の close を判断する。AI は自分の判断で close せず、ユーザーの明示指示がある場合のみ代行する。
 
-| Category | 値 |
-|---|---|
-| `status:` | `todo` / `in-progress` / `blocked` / `ready-for-close` |
-| `owner:` | `claude` / `codex` / `human` |
-| `priority:` | `high` / `medium` / `low` |
-| `type:` | `feature` / `bug` / `investigation` / `refactor` |
-| `area:` | `viewer` / `content` / `background` / `db` / `handoff` / `other` |
+## AI 間 handoff
 
-- 「done」は **close 状態**で表現する（`status: done` ラベルは存在しない）
-- close は**人間の判断**で行う。AI は自分の判断では close せず、ユーザーが明示的に指示したときだけ代行する
-
----
-
-## 2. Issue の種類とテンプレート
-
-GitHub の New Issue から選ぶ:
-
-- **Task** — 実装粒度のタスク（feature / refactor）
-- **Investigation** — 調査・再現・原因切り分け。成果物は Secret Gist もしくは Issue コメント
-- **Bug** — 既存機能の不具合
-
-blank issue は無効化している。
-
----
-
-## 3. AI の作業フロー
-
-### 3.0 Issue 作成
-
-作成者は Claude / Codex / human いずれも可。
-
-1. New Issue からテンプレを選ぶ（実装=Task / 調査=Investigation / 不具合=Bug）
-2. 初期ラベルを付ける:
-   - `status: todo`（テンプレで自動付与）
-   - `owner:` 自分で着手するなら自分、他 AI に投げるなら相手
-   - `priority:` `high` / `medium` / `low`
-   - `type:` `feature` / `bug` / `investigation` / `refactor`
-   - `area:` `viewer` / `content` / `background` / `db` / `handoff` / `other`
-3. 自分で即着手するなら 3.1 に進み `status: todo` を外し `status: in-progress` に遷移
-4. 他 AI に投げるなら `status: todo` + `owner: <相手>` で止める。相手が着手時にラベル操作
-
-タスク分解が必要な大きめ Issue は、子 Issue を複数作り親 Issue 本文 checklist に `- [ ] #<子>` で並べる。
-
-### 3.1 着手
-
-1. ボードか `gh issue list` で自分の担当 Issue を選ぶ
-2. **owner ラベルを確認**。他 AI が in-progress 中なら着手しない（handoff コメントがある場合は引き継ぐ）
-3. `status: todo` を外し `status: in-progress` を付ける
-4. 必要なら `owner:` を自分に付け替える
-
-### 3.2 作業中
-
-- 意味のあるステップごとに **Issue コメントを追記**（本文は編集しない）
-  - 先頭フォーマット: `YYYY-MM-DD <自分>:`
-  - 例: `2026-04-22 Claude: 調査完了。原因は X。次に Y を試す`
-- Issue 本文（body）の編集は **objective / scope / checklist のメンテナンスのみ**。経過はコメントで表現
-- ブロックされたら `status: in-progress` を外し `status: blocked` を付け、理由をコメント
-- ブラウザ検証は shared profile を使う。`scripts/start-cdp-chrome.ps1` は `.shared-cdp-profile` を既定使用し、例外時だけ `-AllowNonSharedProfile` を明示する
-
-### 3.3 完了申請（AI による）
-
-1. `status: in-progress` を外し `status: ready-for-close` を付ける
-2. 以下を含む **最終コメントを 1 件** 投稿:
-
-```markdown
-## Result
-<実装内容の要約を 3〜10 行で>
-
-## Verification
-<`npm run typecheck` の出力（末尾 20 行程度）>
-<`npm run build` の出力（末尾 20 行程度）>
-
-## Changed files
-<`git diff --name-only <base>..HEAD` の結果>
-```
-
-3. **AI はここで止まる**。自分の判断では close せず、人間の確認待ちに入る。
-
-### 3.4 Close（人間の判断）
-
-人間が内容を確認し、実機検証が必要なら実施。問題なければ `gh issue close <n>` または UI で close。
-
-close の代行を AI に指示してもよい。その場合 AI は `status: accepted` に付け替えてから閉じる。判断そのものは人間が持つ、という線は変わらない。
-
----
-
-## 4. AI → AI handoff（引き継ぎ）
-
-Codex が解決できず Claude に渡したい（または逆）の場合:
-
-1. 以下のコメントを投稿する（下の雛形をコピペ）
-2. `owner:` を相手に付け替え
-3. `status: in-progress` を外し `status: todo` に戻す（相手が着手したら再 in-progress）
-
-### 4.1 Handoff コメント雛形
+必要に応じて次の雛形を使う。
 
 ```markdown
 ## Handoff
@@ -116,136 +23,30 @@ Codex が解決できず Claude に渡したい（または逆）の場合:
 - To: <相手>
 
 ### Done so far
-- <そこまでの到達点を箇条書き>
+- <到達点>
 
 ### Blocker
-- <何で詰まったか>
-- <出たエラー文・試した手段・仮説>
+- <障害、試した手段、仮説>
 
 ### Next step suggestion
-- <相手に何をしてほしいか>
+- <相手に依頼する作業>
 
 ### Related
-- <参照した findings Gist / PR / コミット>
+- <関連資料、PR、コミット>
 ```
 
-handoff 手順を踏めば、相手 AI は割り込みではなく引き継ぎとして自由に着手してよい。
+## Branch と commit
 
----
+branch は `feature` / `fix` / `refactor` / `docs` / `chore` のいずれかを使い、`<type>/<topic>` または `<type>/<number>-<topic>` とする。topic は英小文字・数字をハイフンで区切る。
 
-## 5. Branch naming
+着手時は `sh scripts/start-issue.sh <type> <number|-> <topic>` を使う。番号なしの場合は第 2 引数に `-` を渡す。commit・branch と Issue の紐付けは任意で、関連があれば PR 本文に `Refs #N` を記載する。
 
-| パターン | 用途 |
-|---|---|
-| `feature/<number>-<topic>` | 新機能 |
-| `fix/<number>-<topic>` | バグ修正 |
-| `refactor/<number>-<topic>` | 振る舞いを変えない整理 |
-| `docs/<number>-<topic>` | ドキュメント |
-| `chore/<number>-<topic>` | 雑務（issue 参照あり） |
-| `chore/skip-<topic>` | `[skip-issue]` 対象の軽微作業 |
+`scripts/pre-commit` は branch 名を検査し、`master` / `main` への直接 commit を拒否する。メンテナンス時のみ `ALLOW_MASTER_COMMIT=1` で回避できる。`sh scripts/setup-hooks.sh` で hook を設置する。lint と content-script guard は維持し、`--no-verify` で回避しない。他 repo 向けの Git template は `templates/git-template/README.md` を参照する。
 
-着手時は必ず `sh scripts/start-issue.sh <type> <number> <topic>` を使う。
-`scripts/pre-commit` は `master` / `main` への直接 commit を拒否し、`node scripts/check-branch.mjs` で branch 名も自動検査する。
-メンテナンスで直 commit が必要な場合だけ `ALLOW_MASTER_COMMIT=1` を付ける。
-他 repo へ横展開する場合の Git template は `templates/git-template/README.md` を参照する。
+## 検証と完了
 
-## 6. Commit message ルール
+変更に応じて `npm run lint`、`npm run typecheck`、`npm run build`、関連テストと動作確認を行う。ブラウザの手動確認には原則 Shared Profile を使い、別 profile はユーザーの明示許可がある場合のみ使う。検証結果と未確認事項を伝え、人間が完了を判断する。
 
-すべての commit は Issue を参照する。
+## Findings
 
-### 5.1 形式
-
-```
-<type>: <subject> (#<issue>)
-```
-
-例:
-```
-feat: add date-range filter (#42)
-fix: restore progress bar update on large backup (#8)
-refactor: extract archive-maintenance helper (#13)
-```
-
-### 5.2 Escape hatch
-
-雑務コミット（typo 修正、README の微調整など）は `[skip-issue]` を含める:
-
-```
-chore: fix typo in docs [skip-issue]
-```
-
-許容範囲は **本質的に検証不要なレベルの変更**に限る。
-
-### 5.3 Hook
-
-`scripts/setup-hooks.sh` を実行すると `commit-msg` hook が入り、上記を自動検査する。
-`--no-verify` での回避は**しない**（hook が落ちたら根本原因を直す）。
-
----
-
-## 7. Findings / 長文調査ノート
-
-- 原則 **`docs/findings/` に直置き**（private repo 前提）
-- ファイル名: `YYYY-MM-DD-<topic>.md`
-- 先頭に frontmatter を付ける:
-  ```yaml
-  ---
-  date: 2026-04-22
-  related-issue: 10
-  status: open | resolved | superseded
-  ---
-  ```
-- Issue 本文の `## Notes` または該当コメントから `docs/findings/...` をリンク
-- 原文が diff に出るが、調査完了時の 1 コミットに収まれば許容
-- findings 自体に close 概念はない。調査 Issue を close したら frontmatter の `status` を `resolved` にする
-
-### 例外: Secret Gist
-
-個人情報（他者の DM / username / 投稿 ID など）が混入する場合のみ Gist を使う。Issue からリンクし、ローカルには持たない。
-
-旧 `ai-handoff/findings/` は削除済み。新規の調査ノートは `docs/findings/` に作る。
-
-### 将来の OSS 化に備えて
-
-リポジトリを公開する際は `docs/findings/` 一式に対し sanitization pass を実施する（自分の X username / user ID / Chrome profile path などの置換）。現時点では private 前提のため不要。
-
----
-
-## 8. Projects v2 ボード
-
-**X Archive Handoff**
-
-- Columns: Todo / In Progress / Blocked / Ready for Close / Done
-- Group by: `owner` ラベル
-- Filter: `priority` ラベル
-
-Issue を作ると自動でボードに乗る（auto-add ワークフロー）。状態遷移はラベル変更で反映される。
-
----
-
-## 9. Definition of Done
-
-1. `npm run typecheck` pass
-2. `npm run build` pass
-3. `status: ready-for-close` ラベルが付いている
-4. 最終コメントに `## Result` / `## Verification` / `## Changed files` が揃っている
-5. commit message に `#<issue>` が含まれている
-6. 人間の判断で Issue が close された
-
-1〜5 を AI が満たし、6 は人間が判断する（実行は AI に代行させてもよい）。
-
----
-
-## 10. よくある質問
-
-**Q. 小さすぎて Issue を立てるほどでもない修正は？**
-A. `[skip-issue]` escape を使う。ただし後から「なぜこの変更が？」と聞かれたら答えられる範囲に限る。
-
-**Q. 同じタスクを両 AI で並行できないか？**
-A. 原則不可。owner が切り替わる handoff でのみ引き継ぐ。並行作業は衝突コストが高い。
-
-**Q. Issue の body を書き換えていい？**
-A. objective / scope / checklist のメンテナンスのみ。経過・考察・結果はコメントで。
-
-**Q. 旧 `ai-handoff/tasks/*.md` を参照したい**
-A. ディレクトリは削除済み。`git log -- ai-handoff/` で履歴を辿る。
+長文調査ノートは原則 `docs/findings/YYYY-MM-DD-<topic>.md` に置き、関連 Issue からリンクする。個人情報が含まれる場合のみ Secret Gist を使う。公開前には findings の個人情報を確認する。

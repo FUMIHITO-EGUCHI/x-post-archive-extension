@@ -59,8 +59,7 @@ jobs:
             1. `git diff origin/${{ github.event.pull_request.base.ref }}...HEAD --stat` で変更概要
             2. 重要な diff を読み、観点ごとに inline comment を付ける
             3. 軽微な指摘はまとめて1つの summary コメントにする
-            4. commit message が `#<issue>` を含むか / `[skip-issue]` 妥当か確認
-            5. CLAUDE.md の "完了報告前は typecheck / build" が PR 説明で言及されているか確認
+            4. CLAUDE.md の "完了報告前は typecheck / build" が PR 説明で言及されているか確認
 
             **やってはいけないこと**:
             - PR を merge / close しない

@@ -6,43 +6,23 @@ paths:
 
 # AI Handoff Rules (Issue-based)
 
-タスク管理は **GitHub Issues + Projects v2** を single source of truth とする。
-運用ガイド全文は `docs/handoff/README.md`。ここでは AI が守るべき最短のルールだけを置く。
+タスクは **GitHub Issues** で管理する。運用ガイド全文は `docs/handoff/README.md`、背景は `docs/decisions/0004-simplify-issue-workflow.md`。
 
-## Single source of truth
+## Issue
 
-- タスクの状態・担当・経過はすべて **GitHub Issue** にある
-- Issue 本文の編集は objective / scope / checklist のメンテナンスのみ
-- 経過・考察・結果は **Issue コメント** に追記する（本文は書き換えない）
-- 旧 `ai-handoff/` ディレクトリは削除済み。過去の packet 履歴を辿る場合は git log を使う
+- 状態は Issue の open / closed とリンクした PR で表す。**ラベルは付けない**（既存ラベルは過去の記録として残っているだけ）
+- Issue 本文の編集は objective / scope / checklist のメンテナンスのみ。経過・考察・結果はコメントに追記する
+- **AI は自分の判断で Issue を close しない**。ユーザーが明示的に指示したときだけ `gh issue close` を実行する
 
-## Labels と状態遷移
+## Branch と commit
 
-| Category | 値 |
-|---|---|
-| `status:` | `todo` / `in-progress` / `blocked` / `ready-for-close` |
-| `owner:` | `claude` / `codex` / `human` |
-| `priority:` | `high` / `medium` / `low` |
-| `type:` | `feature` / `bug` / `investigation` / `refactor` |
-| `area:` | `viewer` / `content` / `background` / `db` / `handoff` / `other` |
-
-- `status: done` は存在しない。完了は **close 状態**で表現
-- **AI は自分の判断で close しない**。ユーザーが明示的に指示したときだけ `gh issue close` を実行し、その際は `status: accepted` に付け替えてから閉じる
-
-## 作業フロー
-
-0. **作成**: Claude / Codex / human いずれも作成可。テンプレ選択（task / investigation / bug）→ 初期ラベル `status: todo` + `owner:` + `priority:` + `type:` + `area:`。他 AI に投げる場合は `owner: <相手>` で止める。自分で着手するなら 1 へ。
-1. **着手**: `status: todo` を外し `status: in-progress` を付ける。必要なら `owner:` を自分に。
-2. **進捗**: 意味あるステップごとに Issue コメントを追記（`YYYY-MM-DD <自分>:` で始める）
-3. **ブロック時**: `status: in-progress` を外し `status: blocked` を付け、理由をコメント
-4. **完了申請**: `status: in-progress` を外し `status: ready-for-close` を付け、以下を 1 コメントで:
-   - `## Result`（3〜10 行で要約）
-   - `## Verification`（`npm run typecheck` / `npm run build` の末尾）
-   - `## Changed files`（`git diff --name-only` 結果）
+- branch は `<type>/<topic>` または `<type>/<number>-<topic>`（type は `feature` / `fix` / `refactor` / `docs` / `chore`）。`sh scripts/start-issue.sh <type> <number|-> <topic>` で作る
+- commit・branch と Issue の紐付けは任意。関連があれば PR 本文に `Refs #N` を書く（`Closes #N` はマージ時に自動 close されるので使わない）
+- `master` への直接 commit は pre-commit hook が拒否する。`--no-verify` で hook を回避しない
 
 ## AI 間 handoff
 
-`status: in-progress` 中の Issue に他 AI が割り込む場合は **必ず handoff コメント**を残す:
+他の AI が作業中の Issue に割り込む・引き継ぐときは、Issue に handoff コメントを残す。
 
 ```markdown
 ## Handoff
@@ -55,28 +35,9 @@ paths:
 ### Related
 ```
 
-コメント投稿後、`owner:` を相手に付け替え、`status: in-progress` を外し `status: todo` に戻す。
-
-## Commit message
-
-- 形式: `<type>: <subject> (#<issue>)`
-- 雑務 escape: `[skip-issue]`
-- `commit-msg` hook が自動検査。`--no-verify` で回避しない
-
-## Definition of Done
-
-1. `npm run typecheck` pass
-2. `npm run build` pass
-3. `status: ready-for-close` 付与
-4. 最終コメントに Result / Verification / Changed files が揃う
-5. commit message に `#<issue>` 含む
-6. 人間が Issue を close（この 6 のみ AI 対象外）
-
 ## Never
 
 - AI が自発的に Issue を close する
-- handoff コメントなしで他 AI の in-progress Issue を横取りする
 - Issue コメントを **編集・削除** する（追記のみ）
 - Gist / Issue に秘匿情報（`.env` 等）を載せる
-- commit message から `#<issue>` を省いて push する（escape なし）
 - `--no-verify` で hook を回避する

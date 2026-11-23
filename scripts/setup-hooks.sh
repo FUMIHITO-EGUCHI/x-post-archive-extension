@@ -27,6 +27,9 @@ install_hook() {
 
 install_hook "pre-commit"
 install_hook "post-checkout"
-install_hook "commit-msg"
+if [ -e "$HOOKS_DIR/commit-msg" ]; then
+  rm "$HOOKS_DIR/commit-msg"
+  echo "Removed: $HOOKS_DIR/commit-msg"
+fi
 
 echo "Git hooks installed successfully."

@@ -1,13 +1,12 @@
 name: Investigation
 description: 調査・再現・原因切り分けタスク（実装前の前調査）
 title: "[invest] "
-labels: ["status: todo", "type: investigation"]
 body:
   - type: markdown
     attributes:
       value: |
         調査タスクです。最終成果物は「調査レポート」（Issue 内コメント or Secret Gist）とします。
-        実装が必要と分かった場合は、別 Issue（type: feature / bug）を立てて close します。
+        実装が必要と分かった場合は、必要に応じて別 Issue を立てます。close は人間が判断します。
 
   - type: textarea
     id: question

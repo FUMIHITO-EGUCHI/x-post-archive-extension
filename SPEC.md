@@ -1,5 +1,7 @@
 # SPEC: AI 間タスク管理（GitHub Issues ベース）
 
+> この SPEC は GitHub Issues 移行時（2026-04）の設計記録。ラベル運用と commit の Issue 番号必須は [ADR-0004](docs/decisions/0004-simplify-issue-workflow.md) で廃止した。現在の運用は `docs/handoff/README.md` を参照する。
+
 - Status: Draft (awaiting human approval)
 - Author: Claude
 - Date: 2026-04-22

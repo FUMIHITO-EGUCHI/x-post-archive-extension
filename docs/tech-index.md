@@ -14,7 +14,7 @@
 - 全体方針: `AGENTS.md`
 - Claude 専用運用: `CLAUDE.md`
 - handoff の使い方: `docs/handoff/README.md`
-- 現在の作業起点: 担当 GitHub Issue（`gh issue list --assignee @me` もしくは `owner:` ラベル）
+- 現在の作業起点: 関連する GitHub Issue と PR
 
 ## Tooling And Build
 - パッケージと scripts: `package.json`

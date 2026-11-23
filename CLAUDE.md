@@ -15,22 +15,16 @@ X（旧Twitter）投稿を1件ずつ保存・検索する Chrome 拡張（Manife
 | `npm run typecheck` | 型チェック |
 | `npm run zip` | 配布用 zip 作成 |
 
-テストと lint は未設定。完了報告前は `npm run typecheck` と `npm run build`、必要な手動確認を行う。
+完了報告前は `npm run lint`、`npm run typecheck`、`npm test`、`npm run build` と必要な手動確認を行う。
 
 ## タスク管理（AI handoff）
 
-タスクは **GitHub Issues + Projects v2** で管理する。旧 `ai-handoff/tasks/` のファイル運用は廃止した。
+タスクは GitHub Issues で管理し、状態は open / closed と関連 PR で表す。ラベルは使わない。
+commit・branch と Issue の紐付けは任意。関連があれば PR 本文に `Refs #N` を記載する。
+Issue の close は人間が判断し、AI はユーザーの明示的な指示がある場合のみ代行する。
+必要な経過や AI 間 handoff は Issue のコメントに残す。
 
-- 作業開始時: Issue を選んで `status: in-progress` ラベルを付ける
-- 作業中: Issue コメントに逐次追記。本文は objective / scope / checklist のみ編集
-- 完了申請: `status: ready-for-close` ラベル + `## Result` / `## Verification` / `## Changed files` を含むコメント
-- **close は AI の判断で行わない**。ユーザーが明示的に指示したときだけ実行し、その際は `status: accepted` に付け替えてから閉じる
-- commit message は `#<issue>` を必須（雑務は `[skip-issue]`）。`commit-msg` hook が強制
-- AI 間 handoff は `docs/handoff/README.md` の雛形に従う
-
-詳細は `docs/handoff/README.md` を参照。AI 実行制御（GitHub Actions ルーティング、`model:` ラベル運用、コスト管理）は `docs/handoff/ai-execution.md`。移行判断の背景は `docs/decisions/0001-task-management-on-github-issues.md`。
-
-- Issue 作成時に `model:` ラベル（`cheap-ok` / `standard` / `strong-required`）を1つ付与。判断材料は `task.yml` の "強いモデルを要する兆候" チェックボックス（Dexie スキーマ変更・認可・state管理 等）
+詳細は `docs/handoff/README.md`、AI 実行制御は `docs/handoff/ai-execution.md`、移行判断の背景は `docs/decisions/0001-task-management-on-github-issues.md` を参照する。
 
 ## ディレクトリ構造
 | パス | 役割 |

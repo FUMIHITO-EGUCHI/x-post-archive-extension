@@ -11,7 +11,6 @@
 ```
 GitHub Issue / PR
    │
-   ├─[issues opened]──▶ claude-issue-triage.yml   → model:/type:/area: 自動付与
    ├─[@claude mention]─▶ claude-mention.yml       → 質問/調査/実装（track_progress）
    └─[pull_request]───▶ claude-pr-review.yml      → 5軸レビュー
 
@@ -22,42 +21,17 @@ GitHub Issue / PR
 
 ---
 
-## 2. ラベル運用（`model:` 軸）
+## 2. Workflows
 
-| ラベル | 使う場面 |
-|---|---|
-| `model: cheap-ok` | 候補抽出 / 整形 / 要約 / 単純 rename / Issue コメント整形 |
-| `model: standard` | 既存パターンに沿った実装 / テスト追加 / 型修正 / 軽微な UI 修正 |
-| `model: strong-required` | 認可 / DB / migration / 状態管理 / 並行処理 / 曖昧仕様 / 根本原因調査 / 不可逆変更 / 複数ファイル横断設計 |
-
-判定根拠は Issue Template (`task.yml`) の **「強いモデルを要する兆候」チェックボックス**。1つでも該当すれば `strong-required`。
-
-### 振り返り用ラベル（完了申請時に自分で貼る）
-
-- `cost: overrun` — 想定より燃えた（軽量で済むと思ったが手戻りした 等）
-- `model: was-overkill` — strong を選んだが standard で足りた
-
-月1で `gh issue list --label "cost: overrun"` を眺め、判定基準を改善する。
-
----
-
-## 3. Workflows
-
-### 3.1 `claude-issue-triage.yml`
-
-- 発火: `issues: opened`
-- やること: ラベル取得 → `model:` / `type:` / `area:` を1つずつ付与 → 短い triage コメント
-- 触らない: `status:` / 本文 / 既存ラベル削除 / close
-
-### 3.2 `claude-mention.yml`
+### 2.1 `claude-mention.yml`
 
 - 発火: コメント本文に `@claude` を含む / Issue が `claude` に assign された
 - やること: 依頼内容に応じて応答（質問 / 調査 / 実装 / レビュー）
 - 進捗管理: `track_progress: true` が自動でコメント1件を upsert する。**人間/他 AI はそのコメントを触らない**
-- 完了申請: `status: ready-for-close` 付与 + Result / Verification / Changed files の最終コメント
-- 触らない: close / 本文編集 / `[skip-issue]` 濫用 / `--no-verify`
+- 完了時: 結果を短く 1 コメントで残す。ラベルは付けず、Issue は close しない
+- 触らない: close / objective・scope・checklist 以外の本文編集 / `--no-verify` による hook 回避
 
-### 3.3 `claude-pr-review.yml`
+### 2.2 `claude-pr-review.yml`
 
 - 発火: `pull_request: opened / synchronize / ready_for_review`（draft は除外）
 - やること: 5軸（correctness / readability / architecture / security / performance）で diff レビュー、重要箇所に inline comment、軽微指摘は summary 1件
@@ -65,36 +39,27 @@ GitHub Issue / PR
 
 ---
 
-## 4. Claude Code / Codex の役割分担
+## 3. Claude Code / Codex の役割分担
 
 | 場面 | 担当 | 備考 |
 |---|---|---|
-| Issue triage | Claude (Action) | 軽量で十分だが判断ミスを避けるため Sonnet |
 | 要件整理 / 設計判断 / 根本原因調査 | Claude Code (Opus) | ローカル or @claude mention |
 | ブラウザ / CDP デバッグ | Claude Code | DevTools MCP を持つ |
-| ready-for-impl の実装 | Codex | Issue 本文に `implement:` で明示 |
+| 実装 | Codex | Issue 本文に `implement:` で明示 |
 | 差分レビュー | Claude (Action) | claude-pr-review.yml |
-| ドキュメント整理 / コミット整形 | Codex or Claude (cheap-ok) | どちらでも可 |
+| ドキュメント整理 / コミット整形 | Codex or Claude | どちらでも可 |
 
 ルーティングを workflow 単位で固定化したくなったら **`github/gh-aw` (GitHub Agentic Workflows)** で engine を `codex` に切り替えた workflow を追加する。MVP では未導入。
 
 ---
 
-## 5. モデル選択
+## 4. モデル選択
 
-二重管理に注意する。優先順位:
-
-1. **GitHub.com の Agents タブのモデルピッカー** — 実行時に人間が選ぶ最終決定
-2. **Issue の `model:` ラベル** — 推奨値。Action / 人間が貼る
-3. **CLAUDE.md / AGENTS.md の役割記述** — デフォルト方針
-
-`model:` ラベルと UI 選択が矛盾した場合は、Issue コメントに理由を1行残す（後の振り返り用）。
-
-参考: <https://github.blog/changelog/2026-04-14-model-selection-for-claude-and-codex-agents-on-github-com/>
+作業の複雑さと利用可能な手段を踏まえ、人間が実行時に選ぶ。
 
 ---
 
-## 6. コスト管理（任意）
+## 5. コスト管理（任意）
 
 ### `claude-code-router` (CCR)
 
@@ -108,27 +73,22 @@ GitHub Issue / PR
 npx ccusage@latest
 ```
 
-`cost: overrun` ラベルと組み合わせて、Issue 単位の手戻りを月次で振り返る。
+必要に応じて使用量と手戻りの理由を振り返る。
 
 ---
 
-## 7. やってはいけないこと
+## 6. やってはいけないこと
 
 - Action から Issue を close する（対話中の AI はユーザーの明示指示があれば close を代行してよいが、Action にはその指示を受け取る経路がないため常に対象外）
 - Action から PR を merge / approve する
 - `track_progress` コメントを手書きで触る
-- `model:` ラベルを2つ以上貼る（1つだけ）
-- `risk:` / `context:` ラベルを後付けで作る（model: 軸に集約済み）
-- `[skip-issue]` を実装系コミットで使う
 - 自作の issue-pack / ai-state スクリプトを作る（公式 Action が代替）
 
 ---
 
-## 8. セットアップ
+## 7. セットアップ
 
-新 PJ 立ち上げ手順は [`bootstrap.md`](./bootstrap.md) に集約。要点だけ:
-
-1. `sh scripts/init-project.sh "<pj>" "<desc>"` でプレースホルダ置換 + hooks + ラベル同期
+1. `sh scripts/setup-hooks.sh` で hooks を設定する。
 2. Claude Code CLI で `/install-github-app` 実行 → `CLAUDE_CODE_OAUTH_TOKEN` secret が自動登録
 3. **副作用で生成される `claude-code-review.yml` は削除**（`claude-pr-review.yml` と重複）
 4. 各 workflow の `with:` に `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}` が配線済みであること
@@ -156,7 +116,7 @@ CI 利用がサブスク枠を圧迫する／コスト予測を独立させた�
 
 判断基準（どれかに該当したら検討）:
 - claude-code-action 起動でローカル Claude Code が頻繁にレートリミットに当たる
-- 月次の使用量振り返り（`ccusage` + `cost: overrun` ラベル）で CI 起動の比重が高い
+- 月次の使用量振り返り（`ccusage`）で CI 起動の比重が高い
 - サブスクと CI のコストを会計上分離したい
 
 切替手順:
@@ -166,7 +126,7 @@ CI 利用がサブスク枠を圧迫する／コスト予測を独立させた�
 
 ---
 
-## 9. Human acceptance（ADR-0003 3点ゲート）
+## 8. Human acceptance（ADR-0003 3点ゲート）
 
 人間がコードを読まずに accept できる前提で運用する。3点ゲート全部通過で完了：
 
@@ -177,9 +137,9 @@ CI 利用がサブスク枠を圧迫する／コスト予測を独立させた�
 人間がやること：
 
 - Issue 作成時に「コードを読まずに accept できる手順」を Evidence 欄に記入する
-- `status: evidence-required` になった Issue で、AI が貼った evidence を見る
-- 期待挙動と一致 → `status: accepted` を付け close
-- 不一致 → 理由をコメントし `status: in-progress` に戻す（rework count +1）
+- AI が共有した evidence を見る
+- 期待挙動と一致すれば close を判断する
+- 不一致なら理由をコメントし、必要な修正を依頼する
 
 人間がやらないこと：
 
@@ -188,13 +148,13 @@ CI 利用がサブスク枠を圧迫する／コスト予測を独立させた�
 
 ---
 
-## 10. Learning loop（ADR-0003）
+## 9. Learning loop（ADR-0003）
 
-### 10.1 PR ごとの Learning notes
+### 9.1 PR ごとの Learning notes
 
 `claude-pr-review.yml` が PR レビュー末尾に "## Learning notes for the human" セクションを自動生成する。最大3概念 + 公式ドキュメントリンク + 1分で試せる小実験。Hallucination 抑制のため「リンク提供不可なら出さない」が prompt に明記してある。
 
-### 10.2 月次学習ログ
+### 9.2 月次学習ログ
 
 `docs/learning/YYYY-MM.md` を月1ファイルで作成。月末に AI に集約を依頼：
 
@@ -204,7 +164,7 @@ CI 利用がサブスク枠を圧迫する／コスト予測を独立させた�
 
 人間は「自分で説明できるか」チェックボックスを埋める。埋まらなければその月の理解が浅い証拠。
 
-### 10.3 `@claude explain` 質問テンプレ
+### 9.3 `@claude explain` 質問テンプレ
 
 理解が浅いコードを読みたいときは、`claude-mention.yml` 経由で以下の形式で質問する：
 
@@ -218,30 +178,13 @@ CI 利用がサブスク枠を圧迫する／コスト予測を独立させた�
 
 「自分の理解を先に書く」のがコツ。書けない時点で読めていないと自覚できる。
 
-### 10.4 並行する読書
+### 9.4 並行する読書
 
 AI 説明だけでは抽象的な体系が抜けるため、PJ で使う主要ライブラリ・言語の入門書を1冊だけ並行で進める。AI の説明はその索引として機能する。
 
 ---
 
-## 11. Rework count
-
-各 Issue クローズ時に最終コメントに `rework: N (理由)` を1行残す。
-
-- `rework: 0` — 一発 accept
-- `rework: 2 (UI崩れ / state保持漏れ)` — 2回 reject されて修正した
-
-月次で `rework: 0` 比率を見る：
-
-```bash
-gh issue list --state closed --search "rework: 0 in:comments updated:>YYYY-MM-01"
-```
-
-低い場合は Issue 仕様の精度（特に Evidence of acceptance）か AI 品質に問題がある。`evidence-required → in-progress` の差し戻し理由を月次振り返りで分析する。
-
----
-
-## 12. 参考
+## 10. 参考
 
 - claude-code-action: <https://github.com/anthropics/claude-code-action>
 - solutions guide: <https://github.com/anthropics/claude-code-action/blob/main/docs/solutions.md>

@@ -158,6 +158,6 @@
 6. Create the release note in `docs/release-notes/`.
    Start the release note with a short top section that tells the user what improved for them in this release before the technical details.
 7. After creating the release note, ask the user to review and confirm it before continuing.
-8. If the release closes any GitHub Issues, reference them in the commit message via `#<issue>` so the commit-msg hook passes. Actual Issue close is performed by the human.
+8. Reference related GitHub Issues in the PR with `Refs #N` when applicable. Issue closure is decided by the human.
 9. Commit only the intended release changes.
 10. Only when the user explicitly instructs it, create the version tag and push both the branch and the tag.

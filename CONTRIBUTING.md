@@ -8,8 +8,8 @@ This is a small, single-maintainer extension. Contributions are welcome, but ple
 
 - **Open an Issue first** for anything non-trivial
 - **One Issue ⇒ one PR**
-- **commit message must include `#<issue>`** (escape with `[skip-issue]` for chore-only commits)
-- **branch naming**: `<type>/<issue-number>-<short-topic>` (e.g. `feature/42-add-import-button`)
+- Issue references in commits and branches are optional; use `Refs #N` in the PR when related
+- **branch naming**: `<type>/<short-topic> or <type>/<issue-number>-<short-topic>` (e.g. `feature/42-add-import-button`)
 - Don't bypass git hooks with `--no-verify`
 
 ## Setup
@@ -23,31 +23,21 @@ Load `.output/chrome-mv3/` as an unpacked extension in Chrome (`chrome://extensi
 
 ## Branch naming
 
-Pattern: `<type>/<issue-number>-<short-topic>`
+Pattern: `<type>/<short-topic> or <type>/<issue-number>-<short-topic>`
 
 | `<type>` | Use for |
 |---|---|
 | `feature` | New user-visible behavior |
 | `fix` | Bug fix |
 | `refactor` | Internal change, no behavior change |
-| `perf` | Performance improvement |
 | `docs` | Documentation only |
-| `ci` | GitHub Actions / build config |
 | `chore` | Everything else (release prep, dependency bump, etc.) |
 
-For chore work without an Issue, use `chore/skip-<short-topic>`.
+Use `sh scripts/start-issue.sh <type> <number|-> <topic>`; pass `-` when no Issue number is needed.
 
 ## Commit messages
 
-Format: `<type>: <subject> #<issue>`
-
-Examples:
-
-- `feat: add JSON export #42`
-- `fix: prevent duplicate save on rapid click #57`
-- `chore: bump dexie to 4.3.0 [skip-issue]`
-
-The `commit-msg` hook checks for `#<digit>` or `[skip-issue]`. Do not bypass it.
+Use a clear subject describing the change. Issue references are optional.
 
 ## Required checks before commit
 
@@ -74,17 +64,10 @@ Content scripts (`src/features/x/*`, `src/features/runtime/client.ts`) **must no
 
 ## Issue workflow
 
-This repo tracks tasks in GitHub Issues + Projects v2. Labels carry the state:
+This repo tracks tasks in GitHub Issues. Open or closed state and related PRs show progress; labels are not used.
 
-| Label group | Values |
-|---|---|
-| `status:` | `todo` / `in-progress` / `blocked` / `ready-for-close` |
-| `priority:` | `high` / `medium` / `low` |
-| `type:` | `feature` / `bug` / `investigation` / `refactor` |
-| `area:` | `viewer` / `content` / `background` / `db` / `handoff` / `other` |
-
-- The maintainer is the only one who closes Issues
-- For external contributions, file an Issue first (or comment on an existing one) before sending a PR
+- The maintainer decides when to close Issues; an AI may close one only on explicit user instruction.
+- For external contributions, file an Issue first (or comment on an existing one) before sending a PR.
 
 ## AI collaboration
 
