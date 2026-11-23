@@ -70,6 +70,13 @@ export function useTagMerge({ manageableTags, isJapanese, notify, reload, onTagM
     setMergeArmed(false);
   }
 
+  function select(tagIds: string[]): void {
+    if (mergePending) {
+      return;
+    }
+    setSelectedTagIds(tagIds);
+  }
+
   function disarm(): void {
     setMergeArmed(false);
   }
@@ -84,7 +91,7 @@ export function useTagMerge({ manageableTags, isJapanese, notify, reload, onTagM
     pending: mergePending,
     toggle: toggleSelectedTag,
     swap,
-    select: setSelectedTagIds,
+    select,
     disarm,
     run: handleMerge
   };

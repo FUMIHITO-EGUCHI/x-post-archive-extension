@@ -262,22 +262,19 @@ export function SettingsTagManagementPanel({
                       rename.start(summary.tag.tag_id, summary.tag.display_name);
                       return;
                     }
-                    let nextIndex = index;
-                    if (event.key === "ArrowDown") {
-                      nextIndex = Math.min(index + 1, visibleTags.length - 1);
-                      if (index === displayedTags.length - 1 && hasMoreTags) {
-                        loadMoreTags();
-                      }
-                    } else if (event.key === "ArrowUp") {
-                      nextIndex = Math.max(index - 1, 0);
-                    } else if (event.key === "Home") {
-                      nextIndex = 0;
-                    } else if (event.key === "End") {
-                      nextIndex = displayedTags.length - 1;
-                    } else {
+                    const nextIndex = getNextRowIndex(
+                      event.key,
+                      index,
+                      displayedTags.length,
+                      visibleTags.length
+                    );
+                    if (nextIndex === null) {
                       return;
                     }
                     event.preventDefault();
+                    if (nextIndex >= displayedTags.length) {
+                      loadMoreTags();
+                    }
                     const nextTag = visibleTags[nextIndex];
                     if (nextTag && nextIndex !== index) {
                       focusTag(nextTag.tag.tag_id);
@@ -433,6 +430,30 @@ export function SettingsTagManagementPanel({
       )}
     </section>
   );
+}
+
+// Returns the row index a navigation key moves to, or null for other keys.
+// ArrowDown may step one past the loaded rows (the caller loads the next page). End stays on
+// the last loaded row on purpose: loading every remaining tag at once could render thousands.
+export function getNextRowIndex(
+  key: string,
+  index: number,
+  loadedCount: number,
+  totalCount: number
+): number | null {
+  if (key === "ArrowDown") {
+    return Math.min(index + 1, totalCount - 1);
+  }
+  if (key === "ArrowUp") {
+    return Math.max(index - 1, 0);
+  }
+  if (key === "Home") {
+    return 0;
+  }
+  if (key === "End") {
+    return loadedCount - 1;
+  }
+  return null;
 }
 
 function feedbackClassName(tone: FeedbackTone): string {

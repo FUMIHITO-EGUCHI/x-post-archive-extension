@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ArchiveTagSummaryRecord } from "../../../types/viewer";
 import { requestMergeTags, requestRenameTag, requestTagSummaries } from "../../runtime/client";
-import { SettingsTagManagementPanel } from "./settings-tag-management-panel";
+import { getNextRowIndex, SettingsTagManagementPanel } from "./settings-tag-management-panel";
 
 vi.mock("../../runtime/client", () => ({
   requestTagSummaries: vi.fn(),
@@ -550,5 +550,56 @@ it("starts a rename with F2 and returns focus on Escape", async () => {
   await press(input(view.container), "Enter");
   const restored = view.container.querySelector<HTMLElement>('[data-tag-id="uma"]');
   expect(document.activeElement).toBe(restored);
+  await view.cleanup();
+});
+
+it("maps navigation keys to row indexes and leaves End on the loaded rows", () => {
+  expect(getNextRowIndex("ArrowDown", 49, 50, 120)).toBe(50);
+  expect(getNextRowIndex("ArrowDown", 119, 120, 120)).toBe(119);
+  expect(getNextRowIndex("ArrowUp", 0, 50, 120)).toBe(0);
+  expect(getNextRowIndex("Home", 30, 50, 120)).toBe(0);
+  expect(getNextRowIndex("End", 3, 50, 120)).toBe(49);
+  expect(getNextRowIndex("Tab", 3, 50, 120)).toBeNull();
+});
+
+it("keeps the list on screen while tags reload after a rename", async () => {
+  const view = await setup();
+  vi.mocked(requestTagSummaries).mockImplementationOnce(() => new Promise(() => {}));
+  await click(button(view.container, "Rename ウマ娘"));
+  await changeInput(input(view.container), "New name");
+  await click(button(view.container, "Save"));
+  expect(view.container.textContent).not.toContain("Loading tags...");
+  expect(view.container.querySelectorAll("[data-tag-id]")).toHaveLength(3);
+  await view.cleanup();
+});
+
+it("applies only the latest tag list when reloads finish out of order", async () => {
+  type TagListResponse = Awaited<ReturnType<typeof requestTagSummaries>>;
+  const resolvers: Array<(value: TagListResponse) => void> = [];
+  const view = await setup();
+  vi.mocked(requestTagSummaries).mockImplementation(() => new Promise((resolve) => {
+    resolvers.push(resolve);
+  }));
+  // Rename A succeeds and its reload stays pending; then rename B starts a second reload.
+  await click(button(view.container, "Rename ウマ娘"));
+  await changeInput(input(view.container), "Uma");
+  await click(button(view.container, "Save"));
+  await click(button(view.container, "Rename ブルーアーカイブ"));
+  await changeInput(input(view.container), "BA");
+  await click(button(view.container, "Save"));
+  expect(resolvers).toHaveLength(2);
+  const renamed = {
+    ...tags[2]!,
+    tag: { ...tags[2]!.tag, display_name: "BA", normalized_name: "ba" }
+  };
+  await act(async () => {
+    resolvers[1]!({ type: "posts/tags/list-result", tags: [tags[1]!, renamed] });
+  });
+  expect(view.container.querySelector('[data-tag-id="uma"]')).toBeNull();
+  await act(async () => {
+    resolvers[0]!({ type: "posts/tags/list-result", tags });
+  });
+  expect(view.container.textContent).toContain("BA");
+  expect(view.container.querySelector('[data-tag-id="uma"]')).toBeNull();
   await view.cleanup();
 });
