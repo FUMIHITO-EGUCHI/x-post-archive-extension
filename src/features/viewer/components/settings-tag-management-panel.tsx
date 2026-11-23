@@ -1,10 +1,13 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { ArchiveTagSummaryRecord } from "../../../types/viewer";
-import { requestMergeTags, requestRenameTag, requestTagSummaries } from "../../runtime/client";
 import type { ArchiveLanguage } from "../../settings/archive-language";
 import { Icon } from "./icons";
+import type { FeedbackTone } from "./tag-management-types";
+import { useEventCallback } from "./use-event-callback";
 import { useIncrementalList } from "./use-incremental-list";
+import { useTagMerge } from "./use-tag-merge";
+import { useTagRename } from "./use-tag-rename";
+import { useTagSummaries } from "./use-tag-summaries";
 
 type SettingsTagManagementPanelProps = {
   language: ArchiveLanguage;
@@ -12,7 +15,6 @@ type SettingsTagManagementPanelProps = {
   onTagMerged: (sourceNormalizedName: string, targetNormalizedName: string) => Promise<void>;
 };
 
-type FeedbackTone = "neutral" | "success" | "error";
 const TAG_MANAGEMENT_LIST_SIZE = 50;
 
 export function SettingsTagManagementPanel({
@@ -20,31 +22,27 @@ export function SettingsTagManagementPanel({
   onTagRenamed,
   onTagMerged
 }: SettingsTagManagementPanelProps) {
-  const [tags, setTags] = useState<ArchiveTagSummaryRecord[]>([]);
-  const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<FeedbackTone>("neutral");
-  const [editingTagId, setEditingTagId] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState("");
-  const [renameError, setRenameError] = useState<string | null>(null);
-  const [conflictingTagId, setConflictingTagId] = useState<string | null>(null);
-  const [renamePendingTagIds, setRenamePendingTagIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [mergeArmed, setMergeArmed] = useState(false);
-  const [preserveFutureTagUses, setPreserveFutureTagUses] = useState(true);
-  const [mergePending, setMergePending] = useState(false);
-  const renameInputRef = useRef<HTMLInputElement>(null);
-  const editingTagIdRef = useRef<string | null>(null);
+  const [activeTagId, setActiveTagId] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const pendingFocusTagId = useRef<string | null>(null);
   const isJapanese = language === "ja";
-
-  const manageableTags = useMemo(
-    () => [...tags]
-      .filter(({ tag }) => tag.system_key === null)
-      .sort((left, right) => right.postCount - left.postCount ||
-        left.tag.display_name.localeCompare(right.tag.display_name, "ja-JP")),
-    [tags]
-  );
+  const notify = useEventCallback((tone: FeedbackTone, message: string | null) => {
+    setNoticeTone(tone);
+    setNotice(message);
+  });
+  const { tags, loading, manageableTags, reload } = useTagSummaries({ isJapanese, notify });
+  const merge = useTagMerge({ manageableTags, isJapanese, notify, reload, onTagMerged });
+  const rename = useTagRename({
+    isJapanese,
+    notify,
+    reload,
+    onTagRenamed,
+    isBlocked: merge.pending,
+    onStart: merge.disarm
+  });
   const normalizedSearchQuery = normalizeTagSearchValue(searchQuery);
   const visibleTags = useMemo(() => {
     if (normalizedSearchQuery === "") {
@@ -55,11 +53,14 @@ export function SettingsTagManagementPanel({
       normalizeTagSearchValue(tag.normalized_name).includes(normalizedSearchQuery));
   }, [manageableTags, normalizedSearchQuery]);
   const requiredVisibleTagCount = useMemo(() => {
-    const indexes = selectedTagIds.map((id) =>
+    const indexes = merge.selectedTagIds.map((id) =>
       visibleTags.findIndex(({ tag }) => tag.tag_id === id));
-    indexes.push(visibleTags.findIndex(({ tag }) => tag.tag_id === editingTagId));
+    indexes.push(visibleTags.findIndex(({ tag }) => tag.tag_id === rename.editingTagId));
+    // Keep the keyboard-focused row rendered; otherwise deselecting a row past the
+    // first page shrinks the list and drops focus.
+    indexes.push(visibleTags.findIndex(({ tag }) => tag.tag_id === activeTagId));
     return Math.max(-1, ...indexes) + 1;
-  }, [editingTagId, selectedTagIds, visibleTags]);
+  }, [activeTagId, rename.editingTagId, merge.selectedTagIds, visibleTags]);
   const {
     visibleItems: displayedTags,
     remainingCount: remainingTagCount,
@@ -70,165 +71,32 @@ export function SettingsTagManagementPanel({
     step: TAG_MANAGEMENT_LIST_SIZE,
     requiredCount: requiredVisibleTagCount
   });
-  const source = manageableTags.find(({ tag }) => tag.tag_id === selectedTagIds[0]) ?? null;
-  const target = manageableTags.find(({ tag }) => tag.tag_id === selectedTagIds[1]) ?? null;
-  const conflictingTag = tags.find(({ tag }) => tag.tag_id === conflictingTagId) ?? null;
+  // Roving tabindex: one row is the list's only tab stop; arrow keys move it.
+  const effectiveActiveId = displayedTags.some(({ tag }) => tag.tag_id === activeTagId)
+    ? activeTagId
+    : displayedTags[0]?.tag.tag_id ?? null;
+
+  useEffect(() => {
+    const id = pendingFocusTagId.current;
+    if (id === null || loading || rename.editingTagId !== null) {
+      return;
+    }
+    const row = [...(listRef.current?.querySelectorAll<HTMLElement>("[data-tag-id]") ?? [])]
+      .find((element) => element.dataset.tagId === id);
+    if (row) {
+      pendingFocusTagId.current = null;
+      row.focus();
+    }
+  });
+
+  function focusTag(id: string): void {
+    pendingFocusTagId.current = id;
+    setActiveTagId(id);
+  }
+
+  const conflictingTag = tags.find(({ tag }) => tag.tag_id === rename.conflictingTagId) ?? null;
   const manageableConflict =
-    manageableTags.find(({ tag }) => tag.tag_id === conflictingTagId) ?? null;
-
-  useEffect(() => {
-    void loadTagList();
-  }, []);
-  useEffect(() => {
-    if (editingTagId !== null) {
-      renameInputRef.current?.focus();
-      renameInputRef.current?.select();
-    }
-  }, [editingTagId]);
-
-  async function loadTagList(): Promise<void> {
-    setLoading(true);
-    try {
-      const response = await requestTagSummaries();
-      setTags(response.tags);
-    } catch (error) {
-      setNoticeTone("error");
-      setNotice(getErrorMessage(error, isJapanese ? "タグ一覧を取得できませんでした。" : "Failed to load tags."));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function startRename(tagId: string, displayName: string): void {
-    // A blur-save on the previous tag may still be in flight. Only the tag being
-    // saved is locked; its result is applied to the editor only while it is still open.
-    if (renamePendingTagIds.has(tagId) || mergePending) {
-      return;
-    }
-    setMergeArmed(false);
-    editingTagIdRef.current = tagId;
-    setEditingTagId(tagId);
-    setRenameDraft(displayName);
-    setRenameError(null);
-    setConflictingTagId(null);
-    setNotice(null);
-    setNoticeTone("neutral");
-  }
-
-  function cancelRename(): void {
-    editingTagIdRef.current = null;
-    setEditingTagId(null);
-    setRenameDraft("");
-    setRenameError(null);
-    setConflictingTagId(null);
-  }
-
-  async function handleRename(summary: ArchiveTagSummaryRecord): Promise<void> {
-    const tagId = summary.tag.tag_id;
-    if (renamePendingTagIds.has(tagId)) {
-      return;
-    }
-    const name = renameDraft.trim();
-    if (name === "" || name === summary.tag.display_name) {
-      cancelRename();
-      return;
-    }
-    setRenamePendingTagIds((current) => new Set(current).add(tagId));
-    setRenameError(null);
-    setConflictingTagId(null);
-    setNotice(null);
-    try {
-      const response = await requestRenameTag(summary.tag.tag_id, name);
-      if (!response.ok) {
-        if (editingTagIdRef.current === summary.tag.tag_id) {
-          setConflictingTagId(response.conflictingTagId);
-        } else {
-          setNoticeTone("error");
-          setNotice(isJapanese
-            ? `「${summary.tag.display_name}」の名前を変更できませんでした。` +
-              `「${name}」は既にあります。`
-            : `Could not rename "${summary.tag.display_name}": "${name}" already exists.`);
-        }
-        return;
-      }
-      await loadTagList();
-      await onTagRenamed(summary.tag.normalized_name, response.tag.normalized_name);
-      if (editingTagIdRef.current === summary.tag.tag_id) {
-        editingTagIdRef.current = null;
-        setRenameDraft("");
-        setRenameError(null);
-        setConflictingTagId(null);
-      }
-      setEditingTagId((current) => current === summary.tag.tag_id ? null : current);
-      setNoticeTone("success");
-      setNotice(isJapanese
-        ? `タグ名を「${response.tag.display_name}」に更新しました。`
-        : `Renamed tag to "${response.tag.display_name}".`);
-    } catch (error) {
-      const message = getErrorMessage(error, isJapanese ? "リネームに失敗しました。" : "Rename failed.");
-      if (editingTagIdRef.current === summary.tag.tag_id) {
-        setRenameError(message);
-      } else {
-        setNoticeTone("error");
-        setNotice(message);
-      }
-    } finally {
-      // Release only this tag's lock; another tag may still be saving.
-      setRenamePendingTagIds((current) => {
-        const next = new Set(current);
-        next.delete(tagId);
-        return next;
-      });
-    }
-  }
-
-  function toggleSelectedTag(tagId: string): void {
-    if (mergePending) {
-      return;
-    }
-    setNotice(null);
-    setNoticeTone("neutral");
-    setMergeArmed(false);
-    setSelectedTagIds((current) => {
-      if (current.includes(tagId)) {
-        return current.filter((value) => value !== tagId);
-      }
-      if (current.length >= 2) {
-        return current;
-      }
-      return [...current, tagId];
-    });
-  }
-
-  async function handleMerge(): Promise<void> {
-    if (source === null || target === null || mergePending) {
-      return;
-    }
-    if (!mergeArmed) {
-      setMergeArmed(true);
-      setNotice(null);
-      return;
-    }
-    setMergePending(true);
-    setNotice(null);
-    try {
-      await requestMergeTags(source.tag.tag_id, target.tag.tag_id, preserveFutureTagUses);
-      await loadTagList();
-      await onTagMerged(source.tag.normalized_name, target.tag.normalized_name);
-      setSelectedTagIds([]);
-      setNoticeTone("success");
-      const suffix = preserveFutureTagUses ? (isJapanese ? "（自動変換あり）" : " (auto-redirect on)") : "";
-      setNotice(isJapanese
-        ? `「${source.tag.display_name}」を「${target.tag.display_name}」へ統合しました。${suffix}`
-        : `Merged "${source.tag.display_name}" into "${target.tag.display_name}".${suffix}`);
-    } catch (error) {
-      setNoticeTone("error");
-      setNotice(getErrorMessage(error, isJapanese ? "統合に失敗しました。" : "Merge failed."));
-    } finally {
-      setMergeArmed(false);
-      setMergePending(false);
-    }
-  }
+    manageableTags.find(({ tag }) => tag.tag_id === rename.conflictingTagId) ?? null;
 
   return (
     <section className="viewer-settings-card">
@@ -249,7 +117,7 @@ export function SettingsTagManagementPanel({
         className="viewer-tag-management-selection"
         aria-label={isJapanese ? "選択中のタグ" : "Selected tags"}
       >
-        {[source, target].map((summary, index) => (
+        {[merge.source, merge.target].map((summary, index) => (
           <Fragment key={index}>
             {index === 1 && (
               <div className="viewer-tag-management-direction">
@@ -259,10 +127,9 @@ export function SettingsTagManagementPanel({
                   type="button"
                   title={isJapanese ? "入れ替え" : "Swap"}
                   aria-label={isJapanese ? "旧タグと統合先を入れ替え" : "Swap source and target"}
-                  disabled={selectedTagIds.length !== 2 || mergePending}
+                  disabled={merge.selectedTagIds.length !== 2 || merge.pending}
                   onClick={() => {
-                    setSelectedTagIds((current) => [...current].reverse());
-                    setMergeArmed(false);
+                    merge.swap();
                   }}
                 >
                   <Icon name="Swap" />
@@ -271,8 +138,9 @@ export function SettingsTagManagementPanel({
             )}
             <section
               className={
-                `viewer-tag-management-selection-slot${summary ? " viewer-tag-management-slot-filled" : ""}` +
-                `${index === 0 && mergeArmed ? " viewer-tag-management-slot-doomed" : ""}`
+                "viewer-tag-management-selection-slot" +
+                `${summary ? " viewer-tag-management-slot-filled" : ""}` +
+                `${index === 0 && merge.armed ? " viewer-tag-management-slot-doomed" : ""}`
               }
               aria-label={index === 0
                 ? (isJapanese ? "旧タグ" : "Source tag")
@@ -292,27 +160,34 @@ export function SettingsTagManagementPanel({
           </Fragment>
         ))}
       </div>
-      <div className="viewer-settings-action-row viewer-settings-action-row-end viewer-tag-management-actions">
+      <div
+        className={
+          "viewer-settings-action-row viewer-settings-action-row-end viewer-tag-management-actions"
+        }
+      >
         <label className="viewer-tag-management-auto">
           <input
             type="checkbox"
-            checked={preserveFutureTagUses}
-            disabled={mergePending}
-            onChange={(event) => setPreserveFutureTagUses(event.currentTarget.checked)}
+            checked={merge.preserve}
+            disabled={merge.pending}
+            onChange={(event) => merge.setPreserve(event.currentTarget.checked)}
           />
           {isJapanese ? "自動変換" : "Auto-redirect"}
         </label>
         <button
-          className={mergeArmed ? "viewer-danger-button" : "viewer-action-button"}
+          className={merge.armed ? "viewer-danger-button" : "viewer-action-button"}
           type="button"
-          disabled={source === null || target === null || mergePending || renamePendingTagIds.size > 0}
+          disabled={
+            merge.source === null || merge.target === null || merge.pending ||
+            rename.pendingTagIds.size > 0
+          }
           onClick={() => {
-            void handleMerge();
+            void merge.run();
           }}
         >
-          {mergePending
+          {merge.pending
             ? (isJapanese ? "統合中..." : "Merging...")
-            : mergeArmed
+            : merge.armed
               ? (isJapanese ? "統合を確定" : "Confirm merge")
               : (isJapanese ? "統合" : "Merge")}
         </button>
@@ -332,6 +207,7 @@ export function SettingsTagManagementPanel({
         <>
           <div
             className="viewer-tag-management-list"
+            ref={listRef}
             role="grid"
             aria-label={isJapanese ? "タグ管理一覧" : "Tag management list"}
           >
@@ -342,37 +218,77 @@ export function SettingsTagManagementPanel({
                 {isJapanese ? "投稿数" : "Posts"}
               </span>
             </div>
-            {displayedTags.map((summary) => {
-              const isEditing = editingTagId === summary.tag.tag_id;
-              const isRenamePending = renamePendingTagIds.has(summary.tag.tag_id);
-              const isSelected = selectedTagIds.includes(summary.tag.tag_id);
-              const locked = selectedTagIds.length >= 2 && !isSelected;
-              const otherName = conflictingTag?.tag.display_name ?? renameDraft.trim();
+            {displayedTags.map((summary, index) => {
+              const isEditing = rename.editingTagId === summary.tag.tag_id;
+              const isRenamePending = rename.pendingTagIds.has(summary.tag.tag_id);
+              const isSelected = merge.selectedTagIds.includes(summary.tag.tag_id);
+              const locked = merge.selectedTagIds.length >= 2 && !isSelected;
+              const otherName = conflictingTag?.tag.display_name ?? rename.draft.trim();
               return (
                 <div
                   key={summary.tag.tag_id}
                   className={
-                    `viewer-tag-management-row${isSelected ? " viewer-tag-management-row-selected" : ""}` +
+                    "viewer-tag-management-row" +
+                    `${isSelected ? " viewer-tag-management-row-selected" : ""}` +
                     `${locked ? " viewer-tag-management-row-selection-locked" : ""}`
                   }
                   role="row"
-                  tabIndex={isEditing || locked ? -1 : 0}
+                  data-tag-id={summary.tag.tag_id}
+                  tabIndex={effectiveActiveId === summary.tag.tag_id ? 0 : -1}
                   aria-selected={isSelected}
+                  aria-disabled={locked || undefined}
+                  aria-keyshortcuts="F2"
                   onClick={() => {
+                    pendingFocusTagId.current = null;
+                    setActiveTagId(summary.tag.tag_id);
                     if (!isEditing && !locked) {
-                      toggleSelectedTag(summary.tag.tag_id);
+                      merge.toggle(summary.tag.tag_id);
                     }
                   }}
                   onKeyDown={(event: ReactKeyboardEvent<HTMLDivElement>) => {
-                    if (!isEditing && !locked && (event.key === "Enter" || event.key === " ")) {
+                    if (event.target !== event.currentTarget || isEditing) {
+                      return;
+                    }
+                    if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      toggleSelectedTag(summary.tag.tag_id);
+                      if (!locked) {
+                        merge.toggle(summary.tag.tag_id);
+                      }
+                      return;
+                    }
+                    if (event.key === "F2") {
+                      event.preventDefault();
+                      setActiveTagId(summary.tag.tag_id);
+                      rename.start(summary.tag.tag_id, summary.tag.display_name);
+                      return;
+                    }
+                    let nextIndex = index;
+                    if (event.key === "ArrowDown") {
+                      nextIndex = Math.min(index + 1, visibleTags.length - 1);
+                      if (index === displayedTags.length - 1 && hasMoreTags) {
+                        loadMoreTags();
+                      }
+                    } else if (event.key === "ArrowUp") {
+                      nextIndex = Math.max(index - 1, 0);
+                    } else if (event.key === "Home") {
+                      nextIndex = 0;
+                    } else if (event.key === "End") {
+                      nextIndex = displayedTags.length - 1;
+                    } else {
+                      return;
+                    }
+                    event.preventDefault();
+                    const nextTag = visibleTags[nextIndex];
+                    if (nextTag && nextIndex !== index) {
+                      focusTag(nextTag.tag.tag_id);
                     }
                   }}
                 >
                   <div className="viewer-tag-management-cell" role="gridcell" aria-hidden="true">
                     <span
-                      className={`tag-picker-option-check${isSelected ? " tag-picker-check-selected" : ""}`}
+                      className={
+                        `tag-picker-option-check${isSelected ? " tag-picker-check-selected" : ""}`
+                      }
                     >
                       {isSelected && <Icon name="Check" />}
                     </span>
@@ -381,37 +297,45 @@ export function SettingsTagManagementPanel({
                     {isEditing ? (
                       <div
                         className={
-                          `viewer-tag-management-edit${conflictingTagId !== null || renameError !== null
+                          "viewer-tag-management-edit" +
+                          `${rename.conflictingTagId !== null || rename.error !== null
                             ? " viewer-tag-management-edit-error" : ""}`
                         }
                         onClick={(event) => event.stopPropagation()}
                         onKeyDown={(event) => event.stopPropagation()}
                       >
                         <input
-                          ref={renameInputRef}
+                          ref={rename.inputRef}
                           type="text"
-                          value={renameDraft}
+                          value={rename.draft}
                           disabled={isRenamePending}
                           aria-label={isJapanese ? "新しいタグ名" : "New tag name"}
-                          aria-invalid={conflictingTagId !== null || renameError !== null}
+                          aria-invalid={rename.conflictingTagId !== null || rename.error !== null}
                           onChange={(event) => {
-                            setRenameDraft(event.currentTarget.value);
-                            setRenameError(null);
-                            setConflictingTagId(null);
+                            rename.setDraft(event.currentTarget.value);
                           }}
                           onBlur={() => {
-                            if (conflictingTagId === null && renameError === null && !isRenamePending) {
-                              void handleRename(summary);
+                            if (
+                              rename.conflictingTagId === null && rename.error === null &&
+                              !isRenamePending
+                            ) {
+                              void rename.save(summary);
                             }
                           }}
                           onKeyDown={(event) => {
                             if (event.key === "Enter") {
                               event.preventDefault();
-                              void handleRename(summary);
+                              focusTag(summary.tag.tag_id);
+                              void rename.save(summary).then((closed) => {
+                                if (!closed && pendingFocusTagId.current === summary.tag.tag_id) {
+                                  pendingFocusTagId.current = null;
+                                }
+                              });
                             }
                             if (event.key === "Escape") {
                               event.preventDefault();
-                              cancelRename();
+                              focusTag(summary.tag.tag_id);
+                              rename.cancel();
                             }
                           }}
                         />
@@ -422,7 +346,7 @@ export function SettingsTagManagementPanel({
                           aria-label={isJapanese ? "保存" : "Save"}
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => {
-                            void handleRename(summary);
+                            void rename.save(summary);
                           }}
                         >
                           <Icon name="Check" />
@@ -433,7 +357,7 @@ export function SettingsTagManagementPanel({
                           disabled={isRenamePending}
                           aria-label={isJapanese ? "取り消し" : "Cancel"}
                           onMouseDown={(event) => event.preventDefault()}
-                          onClick={cancelRename}
+                          onClick={rename.cancel}
                         >
                           <Icon name="Close" />
                         </button>
@@ -442,6 +366,7 @@ export function SettingsTagManagementPanel({
                       <button
                         className="viewer-tag-management-name"
                         type="button"
+                        tabIndex={-1}
                         title={isJapanese ? "名前を変更" : "Rename"}
                         aria-label={isJapanese
                           ? `${summary.tag.display_name} の名前を変更`
@@ -449,7 +374,9 @@ export function SettingsTagManagementPanel({
                         onKeyDown={(event) => event.stopPropagation()}
                         onClick={(event) => {
                           event.stopPropagation();
-                          startRename(summary.tag.tag_id, summary.tag.display_name);
+                          pendingFocusTagId.current = null;
+                          setActiveTagId(summary.tag.tag_id);
+                          rename.start(summary.tag.tag_id, summary.tag.display_name);
                         }}
                       >
                         <span>{summary.tag.display_name}</span>
@@ -459,26 +386,29 @@ export function SettingsTagManagementPanel({
                       </button>
                     )}
                   </div>
-                  <div className="viewer-tag-management-cell viewer-tag-management-count" role="gridcell">
+                  <div
+                    className="viewer-tag-management-cell viewer-tag-management-count"
+                    role="gridcell"
+                  >
                     {formatCount(summary.postCount, language)}
                   </div>
-                  {isEditing && (conflictingTagId !== null || renameError !== null) && (
+                  {isEditing && (rename.conflictingTagId !== null || rename.error !== null) && (
                     <div
                       className="viewer-tag-management-error"
                       role="alert"
                       onClick={(event) => event.stopPropagation()}
                       onKeyDown={(event) => event.stopPropagation()}
                     >
-                      {conflictingTagId !== null
+                      {rename.conflictingTagId !== null
                         ? (isJapanese ? `「${otherName}」は既にある` : `"${otherName}" already exists`)
-                        : renameError}
+                        : rename.error}
                       {manageableConflict !== null && (
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedTagIds([summary.tag.tag_id, manageableConflict.tag.tag_id]);
-                            setMergeArmed(false);
-                            cancelRename();
+                            merge.select([summary.tag.tag_id, manageableConflict.tag.tag_id]);
+                            merge.disarm();
+                            rename.cancel();
                           }}
                         >
                           {isJapanese ? `「${otherName}」へ統合` : `Merge into "${otherName}"`}
@@ -521,8 +451,4 @@ function formatCount(value: number, language: ArchiveLanguage): string {
 
 function normalizeTagSearchValue(value: string): string {
   return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("ja-JP");
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
 }

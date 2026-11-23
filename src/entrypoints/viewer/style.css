@@ -834,6 +834,11 @@ body {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
+.viewer-tag-management-row:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .viewer-tag-management-row-selected {
   border-color: rgba(37, 99, 235, 0.48);
   box-shadow:
@@ -2641,6 +2646,10 @@ body {
 :root[data-theme="dark"] .viewer-tag-management-row:focus-within {
   border-color: var(--color-accent-soft-strong);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+}
+
+:root[data-theme="dark"] .viewer-tag-management-row:focus-visible {
+  outline-color: var(--color-accent);
 }
 
 :root[data-theme="dark"] .viewer-tag-management-row-selected {

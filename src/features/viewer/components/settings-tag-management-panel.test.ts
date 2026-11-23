@@ -141,7 +141,9 @@ it("renames inline when Enter is pressed", async () => {
   expect(editor.value).toBe("ウマ娘");
   expect(document.activeElement).toBe(editor);
   await changeInput(editor, " New name ");
-  await act(async () => editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  await act(async () => editor.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+  ));
   expect(requestRenameTag).toHaveBeenCalledWith("uma", "New name");
   expect(view.onTagRenamed).toHaveBeenCalledWith("ウマ娘", "new name");
   await view.cleanup();
@@ -401,7 +403,9 @@ it("keeps a second tag locked until its own rename finishes", async () => {
   await click(button(view.container, "Rename ブルーアーカイブ"));
   await changeInput(input(view.container), "Blue Archive");
   await act(async () => {
-    input(view.container).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    input(view.container).dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+    );
   });
   expect(requestRenameTag).toHaveBeenCalledTimes(2);
   expect(input(view.container).disabled).toBe(true);
@@ -411,5 +415,140 @@ it("keeps a second tag locked until its own rename finishes", async () => {
   expect(input(view.container).disabled).toBe(true);
   await click(button(view.container, "Save"));
   expect(requestRenameTag).toHaveBeenCalledTimes(2);
+  await view.cleanup();
+});
+
+async function press(element: HTMLElement, key: string) {
+  await act(async () => {
+    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
+it("keeps a single tab stop in the tag list", async () => {
+  const view = await setup();
+  const rows = [...view.container.querySelectorAll<HTMLElement>("[data-tag-id]")];
+  expect(rows.filter((element) => element.tabIndex === 0)).toHaveLength(1);
+  expect(rows.filter((element) => element.tabIndex === -1)).toHaveLength(2);
+  const names = [...view.container.querySelectorAll<HTMLButtonElement>(
+    ".viewer-tag-management-name"
+  )];
+  expect(names.every((element) => element.tabIndex === -1)).toBe(true);
+  await view.cleanup();
+});
+
+it("moves between rows with arrow keys, Home and End", async () => {
+  const view = await setup();
+  const rows = [...view.container.querySelectorAll<HTMLElement>("[data-tag-id]")];
+  rows[0]!.focus();
+  await press(rows[0]!, "ArrowDown");
+  expect(document.activeElement).toBe(rows[1]!);
+  expect(rows[1]!.tabIndex).toBe(0);
+  expect(rows[0]!.tabIndex).toBe(-1);
+  await press(rows[1]!, "ArrowUp");
+  expect(document.activeElement).toBe(rows[0]!);
+  await press(rows[0]!, "End");
+  expect(document.activeElement).toBe(rows[2]!);
+  await press(rows[2]!, "Home");
+  expect(document.activeElement).toBe(rows[0]!);
+  await view.cleanup();
+});
+
+it("loads more tags when moving past the last displayed row", async () => {
+  const manyTags = Array.from({ length: 51 }, (_, index) => ({
+    tag: { ...tags[0]!.tag, tag_id: `tag-${index}`, display_name: `Tag ${index}` },
+    postCount: 100 - index
+  }));
+  vi.mocked(requestTagSummaries).mockResolvedValueOnce({
+    type: "posts/tags/list-result", tags: manyTags
+  });
+  const view = await setup();
+  const rows = [...view.container.querySelectorAll<HTMLElement>("[data-tag-id]")];
+  expect(rows).toHaveLength(50);
+  rows[49]!.focus();
+  await press(rows[49]!, "ArrowDown");
+  const expanded = [...view.container.querySelectorAll<HTMLElement>("[data-tag-id]")];
+  expect(expanded).toHaveLength(51);
+  expect(document.activeElement).toBe(expanded[50]!);
+  expect(expanded[50]!.tabIndex).toBe(0);
+  await view.cleanup();
+});
+
+it("keeps loaded rows when a row is selected after showing more", async () => {
+  const manyTags = Array.from({ length: 51 }, (_, index) => ({
+    tag: { ...tags[0]!.tag, tag_id: `tag-${index}`, display_name: `Tag ${index}` },
+    postCount: 100 - index
+  }));
+  vi.mocked(requestTagSummaries).mockResolvedValueOnce({
+    type: "posts/tags/list-result", tags: manyTags
+  });
+  const view = await setup();
+  const more = [...view.container.querySelectorAll("button")]
+    .find((button) => button.textContent === "1 more")!;
+  await click(more);
+  expect(view.container.querySelectorAll("[data-tag-id]")).toHaveLength(51);
+  await click(view.container.querySelector<HTMLElement>('[data-tag-id="tag-0"]')!);
+  expect(view.container.querySelectorAll("[data-tag-id]")).toHaveLength(51);
+  await view.cleanup();
+});
+
+it("keeps the focused row rendered after deselecting it past the first page", async () => {
+  const manyTags = Array.from({ length: 51 }, (_, index) => ({
+    tag: { ...tags[0]!.tag, tag_id: `tag-${index}`, display_name: `Tag ${index}` },
+    postCount: 100 - index
+  }));
+  vi.mocked(requestTagSummaries).mockResolvedValueOnce({
+    type: "posts/tags/list-result", tags: manyTags
+  });
+  const view = await setup();
+  const rows = [...view.container.querySelectorAll<HTMLElement>("[data-tag-id]")];
+  rows[49]!.focus();
+  await press(rows[49]!, "ArrowDown");
+  const lastRow = view.container.querySelector<HTMLElement>('[data-tag-id="tag-50"]')!;
+  await press(lastRow, " ");
+  expect(lastRow.getAttribute("aria-selected")).toBe("true");
+  await press(lastRow, " ");
+  const after = view.container.querySelector<HTMLElement>('[data-tag-id="tag-50"]');
+  expect(after).not.toBeNull();
+  expect(after!.getAttribute("aria-selected")).toBe("false");
+  expect(document.activeElement).toBe(after);
+  await view.cleanup();
+});
+
+it("reaches locked rows but does not select them", async () => {
+  const view = await setup();
+  const rows = [...view.container.querySelectorAll<HTMLElement>("[data-tag-id]")];
+  await click(rows[0]!);
+  await click(rows[1]!);
+  rows[1]!.focus();
+  await press(rows[1]!, "ArrowDown");
+  expect(document.activeElement).toBe(rows[2]!);
+  expect(rows[2]!.getAttribute("aria-disabled")).toBe("true");
+  await press(rows[2]!, " ");
+  expect(rows[2]!.getAttribute("aria-selected")).toBe("false");
+  expect(rows.slice(0, 2).every((element) => element.getAttribute("aria-selected") === "true"))
+    .toBe(true);
+  await view.cleanup();
+});
+
+it("starts a rename with F2 and returns focus on Escape", async () => {
+  const view = await setup();
+  const first = view.container.querySelector<HTMLElement>("[data-tag-id]");
+  if (!first) {
+    throw new Error("Tag row not found");
+  }
+  first.focus();
+  await press(first, "F2");
+  expect(document.activeElement).toBe(input(view.container));
+  await press(input(view.container), "Escape");
+  expect(view.container.querySelector('input[aria-label="New tag name"]')).toBeNull();
+  expect(document.activeElement).toBe(first);
+  await press(first, "F2");
+  await press(input(view.container), "Enter");
+  expect(document.activeElement).toBe(first);
+  await press(first, "F2");
+  await changeInput(input(view.container), "New name");
+  await press(input(view.container), "Enter");
+  const restored = view.container.querySelector<HTMLElement>('[data-tag-id="uma"]');
+  expect(document.activeElement).toBe(restored);
   await view.cleanup();
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type UseIncrementalListOptions = {
   initialCount?: number;
@@ -16,10 +16,14 @@ export function useIncrementalList<T>(
   const step = normalizeListCount(options.step, initialCount);
   const requiredCount = normalizeRequiredCount(options.requiredCount);
   const [visibleCount, setVisibleCount] = useState(() => Math.max(initialCount, requiredCount));
+  const requiredCountRef = useRef(requiredCount);
+  requiredCountRef.current = requiredCount;
 
+  // Reset only when the list itself changes. A requiredCount change (selecting or focusing
+  // a row) must not collapse rows the user already loaded; the max() below keeps them shown.
   useEffect(() => {
-    setVisibleCount(Math.max(initialCount, requiredCount));
-  }, [initialCount, items, requiredCount]);
+    setVisibleCount(Math.max(initialCount, requiredCountRef.current));
+  }, [initialCount, items]);
 
   const resolvedVisibleCount = Math.min(items.length, Math.max(visibleCount, requiredCount));
   const visibleItems = useMemo(
