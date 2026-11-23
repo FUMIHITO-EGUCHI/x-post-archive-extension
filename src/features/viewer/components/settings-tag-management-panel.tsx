@@ -28,7 +28,7 @@ export function SettingsTagManagementPanel({
   const [renameDraft, setRenameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
   const [conflictingTagId, setConflictingTagId] = useState<string | null>(null);
-  const [renamePendingTagId, setRenamePendingTagId] = useState<string | null>(null);
+  const [renamePendingTagIds, setRenamePendingTagIds] = useState<ReadonlySet<string>>(() => new Set());
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [mergeArmed, setMergeArmed] = useState(false);
@@ -102,7 +102,7 @@ export function SettingsTagManagementPanel({
   function startRename(tagId: string, displayName: string): void {
     // A blur-save on the previous tag may still be in flight. Only the tag being
     // saved is locked; its result is applied to the editor only while it is still open.
-    if (renamePendingTagId === tagId || mergePending) {
+    if (renamePendingTagIds.has(tagId) || mergePending) {
       return;
     }
     setMergeArmed(false);
@@ -124,7 +124,8 @@ export function SettingsTagManagementPanel({
   }
 
   async function handleRename(summary: ArchiveTagSummaryRecord): Promise<void> {
-    if (renamePendingTagId !== null) {
+    const tagId = summary.tag.tag_id;
+    if (renamePendingTagIds.has(tagId)) {
       return;
     }
     const name = renameDraft.trim();
@@ -132,7 +133,7 @@ export function SettingsTagManagementPanel({
       cancelRename();
       return;
     }
-    setRenamePendingTagId(summary.tag.tag_id);
+    setRenamePendingTagIds((current) => new Set(current).add(tagId));
     setRenameError(null);
     setConflictingTagId(null);
     setNotice(null);
@@ -172,7 +173,12 @@ export function SettingsTagManagementPanel({
         setNotice(message);
       }
     } finally {
-      setRenamePendingTagId(null);
+      // Release only this tag's lock; another tag may still be saving.
+      setRenamePendingTagIds((current) => {
+        const next = new Set(current);
+        next.delete(tagId);
+        return next;
+      });
     }
   }
 
@@ -299,7 +305,7 @@ export function SettingsTagManagementPanel({
         <button
           className={mergeArmed ? "viewer-danger-button" : "viewer-action-button"}
           type="button"
-          disabled={source === null || target === null || mergePending || renamePendingTagId !== null}
+          disabled={source === null || target === null || mergePending || renamePendingTagIds.size > 0}
           onClick={() => {
             void handleMerge();
           }}
@@ -338,7 +344,7 @@ export function SettingsTagManagementPanel({
             </div>
             {displayedTags.map((summary) => {
               const isEditing = editingTagId === summary.tag.tag_id;
-              const isRenamePending = renamePendingTagId === summary.tag.tag_id;
+              const isRenamePending = renamePendingTagIds.has(summary.tag.tag_id);
               const isSelected = selectedTagIds.includes(summary.tag.tag_id);
               const locked = selectedTagIds.length >= 2 && !isSelected;
               const otherName = conflictingTag?.tag.display_name ?? renameDraft.trim();

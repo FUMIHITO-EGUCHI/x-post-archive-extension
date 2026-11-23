@@ -385,3 +385,31 @@ it("opens another tag for editing while the previous rename is still saving", as
   expect(view.container.textContent).toContain('Could not rename "ウマ娘": "ブルアカ" already exists.');
   await view.cleanup();
 });
+
+it("keeps a second tag locked until its own rename finishes", async () => {
+  type RenameResult = Awaited<ReturnType<typeof requestRenameTag>>;
+  const finishers: Array<(value: RenameResult) => void> = [];
+  vi.mocked(requestRenameTag).mockImplementation(() => new Promise((resolve) => {
+    finishers.push(resolve);
+  }));
+  const view = await setup();
+  await click(button(view.container, "Rename ウマ娘"));
+  await changeInput(input(view.container), "Uma");
+  await act(async () => {
+    input(view.container).dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  });
+  await click(button(view.container, "Rename ブルーアーカイブ"));
+  await changeInput(input(view.container), "Blue Archive");
+  await act(async () => {
+    input(view.container).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  expect(requestRenameTag).toHaveBeenCalledTimes(2);
+  expect(input(view.container).disabled).toBe(true);
+  await act(async () => {
+    finishers[0]!({ type: "tag.rename", ok: false, error: "collision", conflictingTagId: "blue" });
+  });
+  expect(input(view.container).disabled).toBe(true);
+  await click(button(view.container, "Save"));
+  expect(requestRenameTag).toHaveBeenCalledTimes(2);
+  await view.cleanup();
+});
