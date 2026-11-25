@@ -65,7 +65,8 @@ jobs:
       needs.preflight.outputs.has_token == 'true' &&
       needs.preflight.outputs.trusted_context == 'true' &&
       (
-        (github.event.comment != null && contains(github.event.comment.body, '@claude')) ||
+        (github.event.comment != null && contains(github.event.comment.body, '@claude') &&
+          !(github.event.issue.pull_request && contains(github.event.comment.body, '@claude review'))) ||
         (github.event.action == 'assigned' && github.event.assignee.login == 'claude')
       )
     runs-on: ubuntu-latest

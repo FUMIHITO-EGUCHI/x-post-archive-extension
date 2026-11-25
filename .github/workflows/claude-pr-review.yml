@@ -1,18 +1,29 @@
 name: Claude PR review
 
+# PR ごとの自動レビューはしない。レビューしてほしい PR に `@claude review` と
+# コメントしたときだけ動く（ADR-0004）。同じコメントで claude-mention.yml は動かない。
 on:
-  pull_request:
-    types: [opened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created]
 
 permissions: {}
 
 jobs:
-  check-secrets:
+  preflight:
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@claude review') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     environment: claude  # CLAUDE_CODE_OAUTH_TOKEN は env: claude に格納
-    permissions: {}
+    permissions:
+      pull-requests: read
     outputs:
       has_token: ${{ steps.check.outputs.has_token }}
+      trusted_context: ${{ steps.pr.outputs.trusted_context }}
+      base_ref: ${{ steps.pr.outputs.base_ref }}
+      head_ref: ${{ steps.pr.outputs.head_ref }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
     steps:
       - id: check
         env:
@@ -24,13 +35,39 @@ jobs:
             echo "has_token=false" >> "$GITHUB_OUTPUT"
             echo "::warning::CLAUDE_CODE_OAUTH_TOKEN is not configured for this repository - skipping Claude workflow. Set the secret to enable."
           fi
+      - id: pr
+        # issue_comment には PR の head / base が載らないので API で取る。
+        # fork からの PR はレビューしない（head のコードを secrets のある job で checkout するため）。
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          pr="$(gh api "repos/$REPO/pulls/$PR_NUMBER")"
+          head_repo="$(jq -r '.head.repo.full_name' <<<"$pr")"
+          draft="$(jq -r '.draft' <<<"$pr")"
+          trusted=true
+          if [ "$head_repo" != "$REPO" ]; then
+            trusted=false
+            echo "::warning::Skipping review for external fork PR."
+          fi
+          if [ "$draft" = "true" ]; then
+            trusted=false
+            echo "::warning::Skipping review for draft PR."
+          fi
+          {
+            echo "trusted_context=$trusted"
+            echo "base_ref=$(jq -r '.base.ref' <<<"$pr")"
+            echo "head_ref=$(jq -r '.head.ref' <<<"$pr")"
+            echo "head_sha=$(jq -r '.head.sha' <<<"$pr")"
+          } >> "$GITHUB_OUTPUT"
 
   review:
-    needs: check-secrets
+    needs: preflight
     if: |
-      needs.check-secrets.outputs.has_token == 'true' &&
-      github.event.pull_request.draft == false &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      needs.preflight.outputs.has_token == 'true' &&
+      needs.preflight.outputs.trusted_context == 'true'
     runs-on: ubuntu-latest
     environment: claude  # CLAUDE_CODE_OAUTH_TOKEN は env: claude に格納
     permissions:
@@ -41,6 +78,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          ref: ${{ needs.preflight.outputs.head_sha }}
           fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
@@ -49,14 +87,14 @@ jobs:
           track_progress: true
           prompt: |
             REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
-            BASE: ${{ github.event.pull_request.base.ref }}
-            HEAD: ${{ github.event.pull_request.head.ref }}
+            PR NUMBER: ${{ github.event.issue.number }}
+            BASE: ${{ needs.preflight.outputs.base_ref }}
+            HEAD: ${{ needs.preflight.outputs.head_ref }}
 
             この PR を 5 軸でレビューする：correctness / readability / architecture / security / performance。CLAUDE.md / .claude/rules/ のルールを参照。
 
             手順:
-            1. `git diff origin/${{ github.event.pull_request.base.ref }}...HEAD --stat` で変更概要
+            1. `git diff origin/${{ needs.preflight.outputs.base_ref }}...HEAD --stat` で変更概要
             2. 重要な diff を読み、観点ごとに inline comment を付ける
             3. 軽微な指摘はまとめて1つの summary コメントにする
             4. CLAUDE.md の "完了報告前は typecheck / build" が PR 説明で言及されているか確認

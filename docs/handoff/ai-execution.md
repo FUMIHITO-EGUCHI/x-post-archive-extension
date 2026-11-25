@@ -12,7 +12,7 @@
 GitHub Issue / PR
    │
    ├─[@claude mention]─▶ claude-mention.yml       → 質問/調査/実装（track_progress）
-   └─[pull_request]───▶ claude-pr-review.yml      → 5軸レビュー
+   └─[@claude review]──▶ claude-pr-review.yml     → 5軸レビュー（PR で頼んだときだけ）
 
 ローカル CLI:
    Claude Code (Opus 4.7 主担当: 調査・要件整理・ブラウザデバッグ)
@@ -25,7 +25,7 @@ GitHub Issue / PR
 
 ### 2.1 `claude-mention.yml`
 
-- 発火: コメント本文に `@claude` を含む / Issue が `claude` に assign された
+- 発火: コメント本文に `@claude` を含む / Issue が `claude` に assign された。PR 上の `@claude review` は 2.2 が受け持つので、こちらは動かない
 - やること: 依頼内容に応じて応答（質問 / 調査 / 実装 / レビュー）
 - 進捗管理: `track_progress: true` が自動でコメント1件を upsert する。**人間/他 AI はそのコメントを触らない**
 - 完了時: 結果を短く 1 コメントで残す。ラベルは付けず、Issue は close しない
@@ -33,7 +33,7 @@ GitHub Issue / PR
 
 ### 2.2 `claude-pr-review.yml`
 
-- 発火: `pull_request: opened / synchronize / ready_for_review`（draft は除外）
+- 発火: PR に `@claude review` とコメントしたときだけ（OWNER / MEMBER / COLLABORATOR のコメントに限る。draft と fork の PR は除外）。PR を開いたときや push したときの自動レビューはしない。もう一度見てほしいときは、またコメントする
 - やること: 5軸（correctness / readability / architecture / security / performance）で diff レビュー、重要箇所に inline comment、軽微指摘は summary 1件
 - 触らない: merge / close / approve
 
@@ -46,7 +46,7 @@ GitHub Issue / PR
 | 要件整理 / 設計判断 / 根本原因調査 | Claude Code (Opus) | ローカル or @claude mention |
 | ブラウザ / CDP デバッグ | Claude Code | DevTools MCP を持つ |
 | 実装 | Codex | Issue 本文に `implement:` で明示 |
-| 差分レビュー | Claude (Action) | claude-pr-review.yml |
+| 差分レビュー | Claude (Action) | 頼んだときだけ。PR に `@claude review` とコメント（claude-pr-review.yml） |
 | ドキュメント整理 / コミット整形 | Codex or Claude | どちらでも可 |
 
 ルーティングを workflow 単位で固定化したくなったら **`github/gh-aw` (GitHub Agentic Workflows)** で engine を `codex` に切り替えた workflow を追加する。MVP では未導入。
@@ -130,7 +130,7 @@ CI 利用がサブスク枠を圧迫する／コスト予測を独立させた�
 
 人間がコードを読まずに accept できる前提で運用する。3点ゲート全部通過で完了：
 
-1. **AI review OK** — `claude-pr-review.yml` の 5軸レビュー（correctness / readability / architecture / security / performance）通過
+1. **AI review OK** — レビューを頼んだ PR では、`claude-pr-review.yml` の 5軸レビュー（correctness / readability / architecture / security / performance）通過
 2. **CI green** — typecheck / build / test pass
 3. **Human evidence verification** — Issue Template の "Evidence of acceptance" 手順を AI が実機で実行し、出力／スクショ／ログを Issue に貼った状態を、人間が確認
 
@@ -152,7 +152,7 @@ CI 利用がサブスク枠を圧迫する／コスト予測を独立させた�
 
 ### 9.1 PR ごとの Learning notes
 
-`claude-pr-review.yml` が PR レビュー末尾に "## Learning notes for the human" セクションを自動生成する。最大3概念 + 公式ドキュメントリンク + 1分で試せる小実験。Hallucination 抑制のため「リンク提供不可なら出さない」が prompt に明記してある。
+レビューを頼んだ PR では、`claude-pr-review.yml` が PR レビュー末尾に "## Learning notes for the human" セクションを自動生成する。最大3概念 + 公式ドキュメントリンク + 1分で試せる小実験。Hallucination 抑制のため「リンク提供不可なら出さない」が prompt に明記してある。
 
 ### 9.2 月次学習ログ
 

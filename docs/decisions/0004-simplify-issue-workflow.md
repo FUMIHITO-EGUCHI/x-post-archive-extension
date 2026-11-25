@@ -19,6 +19,7 @@ Accepted
 - commit message の Issue 番号必須と、所定の 3 節による完了コメントを廃止する。commit・branch と Issue の紐付けは任意とする。
 - AI は自分の判断で Issue を close しない。ユーザーの明示指示がある場合のみ代行する。
 - `master` / `main` への直接 commit を禁止する pre-commit、lint、content-script guard は維持する。
+- Claude の PR レビューは自動では走らせない。レビューしてほしい PR に `@claude review` とコメントしたときだけ動かす。版番号やドキュメントだけの PR にも、push のたびにも、レビューと通知が来ていたため。
 
 ## Alternatives Considered
 
@@ -28,4 +29,5 @@ Accepted
 
 - `.github/workflows/claude-issue-triage.yml`、`.github/workflows/sync-labels.yml`、`.github/labels.yml`、`scripts/sync-labels.mjs`、`scripts/sync-labels.sh`、`scripts/commit-msg`、`scripts/check-commit-message.mjs` を削除する。既存 GitHub ラベルは残る。
 - `sh scripts/setup-hooks.sh` を再実行すると、ローカルの `.git/hooks/commit-msg` は削除される。worktree 等では Git が返す hooks ディレクトリを使う。
+- `claude-pr-review.yml` は `issue_comment` で発火する。`claude-mention.yml` は PR 上の `@claude review` では動かない。
 - 関連 Issue は必要に応じて PR 本文で参照する。Issue の close 判断は引き続き人間が持つ。
