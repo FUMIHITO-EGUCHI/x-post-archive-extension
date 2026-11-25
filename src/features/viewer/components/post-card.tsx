@@ -201,34 +201,7 @@ export function PostCard({
         />
       )}
 
-      <dl
-        className="post-metrics"
-        aria-label={language === "ja" ? "投稿の反応数" : "Post engagement"}
-      >
-        <div className="post-metric">
-          <Icon name="Reply" />
-          <dt className="viewer-visually-hidden">{language === "ja" ? "返信" : "Replies"}</dt>
-          <dd>{formatCount(post.reply_count, language)}</dd>
-        </div>
-        <div className="post-metric">
-          <Icon name="Repost" />
-          <dt className="viewer-visually-hidden">{language === "ja" ? "リポスト" : "Reposts"}</dt>
-          <dd>{formatCount(post.repost_count, language)}</dd>
-        </div>
-        <div className="post-metric">
-          <Icon name="Heart" />
-          <dt className="viewer-visually-hidden">{language === "ja" ? "いいね" : "Likes"}</dt>
-          <dd>{formatCount(post.like_count, language)}</dd>
-        </div>
-        <div
-          className="post-saved-date"
-          title={`${language === "ja" ? "保存日時" : "Saved"}: ${new Date(post.saved_at).toLocaleString(language)}`}
-        >
-          <dt className="viewer-visually-hidden">{language === "ja" ? "保存日時" : "Saved"}</dt>
-          <Icon name="Archive" />
-          <dd>{formatSavedAt(post.saved_at, language)}</dd>
-        </div>
-      </dl>
+      <PostMetrics post={post} language={language} showSavedDate />
 
       <div className="post-tag-section">
         <div className="post-tag-toolbar">
@@ -270,7 +243,7 @@ export function PostCard({
               }}
               disabled={tagActionPostId === post.x_post_id}
             >
-              {language === "ja" ? "+ タグ" : "+ Tag"}
+              <Icon name="Plus" className="post-tag-picker-icon" />
             </button>
             {tagPickerPostId === post.x_post_id && (
               <TagPickerOverlay
@@ -318,9 +291,36 @@ function QuotedPostCard({
         <p className="quoted-post-username">
           <span>{post.display_name}</span>
           <span className="post-handle">@{post.x_username}</span>
+          <span
+            className="post-date"
+            title={`${language === "ja" ? "投稿日時" : "Posted"}: ${new Date(post.posted_at).toLocaleString(language)}`}
+          >
+            {" · "}{formatPostedAt(post.posted_at, language)}
+          </span>
         </p>
-        <span className="quoted-post-date">{formatPostedAt(post.posted_at, language)}</span>
-        <SaveMediaButton post={post} language={language} />
+        <div className="post-card-actions">
+          <SaveMediaButton post={post} language={language} />
+          {postHref === undefined ? (
+            <span
+              className="post-icon-button disabled"
+              aria-label={language === "ja" ? "引用元を開く" : "Open quoted post"}
+              title={language === "ja" ? "引用元を開く" : "Open quoted post"}
+            >
+              <Icon name="ExternalLink" />
+            </span>
+          ) : (
+            <a
+              className="post-icon-button"
+              href={postHref}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={language === "ja" ? "引用元を開く" : "Open quoted post"}
+              title={language === "ja" ? "引用元を開く" : "Open quoted post"}
+            >
+              <Icon name="ExternalLink" />
+            </a>
+          )}
+        </div>
       </div>
 
       {post.post_text.trim() !== "" && <p className="quoted-post-text">{post.post_text}</p>}
@@ -347,28 +347,58 @@ function QuotedPostCard({
         </div>
       )}
 
-      {postHref === undefined ? (
-        <span
-          className="post-icon-button disabled"
-          aria-label={language === "ja" ? "引用元を開く" : "Open quoted post"}
-          title={language === "ja" ? "引用元を開く" : "Open quoted post"}
-        >
-          <Icon name="ExternalLink" />
-        </span>
-      ) : (
-        <a
-          className="post-icon-button"
-          href={postHref}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={language === "ja" ? "引用元を開く" : "Open quoted post"}
-          title={language === "ja" ? "引用元を開く" : "Open quoted post"}
-        >
-          <Icon name="ExternalLink" />
-        </a>
+      {hasEngagementCounts(post) && (
+        <PostMetrics post={post} language={language} showSavedDate={false} />
       )}
     </section>
   );
+}
+
+function PostMetrics({
+  post,
+  language,
+  showSavedDate
+}: {
+  post: ArchivePostRecord;
+  language: ArchiveLanguage;
+  showSavedDate: boolean;
+}) {
+  return (
+    <dl
+      className="post-metrics"
+      aria-label={language === "ja" ? "投稿の反応数" : "Post engagement"}
+    >
+      <div className="post-metric">
+        <Icon name="Reply" />
+        <dt className="viewer-visually-hidden">{language === "ja" ? "返信" : "Replies"}</dt>
+        <dd>{formatCount(post.reply_count, language)}</dd>
+      </div>
+      <div className="post-metric">
+        <Icon name="Repost" />
+        <dt className="viewer-visually-hidden">{language === "ja" ? "リポスト" : "Reposts"}</dt>
+        <dd>{formatCount(post.repost_count, language)}</dd>
+      </div>
+      <div className="post-metric">
+        <Icon name="Heart" />
+        <dt className="viewer-visually-hidden">{language === "ja" ? "いいね" : "Likes"}</dt>
+        <dd>{formatCount(post.like_count, language)}</dd>
+      </div>
+      {showSavedDate && (
+        <div
+          className="post-saved-date"
+          title={`${language === "ja" ? "保存日時" : "Saved"}: ${new Date(post.saved_at).toLocaleString(language)}`}
+        >
+          <dt className="viewer-visually-hidden">{language === "ja" ? "保存日時" : "Saved"}</dt>
+          <Icon name="Archive" />
+          <dd>{formatSavedAt(post.saved_at, language)}</dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
+function hasEngagementCounts(post: ArchivePostRecord): boolean {
+  return post.reply_count > 0 || post.repost_count > 0 || post.like_count > 0;
 }
 
 function SaveMediaButton({ post, language }: {

@@ -6,6 +6,7 @@ import type {
   UserSummary
 } from "../../../types/viewer";
 import type { ArchiveLanguage } from "../../settings/archive-language";
+import { Icon } from "./icons";
 import { useDialogA11y } from "./use-dialog-a11y";
 import type { FilterModalTab } from "./sticky-toolbar";
 
@@ -169,7 +170,7 @@ export function UnifiedFilterModal({
               onClose();
             }}
           >
-            ×
+            <Icon name="Close" width={18} height={18} />
           </button>
         </div>
 

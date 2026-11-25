@@ -653,7 +653,7 @@ export function ViewerApp() {
   if (activeTagFilter !== null) {
     filterChips.push({
       key: "tag",
-      label: `#${(selectedTagFilter === null ? activeTagFilter : getTagDisplayName(selectedTagFilter.tag)).replace(/^#/, "")}`,
+      label: (selectedTagFilter === null ? activeTagFilter : getTagDisplayName(selectedTagFilter.tag)).replace(/^#/, ""),
       onRemove: () => {
         void handleToggleTagFilter(activeTagFilter);
       }
@@ -663,7 +663,7 @@ export function ViewerApp() {
   if (activeExcludeTagFilter !== null) {
     filterChips.push({
       key: "tag",
-      label: `−#${(selectedExcludeTagFilter === null ? activeExcludeTagFilter : getTagDisplayName(selectedExcludeTagFilter.tag)).replace(/^#/, "")}`,
+      label: (selectedExcludeTagFilter === null ? activeExcludeTagFilter : getTagDisplayName(selectedExcludeTagFilter.tag)).replace(/^#/, ""),
       excluded: true,
       onRemove: () => {
         void handleToggleExcludeTagFilter(activeExcludeTagFilter);

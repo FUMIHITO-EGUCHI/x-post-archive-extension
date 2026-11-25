@@ -67,7 +67,9 @@ it("presents accessible compact actions, metrics, and thread count", async () =>
   expect(container.querySelector('.post-thread-badge[aria-label="Thread: 3 posts"]')).not.toBeNull();
   expect(container.querySelectorAll(".post-metric dt.viewer-visually-hidden")).toHaveLength(3);
   expect(container.querySelector(".post-saved-date dt")?.textContent).toBe("Saved");
-  expect(container.querySelector(".post-tag-picker-button")?.textContent).toBe("+ Tag");
+  expect(container.querySelector(".post-tag-picker-button")?.textContent).toBe("");
+  expect(container.querySelector(".post-tag-picker-button svg")).not.toBeNull();
+  expect(container.querySelector(".post-tag-picker-button")?.getAttribute("aria-label")).toContain("Edit tags");
 });
 
 it("places Save before Refetch and saves the quoted post independently", async () => {
@@ -79,6 +81,30 @@ it("places Save before Refetch and saves the quoted post independently", async (
   expect(buttons[1]!.getAttribute("aria-label")).toBe("Save media from post by @quoted");
   await act(async () => buttons[1]!.click());
   expect(downloadPostMedia).toHaveBeenCalledExactlyOnceWith(quoted);
+});
+
+it("lays out the quoted post header and metrics like the main card", async () => {
+  const quoted = {
+    ...post,
+    x_post_id: "456",
+    x_username: "quoted",
+    post_url: "https://x.com/quoted/status/456",
+    like_count: 12
+  };
+  await render({ post: { ...post, quoted_post: quoted }, language: "en" });
+  const quotedCard = container.querySelector(".quoted-post-card")!;
+  const actions = quotedCard.querySelector(".quoted-post-header .post-card-actions");
+  expect(actions?.querySelector('a[aria-label="Open quoted post"]')?.getAttribute("href")).toBe(
+    quoted.post_url
+  );
+  expect(quotedCard.querySelectorAll(".post-metric")).toHaveLength(3);
+  expect(quotedCard.querySelector(".post-saved-date")).toBeNull();
+});
+
+it("omits quoted post metrics when no counts were captured", async () => {
+  const quoted = { ...post, x_post_id: "456", x_username: "quoted" };
+  await render({ post: { ...post, quoted_post: quoted }, language: "en" });
+  expect(container.querySelector(".quoted-post-card .post-metrics")).toBeNull();
 });
 
 it("disables while saving, displays partial failure, and clears it on retry", async () => {
