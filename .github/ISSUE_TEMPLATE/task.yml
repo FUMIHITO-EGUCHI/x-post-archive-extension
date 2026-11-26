@@ -1,13 +1,12 @@
 name: Task
 description: AI 向けタスク packet（feature / refactor / 小粒実装）
 title: "[task] "
-labels: ["status: todo"]
 body:
   - type: markdown
     attributes:
       value: |
         AI（Claude / Codex）が着手できる粒度のタスクを記述してください。
-        完了判定は人間が行います。AI は `status: ready-for-close` を付けて完了申請します。
+        完了判定は人間が行います。
 
   - type: textarea
     id: objective
@@ -54,7 +53,7 @@ body:
     id: human-evidence
     attributes:
       label: Evidence of acceptance（人間が確認する手順）
-      description: コードを読まずに accept できる手順を書く。AI が完了申請時にこの手順を実行し、出力・ログ・スクショを Issue に貼る。
+      description: コードを読まずに確認できる手順を書く。実行結果は必要に応じて共有する。
       placeholder: |
         1. npm run dev で起動
         2. viewer を開き日付フィルタで「今週」を選択
@@ -62,19 +61,6 @@ body:
         4. ページリロードで設定が保持されていることを確認
     validations:
       required: true
-
-  - type: checkboxes
-    id: strong-signals
-    attributes:
-      label: 強いモデルを要する兆候
-      description: 1つでも該当すれば model:strong-required を貼る。なければ model:standard か model:cheap-ok を選ぶ。
-      options:
-        - label: DB / migration を変更する（Dexie スキーマ変更含む）
-        - label: 認可・権限・セッションに触れる
-        - label: 状態管理・並行処理・非同期に触れる
-        - label: 仕様が曖昧、または複数解釈がある
-        - label: 失敗時の手戻りが大きい / 不可逆
-        - label: 複数ファイル横断の設計変更
 
   - type: textarea
     id: notes

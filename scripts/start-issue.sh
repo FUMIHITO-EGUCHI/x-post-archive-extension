@@ -8,9 +8,9 @@ NUMBER="$2"
 TOPIC="$3"
 
 if [ -z "$TYPE" ] || [ -z "$NUMBER" ] || [ -z "$TOPIC" ]; then
-  echo "Usage: sh scripts/start-issue.sh <type> <number> <topic>"
+  echo "Usage: sh scripts/start-issue.sh <type> <number|-> <topic>"
   echo "  type:   feature / fix / refactor / docs / chore"
-  echo "  number: issue number (or 'skip' for [skip-issue] work)"
+  echo "  number: issue number, or '-' for an unnumbered branch"
   echo "  topic:  short-topic (lowercase, numbers, hyphens only)"
   exit 1
 fi
@@ -33,22 +33,20 @@ case "$TOPIC" in
     ;;
 esac
 
-if [ "$NUMBER" = "skip" ]; then
-  if [ "$TYPE" != "chore" ]; then
-    echo "skip is only allowed with chore branches."
-    exit 1
-  fi
-  BRANCH="chore/skip-$TOPIC"
+if [ "$NUMBER" = "-" ]; then
+  BRANCH="$TYPE/$TOPIC"
 else
   case "$NUMBER" in
     *[!0-9]*|'')
       echo "Invalid number: $NUMBER"
-      echo "  number must be digits only, or 'skip' for chore work"
+      echo "  number must be digits only, or '-'"
       exit 1
       ;;
   esac
   BRANCH="$TYPE/$NUMBER-$TOPIC"
 fi
+
+node scripts/check-branch.mjs "$BRANCH"
 
 if [ -n "$(git status --short)" ]; then
   echo "Working tree is dirty. Commit or stash before creating a new branch."
@@ -74,6 +72,3 @@ git switch -c "$BRANCH" >/dev/null 2>&1 || git checkout -b "$BRANCH"
 
 echo ""
 echo "Branch created: $BRANCH"
-if [ "$NUMBER" != "skip" ]; then
-  echo "Remember to link this branch to issue #$NUMBER on GitHub."
-fi

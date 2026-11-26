@@ -14,7 +14,7 @@ ADR-0001 で GitHub Issues + Projects v2 をタスク管理の single source of 
 
 運用開始後、以下が分かった:
 
-- 実作業では Claude / Codex とも `gh` CLI での issue 作成・ラベル操作が主経路になっている
+- 当時の実作業では Claude / Codex とも `gh` CLI が GitHub 操作の主経路だった
 - MCP 経由は利用頻度が低く、stdio server のセッション起動コストが常時発生する
 - MCP のレスポンスは構造化 JSON で verbose。フィールド絞り込みができず、1 コマンドあたりのトークン消費が大きい
 - `gh` CLI は `--json <fields> --jq '...'` で必要列のみ抽出でき、同一操作で数倍〜10 倍圧縮可能
@@ -39,18 +39,7 @@ ADR-0001 で GitHub Issues + Projects v2 をタスク管理の single source of 
 - `SPEC.md` / `docs/handoff/README.md` / `.claude/rules/handoff.md` を `gh` CLI 記述に統一
 - Chrome DevTools MCP（`.mcp.json` の `chrome-devtools` エントリ）は維持。GitHub とは別用途
 
-代表操作の `gh` CLI 対応表:
-
-| 操作 | `gh` CLI |
-|---|---|
-| タスク作成 | `gh issue create --title ... --body ... --label ...` |
-| ステータス変更 | `gh issue edit <n> --add-label ... --remove-label ...` |
-| Work Log 追記 | `gh issue comment <n> --body ...` |
-| 担当変更 | `gh issue edit <n> --add-label 'owner: <name>'` |
-| 完了申請（AI） | `gh issue edit <n> --add-label 'status: ready-for-close'` + `gh issue comment ...` |
-| close（人間のみ） | `gh issue close <n>` |
-| 検索 | `gh issue list --search ... --json number,title,labels` |
-| Projects v2 | `gh project ...` / 複雑ケースは `gh api graphql` |
+Issue の状態管理は [ADR-0004](./0004-simplify-issue-workflow.md) に従う。
 
 ## Alternatives Considered
 

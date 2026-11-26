@@ -65,7 +65,8 @@ jobs:
       needs.preflight.outputs.has_token == 'true' &&
       needs.preflight.outputs.trusted_context == 'true' &&
       (
-        (github.event.comment != null && contains(github.event.comment.body, '@claude')) ||
+        (github.event.comment != null && contains(github.event.comment.body, '@claude') &&
+          !(github.event.issue.pull_request && contains(github.event.comment.body, '@claude review'))) ||
         (github.event.action == 'assigned' && github.event.assignee.login == 'claude')
       )
     runs-on: ubuntu-latest
@@ -92,15 +93,13 @@ jobs:
 
             手順:
             1. `gh issue view <n>` または `gh pr view <n>` で Issue/PR の現状を取得
-            2. 既存ラベル（特に `model:` `status:` `owner:`）を確認
-            3. ユーザーの依頼内容に応じて：質問応答 / 調査 / 実装 / レビュー
-            4. 進捗は track_progress コメントに任せる（手書きの経過コメントは追加しない）
-            5. 完了したら `status: ready-for-close` を付け、Result / Verification / Changed files を含む最終コメントを1件残す
+            2. ユーザーの依頼内容に応じて：質問応答 / 調査 / 実装 / レビュー
+            3. 進捗は track_progress コメントに任せる（手書きの経過コメントは追加しない）
+            4. 完了時は結果を短く 1 コメントで残す。ラベルは付けない。Issue は close しない
 
             **やってはいけないこと**:
             - Issue を close しない（人間のみ）
             - 本文を編集しない（objective / scope / checklist 以外）
-            - commit message から `#<issue>` を省略しない
             - `--no-verify` で hook を回避しない
           claude_args: |
-            --allowedTools "Bash(gh issue:*),Bash(gh pr:*),Bash(gh label list:*),Bash(npm run typecheck:*),Bash(npm run build:*),Bash(npm test:*),Bash(git:*)"
+            --allowedTools "Bash(gh issue:*),Bash(gh pr:*),Bash(npm run typecheck:*),Bash(npm run build:*),Bash(npm test:*),Bash(git:*)"

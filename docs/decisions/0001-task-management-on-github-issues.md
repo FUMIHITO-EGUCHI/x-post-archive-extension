@@ -1,5 +1,7 @@
 # ADR-0001: AI handoff / task management を GitHub Issues + Projects v2 に移行する
 
+> ラベル運用と commit の Issue 番号必須は [ADR-0004](./0004-simplify-issue-workflow.md) で廃止した。
+
 ## Status
 
 Accepted

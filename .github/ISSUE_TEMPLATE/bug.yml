@@ -1,7 +1,6 @@
 name: Bug
 description: 既存機能の不具合報告
 title: "[bug] "
-labels: ["status: todo", "type: bug"]
 body:
   - type: textarea
     id: summary

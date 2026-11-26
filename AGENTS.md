@@ -72,10 +72,10 @@ X の投稿を保存して後から見返しやすくすることが目的。X �
 - 実装は小さな単位に分け、曖昧なことは推測で埋め切らず未確定事項として残す
 - 要件、設計、データモデル、実装手順が大きく変わる場合は `docs/requirements.md`、`docs/mvp-plan.md`、`docs/data-model.md`、`docs/implementation-steps.md` を更新する
 - 検索性と保存時点の再現性を優先し、保存済みデータの自動更新前提で複雑化しない
-- feature branch 前提で作業する。着手時は `sh scripts/start-issue.sh <type> <number> <topic>` で branch を作成する
-- branch 命名は `<type>/<number>-<topic>`（例: `fix/13-workflow-guard`）。`[skip-issue]` 対象は `chore/skip-<topic>`
+- feature branch 前提で作業する。着手時は `sh scripts/start-issue.sh <type> <number|-> <topic>` で branch を作成する
+- branch 命名は `<type>/<topic>` または `<type>/<number>-<topic>`（例: `fix/workflow-guard`、`fix/13-workflow-guard`）
 - `master` / `main` への直接 commit は `pre-commit` hook が拒否する。メンテナンス時のみ `ALLOW_MASTER_COMMIT=1` で override する
-- PR 本文には `Closes #<number>` を含め、merge で issue を自動 close する
+- 関連 Issue があれば PR 本文に `Refs #N` を記載する
 - `git push` はユーザーから明示的な指示がある場合にのみ行う
 - 実装変更時は少なくとも `npm run typecheck`、`npm run build`、影響した画面や処理の動作確認を行う
 - ブラウザでの手動動作確認は、原則として設定済みの Shared Profile を使う。`powershell -ExecutionPolicy Bypass -File scripts/start-cdp-chrome.ps1` は `.shared-cdp-profile` を既定使用し、他 profile は `-AllowNonSharedProfile` なしでは拒否される
@@ -94,11 +94,10 @@ X の投稿を保存して後から見返しやすくすることが目的。X �
 - Codex の主担当は実装、リファクタ、テスト、レビュー、ドキュメント作成、Git 関連作業
 - Claude から Codex へ渡す調査結果は、生ログではなく圧縮した結論・根拠・未解決点だけにする
 - handoff 前には Goal、In scope、Out of scope、Constraints、Compressed findings、Files to read first、Acceptance criteria、Open questions が分かる状態を目指す
-- タスク管理は **GitHub Issues + Projects v2**（X Archive Handoff ボード）を single source of truth とする。旧 `ai-handoff/` のファイル運用は削除済み（履歴は git log 参照）
-- Issue 作成は Claude / Codex / human いずれも可。New Issue → テンプレ選択（Task / Investigation / Bug）→ 初期ラベル `status: todo` + `owner:` + `priority:` + `type:` + `area:`。他 AI に投げる場合は `owner: <相手>` で止める
-- 作業中は Issue コメントに逐次追記（本文は objective / scope / checklist のみ編集）。完了申請は `status: ready-for-close` + `## Result` / `## Verification` / `## Changed files` コメント
-- **AI は自分の判断で Issue を close しない。** ユーザーが明示的に close を指示したときだけ実行し、その際は `status: accepted` に付け替えてから閉じる。指示なしに完了扱いへ進めないための線であって、指示があればそれはユーザーの判断
-- commit message に `#<issue>` 必須（雑務は `[skip-issue]`）。`commit-msg` hook が強制
+- タスクは GitHub Issues で管理し、状態は open / closed と関連 PR で表す。ラベルは使わない
+- Issue 作成は Claude / Codex / human いずれも可。必要な経過や引き継ぎはコメントに残す
+- commit・branch と Issue の紐付けは任意。関連があれば PR 本文に `Refs #N` を記載する
+- **AI は自分の判断で Issue を close しない。** ユーザーが明示的に close を指示したときだけ代行する
 - 詳細運用は `docs/handoff/README.md`、AI 向け最短ルールは `.claude/rules/handoff.md`
 
 ## Local Skills

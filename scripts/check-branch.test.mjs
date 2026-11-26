@@ -22,8 +22,8 @@ test('accepts numbered work branches', () => {
   assert.equal(result.status, 0);
 });
 
-test('accepts skip-issue chore branches', () => {
-  const result = runCheck('chore/skip-release-v0-20');
+test('accepts unnumbered work branches', () => {
+  const result = runCheck('feature/changelog-view');
   assert.equal(result.status, 0);
 });
 
@@ -38,8 +38,8 @@ test('accepts master with override', () => {
   assert.equal(result.status, 0);
 });
 
-test('rejects branch names without issue number', () => {
-  const result = runCheck('fix/workflow-guard');
+test('rejects malformed topics', () => {
+  const result = runCheck('fix/workflow--guard');
   assert.equal(result.status, 1);
   assert.match(result.stderr, /branch name must match/i);
 });

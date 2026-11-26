@@ -8,7 +8,7 @@ if [ "$BRANCH" = "master" ] || [ "$BRANCH" = "main" ]; then
   if [ -z "$ALLOW_MASTER_COMMIT" ]; then
     echo ""
     echo "Error: direct commit to $BRANCH is not allowed."
-    echo "  Start work with: sh scripts/start-issue.sh <type> <number> <topic>"
+    echo "  Start work with: sh scripts/start-issue.sh <type> <number|-> <topic>"
     echo "  For maintenance commits, set ALLOW_MASTER_COMMIT=1"
     exit 1
   fi
@@ -19,7 +19,7 @@ node scripts/check-branch.mjs
 if [ $? -ne 0 ]; then
   echo ""
   echo "Branch name does not follow naming convention."
-  echo "  Use: sh scripts/start-issue.sh <type> <number> <topic>"
+  echo "  Use: sh scripts/start-issue.sh <type> <number|-> <topic>"
   exit 1
 fi
 
@@ -28,7 +28,7 @@ npm run precommit:check
 if [ $? -ne 0 ]; then
   echo ""
   echo "Pre-commit checks failed."
-  echo "  1. Fix handoff consistency, lint, or content-script guard failures."
+  echo "  1. Fix lint or content-script guard failures."
   echo "  2. If the content-script guard failed, keep Dexie out of content-safe modules."
   echo "  3. Re-run the relevant commands and commit again."
   exit 1
